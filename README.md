@@ -1,8 +1,8 @@
-# FireGuard 영화관 통합 관제 UI v4
+# FireGuard 영화관 통합 관제 UI v5
 
 영화관 2층 피난도를 디지털 트윈 배경으로 사용하고, Flask + Flask-SocketIO + Dijkstra 기반으로 화재/연기/방화셔터 상태와 대피 경로를 실시간 표시하는 캡스톤 시연용 프로젝트입니다.
 
-## v4 핵심 변경
+## v5 핵심 변경
 
 - 목업 디자인에 맞춘 다크 관제 대시보드 전면 재설계
 - 영화관 평면도를 발표용 도면(Schematic) 스타일로 재설계하고 Node / Edge / Exit / Sensor 오버레이
@@ -99,7 +99,7 @@ Content-Type: application/json
 ## 파일 구조
 
 ```text
-FireGuard_Cinema_UI_v4/
+FireGuard_Cinema_UI_v5/
 ├─ app.py
 ├─ state_manager.py
 ├─ route_service.py
@@ -125,7 +125,7 @@ FireGuard_Cinema_UI_v4/
 현재 `Supabase` 표시는 실제 Supabase SDK 연결 상태가 아니라 **외부 관제/DB 통신 링크를 시뮬레이션하는 상태값**입니다. 실제 Supabase 저장은 프로젝트 키와 스키마가 확정된 뒤 별도 연결하면 됩니다.
 
 
-## v4 UI 재설계
+## v5 UI 재설계
 
 - 기존 사진형 영화관 맵을 대시보드 내부의 **도면형 SVG 평면도**로 교체
 - 메인 상태 `SAFE / FIRE / LOCAL FAIL-SAFE`를 대형 배너로 표시
@@ -135,3 +135,12 @@ FireGuard_Cinema_UI_v4/
 - 영화관 Node 클릭 시 화재 발생/해제/출발 위치 지정
 - 화면 전체 글자와 카드 크기를 확대해 프로젝터 발표 가독성 개선
 - Flask/Socket.IO/Dijkstra/하드웨어 API 구조는 v3 그대로 유지
+
+
+## v5 Soft UI Refresh
+
+- 밝은 미니멀 UI로 전면 리스타일링
+- Toss식 큰 정보 계층 + 당근식 따뜻한 포인트 + Notion식 중립 카드 구조를 혼합
+- 핵심 기능/ID/API/Socket.IO/Dijkstra는 그대로 유지
+- 영화관 schematic 도면을 밝은 paper-style로 변경
+- QR 모바일 화면도 동일한 디자인 언어로 통일
