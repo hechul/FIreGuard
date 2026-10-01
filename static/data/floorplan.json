@@ -1,0 +1,385 @@
+{
+  "name": "Cinema Evacuation Demo Floor",
+  "viewBox": {
+    "width": 584,
+    "height": 858
+  },
+  "nodes": [
+    {
+      "id": "N1",
+      "name": "현재위치 / 매표소 우측",
+      "x": 456,
+      "y": 470
+    },
+    {
+      "id": "N2",
+      "name": "동측 분기점",
+      "x": 486,
+      "y": 522
+    },
+    {
+      "id": "N3",
+      "name": "동측 비상구 앞",
+      "x": 520,
+      "y": 522
+    },
+    {
+      "id": "N4",
+      "name": "중앙복도 동측",
+      "x": 442,
+      "y": 561
+    },
+    {
+      "id": "N5",
+      "name": "중앙복도 중앙",
+      "x": 350,
+      "y": 561
+    },
+    {
+      "id": "N6",
+      "name": "중앙복도 서측",
+      "x": 254,
+      "y": 561
+    },
+    {
+      "id": "N7",
+      "name": "서측 분기점",
+      "x": 158,
+      "y": 561
+    },
+    {
+      "id": "N8",
+      "name": "서측 비상구 앞",
+      "x": 97,
+      "y": 558
+    },
+    {
+      "id": "N9",
+      "name": "4관 앞",
+      "x": 150,
+      "y": 430
+    },
+    {
+      "id": "N10",
+      "name": "5관 앞",
+      "x": 150,
+      "y": 220
+    },
+    {
+      "id": "N11",
+      "name": "1관 앞",
+      "x": 355,
+      "y": 648
+    },
+    {
+      "id": "N12",
+      "name": "2관 앞",
+      "x": 244,
+      "y": 648
+    },
+    {
+      "id": "N13",
+      "name": "4DX관 앞",
+      "x": 82,
+      "y": 648
+    },
+    {
+      "id": "N14",
+      "name": "매표소 앞",
+      "x": 390,
+      "y": 470
+    },
+    {
+      "id": "N15",
+      "name": "팝콘팩토리 앞",
+      "x": 410,
+      "y": 320
+    }
+  ],
+  "exits": [
+    {
+      "id": "EXIT_E",
+      "name": "동측 비상구",
+      "x": 551,
+      "y": 523,
+      "available": true
+    },
+    {
+      "id": "EXIT_W",
+      "name": "서측 비상구",
+      "x": 126,
+      "y": 535,
+      "available": true
+    },
+    {
+      "id": "EXIT_S",
+      "name": "1관 남측 비상구",
+      "x": 410,
+      "y": 770,
+      "available": true
+    },
+    {
+      "id": "EXIT_NW",
+      "name": "5관 북서 비상구",
+      "x": 119,
+      "y": 107,
+      "available": true
+    }
+  ],
+  "edges": [
+    {
+      "id": "E01",
+      "from": "N1",
+      "to": "N2",
+      "weight": 1.0
+    },
+    {
+      "id": "E02",
+      "from": "N2",
+      "to": "N3",
+      "weight": 1.0
+    },
+    {
+      "id": "E03",
+      "from": "N3",
+      "to": "EXIT_E",
+      "weight": 0.8
+    },
+    {
+      "id": "E04",
+      "from": "N2",
+      "to": "N4",
+      "weight": 1.0
+    },
+    {
+      "id": "E05",
+      "from": "N4",
+      "to": "N5",
+      "weight": 2.0
+    },
+    {
+      "id": "E06",
+      "from": "N5",
+      "to": "N6",
+      "weight": 2.0
+    },
+    {
+      "id": "E07",
+      "from": "N6",
+      "to": "N7",
+      "weight": 2.0
+    },
+    {
+      "id": "E08",
+      "from": "N7",
+      "to": "N8",
+      "weight": 1.0
+    },
+    {
+      "id": "E09",
+      "from": "N8",
+      "to": "EXIT_W",
+      "weight": 0.8
+    },
+    {
+      "id": "E10",
+      "from": "N7",
+      "to": "N9",
+      "weight": 2.0
+    },
+    {
+      "id": "E11",
+      "from": "N9",
+      "to": "N10",
+      "weight": 3.0
+    },
+    {
+      "id": "E12",
+      "from": "N10",
+      "to": "EXIT_NW",
+      "weight": 1.0
+    },
+    {
+      "id": "E13",
+      "from": "N5",
+      "to": "N11",
+      "weight": 2.0
+    },
+    {
+      "id": "E14",
+      "from": "N6",
+      "to": "N12",
+      "weight": 2.0
+    },
+    {
+      "id": "E15",
+      "from": "N7",
+      "to": "N13",
+      "weight": 2.0
+    },
+    {
+      "id": "E16",
+      "from": "N11",
+      "to": "EXIT_S",
+      "weight": 6.0
+    },
+    {
+      "id": "E17",
+      "from": "N14",
+      "to": "N1",
+      "weight": 1.0
+    },
+    {
+      "id": "E18",
+      "from": "N14",
+      "to": "N5",
+      "weight": 2.0
+    },
+    {
+      "id": "E19",
+      "from": "N15",
+      "to": "N14",
+      "weight": 2.0
+    },
+    {
+      "id": "E20",
+      "from": "N15",
+      "to": "N10",
+      "weight": 8.0
+    }
+  ],
+  "sensors": [
+    {
+      "id": "FLM-01",
+      "type": "flame",
+      "node": "N1",
+      "name": "매표소 우측 불꽃센서"
+    },
+    {
+      "id": "FLM-02",
+      "type": "flame",
+      "node": "N2",
+      "name": "동측 분기점 불꽃센서"
+    },
+    {
+      "id": "FLM-03",
+      "type": "flame",
+      "node": "N4",
+      "name": "중앙복도 동측 불꽃센서"
+    },
+    {
+      "id": "FLM-04",
+      "type": "flame",
+      "node": "N5",
+      "name": "중앙복도 중앙 불꽃센서"
+    },
+    {
+      "id": "FLM-05",
+      "type": "flame",
+      "node": "N6",
+      "name": "중앙복도 서측 불꽃센서"
+    },
+    {
+      "id": "FLM-06",
+      "type": "flame",
+      "node": "N7",
+      "name": "서측 분기점 불꽃센서"
+    },
+    {
+      "id": "FLM-07",
+      "type": "flame",
+      "node": "N9",
+      "name": "4관 앞 불꽃센서"
+    },
+    {
+      "id": "FLM-08",
+      "type": "flame",
+      "node": "N10",
+      "name": "5관 앞 불꽃센서"
+    },
+    {
+      "id": "FLM-09",
+      "type": "flame",
+      "node": "N11",
+      "name": "1관 앞 불꽃센서"
+    },
+    {
+      "id": "FLM-10",
+      "type": "flame",
+      "node": "N12",
+      "name": "2관 앞 불꽃센서"
+    },
+    {
+      "id": "FLM-11",
+      "type": "flame",
+      "node": "N13",
+      "name": "4DX관 앞 불꽃센서"
+    },
+    {
+      "id": "FLM-12",
+      "type": "flame",
+      "node": "N14",
+      "name": "매표소 앞 불꽃센서"
+    },
+    {
+      "id": "FLM-13",
+      "type": "flame",
+      "node": "N15",
+      "name": "팝콘팩토리 앞 불꽃센서"
+    },
+    {
+      "id": "FLM-14",
+      "type": "flame",
+      "node": "N8",
+      "name": "서측 비상구 앞 불꽃센서"
+    },
+    {
+      "id": "FLM-15",
+      "type": "flame",
+      "node": "N3",
+      "name": "동측 비상구 앞 불꽃센서"
+    },
+    {
+      "id": "MQ2-01",
+      "type": "mq2",
+      "node": "N15",
+      "name": "팝콘팩토리 연기센서"
+    },
+    {
+      "id": "MQ2-02",
+      "type": "mq2",
+      "node": "N5",
+      "name": "중앙복도 연기센서"
+    },
+    {
+      "id": "MQ2-03",
+      "type": "mq2",
+      "node": "N1",
+      "name": "매표소 연기센서"
+    },
+    {
+      "id": "MQ2-04",
+      "type": "mq2",
+      "node": "N9",
+      "name": "4관 앞 연기센서"
+    },
+    {
+      "id": "MQ2-05",
+      "type": "mq2",
+      "node": "N3",
+      "name": "동측 비상구 앞 연기센서"
+    }
+  ],
+  "shutters": [
+    {
+      "id": "SH-01",
+      "name": "중앙 방화셔터",
+      "edge": "E05"
+    },
+    {
+      "id": "SH-02",
+      "name": "동측 방화셔터",
+      "edge": "E02"
+    }
+  ]
+}

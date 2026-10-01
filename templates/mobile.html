@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FireGuard Mobile</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard-dynamic-subset.css">
+  <style>
+    :root {
+      --bg: #F2F4F6;
+      --panel: #FFFFFF;
+      --line: #E5E8EB;
+      --text: #191F28;
+      --muted: #8B95A1;
+      --safe: #04C062;
+      --safe-soft: #E8F8EE;
+      --danger: #F04452;
+      --danger-soft: #FDE8E9;
+      --blue: #3182F6;
+      --shadow-sm: 0 4px 12px rgba(0,0,0,0.06);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: "Pretendard Variable", Pretendard, -apple-system, sans-serif;
+      letter-spacing: -0.015em;
+    }
+    .wrap { max-width: 480px; margin: auto; padding: 24px; }
+    .brand { font-size: 24px; font-weight: 800; }
+    .brand span { color: var(--blue); }
+    .card {
+      margin-top: 24px; background: var(--panel); border: 1px solid var(--line);
+      border-radius: 24px; padding: 28px; box-shadow: var(--shadow-sm);
+    }
+    .tag {
+      display: inline-flex; padding: 6px 12px; border-radius: 99px;
+      background: #F0F6FF; color: var(--blue); font-size: 13px; font-weight: 700;
+    }
+    .loc { font-size: 36px; font-weight: 800; margin: 12px 0 8px; }
+    .muted { color: var(--muted); font-size: 14px; line-height: 1.5; font-weight: 500;}
+    .status {
+      margin-top: 24px; border-radius: 16px; padding: 20px;
+      background: var(--safe-soft); border: 1px solid #A3E5C1;
+    }
+    .status.danger { background: var(--danger-soft); border-color: #FBC5C9; }
+    .status strong { display: block; font-size: 20px; font-weight: 800; color: var(--safe); }
+    .status.danger strong { color: var(--danger); }
+    .status span { display: block; color: var(--text); font-size: 13px; margin-top: 8px; font-weight: 600;}
+    .exit {
+      margin-top: 16px; background: var(--safe); color: #FFF;
+      border-radius: 16px; padding: 24px; text-align: center; font-size: 32px; font-weight: 900;
+    }
+    .status.danger + .exit { background: var(--danger); } /* If danger, maybe exit is different, but JS handles text */
+    .route {
+      margin-top: 16px; padding: 20px; border-radius: 16px;
+      background: #F9FAFB; border: 1px solid var(--line);
+      color: var(--text); font-size: 15px; line-height: 1.5; font-weight: 600; text-align: center;
+    }
+    .footer { margin-top: 24px; text-align: center; color: var(--muted); font-size: 12px; font-weight: 500; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="brand">FIRE<span>GUARD</span></div>
+    <section class="card">
+      <span class="tag">현재 위치</span>
+      <div class="loc">{{ node_id }}</div>
+      <div class="muted">관제 시스템이 계산한 현재 대피 정보를 표시합니다.</div>
+      <div id="status" class="status"><strong>상태 확인 중</strong><span>서버에서 최신 정보를 불러오고 있습니다.</span></div>
+      <div id="exit" class="exit">EXIT 확인 중</div>
+      <div id="route" class="route">대피 경로를 불러오는 중입니다.</div>
+      <div class="footer">현장에서는 LED 유도등과 안전요원의 지시에 따라 이동하세요.</div>
+    </section>
+  </main>
+  <script>
+    const nodeId={{ node_id|tojson }};
+    async function refresh(){
+      try{
+        const [state,floor]=await Promise.all([fetch('/api/state').then(r=>r.json()),fetch('/api/floorplan').then(r=>r.json())]);
+        const names={}; [...floor.nodes,...floor.exits].forEach(n=>names[n.id]=n.name||n.id);
+        const status=document.getElementById('status');
+        const isDanger = state.overallStatus==='fire'||state.overallStatus==='no_route';
+        status.classList.toggle('danger', isDanger);
+        status.querySelector('strong').textContent=state.overallStatus==='normal'?'SAFE':state.overallStatus==='warning'?'WARNING':state.overallStatus==='fire'?'FIRE DETECTED':'NO SAFE ROUTE';
+        status.querySelector('span').textContent=state.failSafeActive?'서버 단절 상태입니다. 현장 로컬 유도는 계속 동작합니다.':'관제 시스템과 연결되어 있습니다.';
+        
+        const exitEl = document.getElementById('exit');
+        exitEl.textContent=state.selectedExitName||'안전 경로 없음';
+        exitEl.style.background = isDanger ? 'var(--danger)' : 'var(--safe)';
+        
+        document.getElementById('route').textContent=state.route?state.route.nodes.map(id=>names[id]||id).join(' → '):'현재 안전한 대피 경로를 찾을 수 없습니다.';
+      }catch(e){
+        document.getElementById('status').querySelector('strong').textContent='CONNECTION LOST';
+      }
+    }
+    refresh(); setInterval(refresh,1500);
+  </script>
+</body>
+</html>

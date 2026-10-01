@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FireGuard · 영화관 화재 대피 통합 관제 시스템</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard-dynamic-subset.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand-row">
+        <div class="brand-mark">🔥</div>
+        <div class="brand-copy">
+          <strong>FIREGUARD</strong>
+          <span>Evacuation Control</span>
+        </div>
+      </div>
+
+      <nav class="nav-list" aria-label="주요 메뉴">
+        <button class="nav-item active" data-page="overview"><span class="nav-icon">⌂</span><div>대시보드<small>Dashboard</small></div></button>
+        <button class="nav-item" data-page="equipment"><span class="nav-icon">▣</span><div>장비 관리<small>Devices</small></div></button>
+        <button class="nav-item" data-page="routing"><span class="nav-icon">⌘</span><div>대피 경로<small>Routing</small></div></button>
+        <button class="nav-item" data-page="events"><span class="nav-icon">▤</span><div>이벤트 로그<small>Events</small></div></button>
+        <button class="nav-item" data-page="qr"><span class="nav-icon">▦</span><div>QR / 모바일<small>QR / Mobile</small></div></button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <span>CAPSTONE DESIGN 2026</span>
+        <strong>2조 · FireGuard</strong>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div class="topbar-title">
+          <span class="eyebrow">MOVIE THEATER FIRE EVACUATION SYSTEM</span>
+          <h1 id="pageTitle">영화관 화재 대피 통합 관제 시스템</h1>
+        </div>
+
+        <div class="topbar-right">
+          <div class="connection-chip" id="piChip"><span class="status-dot"></span><b>Raspberry Pi</b><em>ONLINE</em></div>
+          <div class="connection-chip" id="flaskChip"><span class="status-dot"></span><b>Flask Server</b><em>ONLINE</em></div>
+          <div class="connection-chip" id="cloudChip"><span class="status-dot"></span><b>Supabase</b><em>ONLINE</em></div>
+
+          <div class="mode-toggle" aria-label="운영 모드">
+            <button id="realModeBtn" type="button">REAL</button>
+            <button id="simModeBtn" type="button" class="active">SIMULATION</button>
+          </div>
+
+          <div class="clock-block">
+            <span id="currentDate">-</span>
+            <strong id="currentTime">-</strong>
+          </div>
+        </div>
+      </header>
+
+      <div id="browserOfflineBanner" class="browser-offline hidden" role="alert">
+        <strong>관제 서버 연결이 끊어졌습니다.</strong>
+        <span>현재 화면은 마지막 수신 상태를 유지합니다. Raspberry Pi의 로컬 경로 계산과 LED 유도는 독립적으로 계속 동작합니다.</span>
+      </div>
+
+      <!-- OVERVIEW -->
+      <section id="overview" class="page active">
+        <div id="systemBanner" class="system-banner normal">
+          <div class="system-banner-icon" id="systemIcon">✓</div>
+          <div class="system-banner-copy">
+            <span>CURRENT STATUS</span>
+            <strong id="systemTitle">SAFE</strong>
+          </div>
+          <div class="system-banner-message">
+            <strong id="systemDescription">현재 화재 상황이 없습니다. 모든 경로를 정상 감시 중입니다.</strong>
+            <span>센서 입력 → 위험구역 차단 → Dijkstra 재계산 → LED 유도 → 대시보드 갱신</span>
+          </div>
+          <div class="system-banner-meta">
+            <span>업데이트</span><strong id="updatedAt">-</strong>
+            <span>운영 모드</span><strong id="operationModeLabel">SIMULATION</strong>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+          <section class="panel map-panel">
+            <div class="panel-heading">
+              <div>
+                <span class="panel-kicker">DIGITAL TWIN</span>
+                <h2>영화관 화재 대피 경로</h2>
+              </div>
+              <div class="legend">
+                <span><i class="legend-line active"></i>대피 경로</span>
+                <span><i class="legend-dot normal"></i>일반 노드</span>
+                <span><i class="legend-dot danger"></i>화재</span>
+                <span><i class="legend-square shutter"></i>통행 제한</span>
+                <span><i class="legend-exit">EXIT</i>비상구</span>
+              </div>
+            </div>
+
+            <div class="map-stage schematic" id="mapStage">
+              <!-- 실제 영화관 맵을 발표용 도면 스타일로 단순화한 베이스 -->
+              <svg class="schematic-base" viewBox="0 0 584 858" aria-hidden="true">
+                <rect class="plan-bg" x="8" y="8" width="568" height="842" rx="10"/>
+
+                <!-- 외곽/복도 -->
+                <rect class="plan-corridor" x="34" y="62" width="80" height="488" rx="2"/>
+                <rect class="plan-corridor" x="88" y="520" width="458" height="68" rx="2"/>
+                <rect class="plan-corridor" x="442" y="390" width="104" height="198" rx="2"/>
+                <rect class="plan-corridor" x="110" y="192" width="326" height="52" rx="2"/>
+                <rect class="plan-corridor" x="372" y="242" width="174" height="146" rx="2"/>
+
+                <!-- 상영관/시설 블록 -->
+                <rect class="room cinema" x="126" y="72" width="210" height="118" rx="2"/>
+                <text class="room-title" x="231" y="125">5관</text>
+                <text class="room-sub" x="231" y="149">Cinema 5</text>
+
+                <rect class="room cinema" x="126" y="246" width="222" height="198" rx="2"/>
+                <text class="room-title" x="237" y="334">4관</text>
+                <text class="room-sub" x="237" y="360">Cinema 4</text>
+
+                <rect class="room shop" x="350" y="74" width="76" height="167" rx="2"/>
+                <text class="room-title small" x="388" y="142">매점</text>
+
+                <rect class="room public" x="430" y="74" width="116" height="208" rx="2"/>
+                <text class="room-title small" x="488" y="145">POPCORN</text>
+                <text class="room-title small" x="488" y="170">FACTORY</text>
+
+                <rect class="room public" x="378" y="344" width="152" height="113" rx="2"/>
+                <text class="room-title small" x="454" y="385">TICKET BOX</text>
+                <text class="room-title small" x="454" y="413">매표</text>
+
+                <rect class="room utility" x="170" y="446" width="90" height="74" rx="2"/>
+                <text class="room-title tiny" x="215" y="478">화장실</text>
+                <text class="room-sub tiny" x="215" y="498">Toilet</text>
+
+                <rect class="room utility" x="260" y="446" width="72" height="74" rx="2"/>
+                <text class="room-title tiny" x="296" y="478">화장실</text>
+                <text class="room-sub tiny" x="296" y="498">Toilet</text>
+
+                <rect class="room cinema" x="72" y="590" width="138" height="210" rx="2"/>
+                <text class="room-title" x="141" y="690">4DX관</text>
+                <text class="room-sub" x="141" y="714">4DX Screen</text>
+
+                <rect class="room cinema" x="214" y="590" width="138" height="210" rx="2"/>
+                <text class="room-title" x="283" y="690">2관</text>
+                <text class="room-sub" x="283" y="714">Cinema 2</text>
+
+                <rect class="room cinema" x="356" y="590" width="138" height="210" rx="2"/>
+                <text class="room-title" x="425" y="690">1관</text>
+                <text class="room-sub" x="425" y="714">Cinema 1</text>
+
+                <!-- 스크린 -->
+                <rect class="screen" x="88" y="760" width="106" height="14"/><text class="screen-text" x="141" y="771">SCREEN</text>
+                <rect class="screen" x="230" y="760" width="106" height="14"/><text class="screen-text" x="283" y="771">SCREEN</text>
+                <rect class="screen" x="372" y="760" width="106" height="14"/><text class="screen-text" x="425" y="771">SCREEN</text>
+
+                <!-- 설비 아이콘/라벨 -->
+                <text class="fixture" x="66" y="268">🚻</text>
+                <text class="fixture" x="392" y="462">🚻</text>
+                <text class="fixture fire" x="107" y="218">🧯</text>
+                <text class="fixture fire" x="522" y="369">🧯</text>
+                <text class="fixture fire" x="102" y="807">🧯</text>
+                <text class="fixture fire" x="512" y="808">🧯</text>
+
+                <!-- 주 통로 힌트 -->
+                <path class="corridor-guide" d="M97 558 H520 M520 558 V522 M97 558 V430 M150 430 V220 M390 470 H456"/>
+              </svg>
+
+              <!-- 동적 Node/Edge/센서 오버레이 -->
+              <svg id="floorSvg" class="overlay-svg" viewBox="0 0 584 858" aria-label="노드, 간선, 센서 및 대피 경로 오버레이">
+                <defs>
+                  <marker id="arrowGreen" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+                    <path d="M0,0 L0,7 L8,3.5 z" fill="#46f0b2"></path>
+                  </marker>
+                  <filter id="softGlow">
+                    <feGaussianBlur stdDeviation="3" result="blur"></feGaussianBlur>
+                    <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+                  </filter>
+                </defs>
+                <g id="edgeLayer"></g>
+                <g id="routeLayer"></g>
+                <g id="shutterLayer"></g>
+                <g id="sensorLayer"></g>
+                <g id="nodeLayer"></g>
+                <g id="exitLayer"></g>
+              </svg>
+
+              <div id="nodeActionCard" class="node-action-card hidden">
+                <button type="button" id="nodeActionClose" class="icon-btn" aria-label="닫기">×</button>
+                <span class="tiny-label">SELECTED NODE</span>
+                <strong id="selectedNodeTitle">-</strong>
+                <p id="selectedNodeSensors">-</p>
+                <div class="node-action-buttons">
+                  <button id="selectedFireBtn" type="button" class="btn danger simulation-only">🔥 화재 발생</button>
+                  <button id="selectedClearBtn" type="button" class="btn secondary simulation-only">화재 해제</button>
+                  <button id="selectedStartBtn" type="button" class="btn ghost simulation-only">출발 위치 지정</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="map-summary-row">
+              <div><span>출발 노드</span><strong id="startNodeLabel">-</strong></div>
+              <div><span>선택 비상구</span><strong id="exitLabel">-</strong></div>
+              <div><span>경로 비용</span><strong id="costLabel">-</strong></div>
+              <div><span>차단 구간</span><strong id="blockedLabel">0</strong></div>
+            </div>
+          </section>
+
+          <aside class="dashboard-side">
+            <section class="panel status-card">
+              <div class="panel-heading compact">
+                <div><span class="panel-kicker">RESPONSE</span><h2>현재 대응 상태</h2></div>
+              </div>
+              <div class="response-grid">
+                <div class="response-item">
+                  <span>추천 비상구</span>
+                  <strong id="selectedExitName">-</strong>
+                  <small id="routeCostText">대기 중</small>
+                </div>
+                <div class="response-item">
+                  <span>대피 경로</span>
+                  <strong id="routeStatusText">정상</strong>
+                  <small id="routeNodeText">-</small>
+                </div>
+              </div>
+              <div id="failSafeNotice" class="failsafe-notice hidden">
+                <strong>LOCAL FAIL-SAFE ACTIVE</strong>
+                <span>외부 서버 연결이 끊어졌습니다. 현장 LED 유도는 Raspberry Pi 로컬 연산을 유지합니다.</span>
+              </div>
+              <div id="noRouteNotice" class="no-route-notice hidden">
+                <strong>안전한 경로 없음</strong>
+                <span>모든 유효 경로가 차단되었습니다. 현장 관리자 판단이 필요합니다.</span>
+              </div>
+            </section>
+
+            <section class="panel sensor-card">
+              <div class="panel-heading compact">
+                <div><span class="panel-kicker">SENSORS</span><h2>센서 상태</h2></div>
+              </div>
+              <div class="sensor-metric-grid">
+                <div class="sensor-metric flame">
+                  <div class="sensor-metric-header"><div class="sensor-icon">🔥</div>화염 센서</div>
+                  <div class="sensor-metric-data"><span>이벤트</span><strong id="flameCount">0 / 15</strong><small id="flameStateText">정상</small></div>
+                </div>
+                <div class="sensor-metric mq2">
+                  <div class="sensor-metric-header"><div class="sensor-icon gas">◉</div>MQ-2 가스 센서</div>
+                  <div class="sensor-metric-data"><span>이벤트</span><strong id="mq2Count">0 / 5</strong><small id="mq2StateText">정상</small></div>
+                </div>
+              </div>
+              <div class="sensor-detail-list" id="sensorSummary"></div>
+            </section>
+
+            <section class="panel chart-card">
+              <div class="panel-heading compact">
+                <div><span class="panel-kicker">RELIABILITY</span><h2>화재 및 연기 감지 신뢰도</h2></div>
+              </div>
+              <div style="position: relative; height: 160px; width: 100%;">
+                <canvas id="reliabilityChart"></canvas>
+              </div>
+            </section>
+
+            <section class="panel scenario-card">
+              <div class="panel-heading compact">
+                <div><span class="panel-kicker">QUICK DEMO</span><h2>시나리오 제어</h2></div>
+                <button id="autoDemoBtn" class="mini-btn simulation-only" type="button">AUTO DEMO</button>
+              </div>
+
+              <div class="scenario-grid">
+                <button type="button" class="scenario-btn safe simulation-only" data-scenario="normal"><span>▶</span><strong>정상</strong><small>기본 상태</small></button>
+                <button type="button" class="scenario-btn simulation-only" data-scenario="east_exit_fire"><span>🔥</span><strong>동측 출구</strong><small>화재</small></button>
+                <button type="button" class="scenario-btn simulation-only" data-scenario="cinema4_fire"><span>🔥</span><strong>4관</strong><small>화재</small></button>
+                <button type="button" class="scenario-btn simulation-only" data-scenario="east_shutter"><span>▧</span><strong>통행 제한</strong><small>차단</small></button>
+                <button type="button" class="scenario-btn simulation-only" data-scenario="server_off"><span>⌁</span><strong>서버</strong><small>단절</small></button>
+              </div>
+
+              <div class="auto-demo-row">
+                <span id="demoStep">READY</span>
+                <button id="stopDemoBtn" type="button" class="text-btn" disabled>중지</button>
+                <button id="serverRestoreBtn" type="button" class="text-btn simulation-only">서버 복구</button>
+              </div>
+              <div id="realModeNotice" class="real-mode-notice hidden">REAL 모드에서는 실제 Raspberry Pi 센서 이벤트만 표시하며 시뮬레이션 조작이 잠깁니다.</div>
+            </section>
+
+            <div class="lower-side-grid">
+              <section class="panel qr-mini-card">
+                <div class="panel-heading compact"><div><span class="panel-kicker">MOBILE</span><h2>QR 대피 안내</h2></div></div>
+                <div class="qr-mini-body">
+                  <img src="{{ url_for('static', filename='images/qr_n1.png') }}" alt="모바일 대피 안내 QR 코드">
+                  <div><p>현재 위치 기반<br>모바일 대피 화면</p><a href="/mobile/N1" target="_blank" rel="noopener">모바일 미리보기 →</a></div>
+                </div>
+              </section>
+
+              <section class="panel log-mini-card">
+                <div class="panel-heading compact">
+                  <div><span class="panel-kicker">LIVE LOG</span><h2>실시간 이벤트</h2></div>
+                  <button class="text-btn nav-shortcut" data-target-page="events" type="button">전체 보기 →</button>
+                </div>
+                <div id="miniEventList" class="mini-event-list"></div>
+              </section>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- EQUIPMENT -->
+      <section id="equipment" class="page">
+        <div class="page-header-card">
+          <div><span class="panel-kicker">DEVICE MANAGEMENT</span><h2>장비 관리</h2><p>Raspberry Pi, 센서, 방화셔터, LED, 전원장치의 실시간 상태를 확인합니다.</p></div>
+          <div class="device-summary"><strong>15</strong><span>Flame</span><strong>5</strong><span>MQ-2</span><strong>2</strong><span>Shutter</span></div>
+        </div>
+        <section class="panel page-panel">
+          <div class="toolbar">
+            <input id="equipmentSearch" type="search" placeholder="장비명 / ID / 위치 검색">
+            <select id="equipmentFilter">
+              <option value="all">전체 상태</option>
+              <option value="normal">정상</option>
+              <option value="warning">주의</option>
+              <option value="danger">위험</option>
+              <option value="offline">연결 끊김</option>
+            </select>
+          </div>
+          <div class="table-wrap">
+            <table class="equipment-table">
+              <thead><tr><th>ID</th><th>분류</th><th>장비명</th><th>위치</th><th>값</th><th>상태</th><th>최근 확인</th></tr></thead>
+              <tbody id="equipmentRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <!-- ROUTING -->
+      <section id="routing" class="page">
+        <div class="page-header-card">
+          <div><span class="panel-kicker">ROUTE CONTROL</span><h2>대피 경로 및 수동 설정</h2><p>발표용 고급 시뮬레이션과 방화셔터·통로 차단을 제어합니다.</p></div>
+        </div>
+
+        <div class="routing-layout">
+          <section class="panel control-panel">
+            <div class="control-block">
+              <h3>출발 위치</h3>
+              <select id="startNodeSelect"></select>
+              <button id="startApplyBtn" class="btn primary simulation-only" type="button">출발 위치 적용</button>
+            </div>
+            <div class="control-block">
+              <h3>Flame 개별 제어</h3>
+              <select id="flameSelect"></select>
+              <div class="inline-control">
+                <button id="flameOnBtn" class="btn danger simulation-only" type="button">화재 ON</button>
+                <button id="flameOffBtn" class="btn secondary simulation-only" type="button">해제</button>
+              </div>
+            </div>
+            <div class="control-block">
+              <h3>MQ-2 개별 제어</h3>
+              <select id="mq2Select"></select>
+              <input id="mq2Range" type="range" min="0" max="1023" value="0">
+              <div class="range-row"><span>0</span><strong id="mq2Value">0</strong><span>1023</span></div>
+              <button id="mq2ApplyBtn" class="btn primary simulation-only" type="button">센서값 적용</button>
+            </div>
+          </section>
+
+          <section class="panel control-panel">
+            <div class="control-block">
+              <h3>일반 통로 수동 차단</h3>
+              <select id="manualEdgeSelect"></select>
+              <div class="inline-control">
+                <button id="edgeBlockBtn" class="btn warning simulation-only" type="button">BLOCK</button>
+                <button id="edgeOpenBtn" class="btn secondary simulation-only" type="button">OPEN</button>
+              </div>
+            </div>
+            <div class="control-block">
+              <h3>현재 관리자 차단</h3>
+              <div id="manualBlockedList" class="blocked-list"></div>
+            </div>
+            <div class="control-block">
+              <h3>방화셔터</h3>
+              <div id="shutterControls" class="shutter-controls"></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- EVENTS -->
+      <section id="events" class="page">
+        <div class="page-header-card">
+          <div><span class="panel-kicker">EVENT TIMELINE</span><h2>이벤트 기록</h2><p>센서 입력부터 경로 재계산, 통신 상태 변경까지 시간 순서대로 확인합니다.</p></div>
+          <strong id="eventCount" class="event-count">0 EVENTS</strong>
+        </div>
+        <section class="panel page-panel">
+          <div id="eventList" class="event-list"></div>
+        </section>
+      </section>
+
+      <!-- QR -->
+      <section id="qr" class="page">
+        <div class="page-header-card">
+          <div><span class="panel-kicker">MOBILE EVACUATION</span><h2>QR 기반 모바일 대피 안내</h2><p>관제 화면의 추천 경로를 모바일 화면에서도 확인하는 시연용 기능입니다.</p></div>
+        </div>
+        <div class="qr-page-grid">
+          <section class="panel qr-card-large">
+            <img src="{{ url_for('static', filename='images/qr_n1.png') }}" alt="모바일 대피 안내 QR 코드">
+            <div><span>현재 위치</span><strong>N1 · 매표소 우측</strong><p>스마트폰으로 QR을 스캔하여 대피 화면을 확인합니다.</p><a href="/mobile/N1" target="_blank" rel="noopener" class="btn primary link-btn">모바일 화면 열기</a></div>
+          </section>
+          <section class="panel phone-preview">
+            <div class="phone-frame">
+              <span class="phone-kicker">FIREGUARD</span>
+              <h3>대피 안내</h3>
+              <span>추천 비상구</span><strong id="mobileExitPreview">-</strong>
+              <p id="mobileRoutePreview">-</p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <div id="toast" class="toast hidden" role="status"></div>
+    </main>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
