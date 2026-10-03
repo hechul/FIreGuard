@@ -4,10 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FireGuard · 영화관 화재 대피 통합 관제 시스템</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard-dynamic-subset.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
   <script src="/socket.io/socket.io.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -26,6 +24,7 @@
         <button class="nav-item" data-page="routing"><span class="nav-icon">⌘</span><div>대피 경로<small>Routing</small></div></button>
         <button class="nav-item" data-page="events"><span class="nav-icon">▤</span><div>이벤트 로그<small>Events</small></div></button>
         <button class="nav-item" data-page="qr"><span class="nav-icon">▦</span><div>QR / 모바일<small>QR / Mobile</small></div></button>
+        <button class="nav-item" data-page="mapEditor"><span class="nav-icon">✥</span><div>맵 편집<small>Map Editor</small></div></button>
       </nav>
 
       <div class="sidebar-footer">
@@ -129,13 +128,16 @@
                 <text class="room-title small" x="454" y="385">TICKET BOX</text>
                 <text class="room-title small" x="454" y="413">매표</text>
 
-                <rect class="room utility" x="170" y="446" width="90" height="74" rx="2"/>
-                <text class="room-title tiny" x="215" y="478">화장실</text>
-                <text class="room-sub tiny" x="215" y="498">Toilet</text>
+                <!-- 제작도 I/J 화장실: 아이콘을 각 화장실 영역 안쪽으로 이동 -->
+                <rect class="room utility toilet-room" x="175" y="453" width="78" height="72" rx="3"/>
+                <text class="toilet-pictogram" x="214" y="477">🚻</text>
+                <text class="room-title tiny" x="214" y="498">화장실 1</text>
+                <text class="room-sub tiny" x="214" y="515">Toilet</text>
 
-                <rect class="room utility" x="260" y="446" width="72" height="74" rx="2"/>
-                <text class="room-title tiny" x="296" y="478">화장실</text>
-                <text class="room-sub tiny" x="296" y="498">Toilet</text>
+                <rect class="room utility toilet-room" x="258" y="453" width="78" height="72" rx="3"/>
+                <text class="toilet-pictogram" x="297" y="477">🚻</text>
+                <text class="room-title tiny" x="297" y="498">화장실 2</text>
+                <text class="room-sub tiny" x="297" y="515">Toilet</text>
 
                 <rect class="room cinema" x="72" y="590" width="138" height="210" rx="2"/>
                 <text class="room-title" x="141" y="690">4DX관</text>
@@ -155,9 +157,9 @@
                 <rect class="screen" x="372" y="760" width="106" height="14"/><text class="screen-text" x="425" y="771">SCREEN</text>
 
                 <!-- 설비 아이콘/라벨 -->
-                <text class="fixture" x="66" y="268">🚻</text>
-                <text class="fixture" x="392" y="462">🚻</text>
                 <text class="fixture fire" x="107" y="218">🧯</text>
+                <rect class="descender-fixture" x="74" y="337" width="44" height="28" rx="7"></rect>
+                <text class="descender-label" x="96" y="355">완강기</text>
                 <text class="fixture fire" x="522" y="369">🧯</text>
                 <text class="fixture fire" x="102" y="807">🧯</text>
                 <text class="fixture fire" x="512" y="808">🧯</text>
@@ -170,7 +172,7 @@
               <svg id="floorSvg" class="overlay-svg" viewBox="0 0 584 858" aria-label="노드, 간선, 센서 및 대피 경로 오버레이">
                 <defs>
                   <marker id="arrowGreen" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
-                    <path d="M0,0 L0,7 L8,3.5 z" fill="#46f0b2"></path>
+                    <path d="M0,0 L0,7 L8,3.5 z" fill="#3182f6"></path>
                   </marker>
                   <filter id="softGlow">
                     <feGaussianBlur stdDeviation="3" result="blur"></feGaussianBlur>
@@ -213,7 +215,7 @@
               </div>
               <div class="response-grid">
                 <div class="response-item">
-                  <span>추천 비상구</span>
+                  <span>추천 대피지점</span>
                   <strong id="selectedExitName">-</strong>
                   <small id="routeCostText">대기 중</small>
                 </div>
@@ -227,9 +229,13 @@
                 <strong>LOCAL FAIL-SAFE ACTIVE</strong>
                 <span>외부 서버 연결이 끊어졌습니다. 현장 LED 유도는 Raspberry Pi 로컬 연산을 유지합니다.</span>
               </div>
+              <div id="fallbackNotice" class="fallback-notice hidden">
+                <strong>보조 대피 경로 활성화</strong>
+                <span id="fallbackNoticeText">정규 비상구 경로가 모두 차단되어 지정된 보조 대피지점으로 안내합니다.</span>
+              </div>
               <div id="noRouteNotice" class="no-route-notice hidden">
-                <strong>안전한 경로 없음</strong>
-                <span>모든 유효 경로가 차단되었습니다. 현장 관리자 판단이 필요합니다.</span>
+                <strong>사용 가능한 대피 경로 없음</strong>
+                <span>정규 비상구와 보조 대피지점 접근 경로가 모두 차단되었습니다.</span>
               </div>
             </section>
 
@@ -239,24 +245,15 @@
               </div>
               <div class="sensor-metric-grid">
                 <div class="sensor-metric flame">
-                  <div class="sensor-metric-header"><div class="sensor-icon">🔥</div>화염 센서</div>
-                  <div class="sensor-metric-data"><span>이벤트</span><strong id="flameCount">0 / 15</strong><small id="flameStateText">정상</small></div>
+                  <div class="sensor-icon">🔥</div>
+                  <div><span>화염 센서</span><strong id="flameCount">0 / 15</strong><small id="flameStateText">정상</small></div>
                 </div>
                 <div class="sensor-metric mq2">
-                  <div class="sensor-metric-header"><div class="sensor-icon gas">◉</div>MQ-2 가스 센서</div>
-                  <div class="sensor-metric-data"><span>이벤트</span><strong id="mq2Count">0 / 5</strong><small id="mq2StateText">정상</small></div>
+                  <div class="sensor-icon gas">◉</div>
+                  <div><span>MQ-2 가스 센서</span><strong id="mq2Count">0 / 5</strong><small id="mq2StateText">정상</small></div>
                 </div>
               </div>
               <div class="sensor-detail-list" id="sensorSummary"></div>
-            </section>
-
-            <section class="panel chart-card">
-              <div class="panel-heading compact">
-                <div><span class="panel-kicker">RELIABILITY</span><h2>화재 및 연기 감지 신뢰도</h2></div>
-              </div>
-              <div style="position: relative; height: 160px; width: 100%;">
-                <canvas id="reliabilityChart"></canvas>
-              </div>
             </section>
 
             <section class="panel scenario-card">
@@ -265,13 +262,65 @@
                 <button id="autoDemoBtn" class="mini-btn simulation-only" type="button">AUTO DEMO</button>
               </div>
 
-              <div class="scenario-grid">
-                <button type="button" class="scenario-btn safe simulation-only" data-scenario="normal"><span>▶</span><strong>정상</strong><small>기본 상태</small></button>
-                <button type="button" class="scenario-btn simulation-only" data-scenario="east_exit_fire"><span>🔥</span><strong>동측 출구</strong><small>화재</small></button>
-                <button type="button" class="scenario-btn simulation-only" data-scenario="cinema4_fire"><span>🔥</span><strong>4관</strong><small>화재</small></button>
-                <button type="button" class="scenario-btn simulation-only" data-scenario="east_shutter"><span>▧</span><strong>통행 제한</strong><small>차단</small></button>
-                <button type="button" class="scenario-btn simulation-only" data-scenario="server_off"><span>⌁</span><strong>서버</strong><small>단절</small></button>
+              <div class="scenario-featured">
+                <button type="button" class="scenario-btn safe simulation-only" data-scenario="normal" data-note="모든 상태를 초기화하고 기본 동측 비상구 경로로 복원합니다."><span>▶</span><strong>정상</strong><small>기본 상태</small></button>
+                <button type="button" class="scenario-btn simulation-only" data-scenario="east_exit_fire" data-note="동측 비상구 앞 N3 화재로 기존 최단경로를 즉시 우회합니다."><span>🔥</span><strong>동측 출구</strong><small>화재</small></button>
+                <button type="button" class="scenario-btn simulation-only" data-scenario="mid_route_block" data-note="현재 최단경로의 E02 통로가 갑자기 폐쇄된 상황을 재현합니다."><span>🚧</span><strong>현재 경로</strong><small>갑자기 차단</small></button>
+                <button type="button" class="scenario-btn fallback simulation-only" data-scenario="fallback_toilet" data-note="모든 정규 비상구 진입이 막혀 가장 가까운 화장실 보조 대피지점으로 전환합니다."><span>WC</span><strong>출구 전부 차단</strong><small>화장실 대피</small></button>
               </div>
+
+              <details class="scenario-lab" open>
+                <summary>
+                  <span><b>예외 상황 Scenario Lab</b><small>센서 · 화재 · 통로 · 혼잡 · 통신 장애 · Fallback</small></span>
+                  <strong>14 CASES</strong>
+                </summary>
+
+                <div class="scenario-group">
+                  <div class="scenario-group-title"><span>01</span><div><b>감지 / 화재</b><small>임계값과 복합 화재 확인</small></div></div>
+                  <div class="scenario-compact-grid">
+                    <button class="scenario-compact simulation-only" data-scenario="smoke_warning" data-note="MQ2-02를 450으로 설정합니다. WARNING만 표시하고 Node는 차단하지 않습니다."><i>🌫</i><b>연기 주의</b><span>MQ-2 450</span></button>
+                    <button class="scenario-compact simulation-only" data-scenario="smoke_danger" data-note="동측 비상구 MQ2-05를 760으로 올려 N3를 위험 Node로 차단합니다."><i>☁</i><b>연기 위험</b><span>MQ-2 760</span></button>
+                    <button class="scenario-compact simulation-only" data-scenario="ticket_fire" data-note="매표소 앞 N14 화재를 발생시켜 인접 경로 재계산을 확인합니다."><i>🔥</i><b>매표소 화재</b><span>N14</span></button>
+                    <button class="scenario-compact simulation-only" data-scenario="cinema4_fire" data-note="4관 앞 N9 화재로 서측 상부 경로를 회피합니다."><i>🔥</i><b>4관 화재</b><span>N9</span></button>
+                    <button class="scenario-compact danger simulation-only" data-scenario="large_fire" data-note="N3와 N7에서 동시 화재가 발생한 대형 화재 상황입니다. 남아 있는 정규 출구를 재탐색합니다."><i>🔥🔥</i><b>복합 대형화재</b><span>N3 + N7</span></button>
+                  </div>
+                </div>
+
+                <div class="scenario-group">
+                  <div class="scenario-group-title"><span>02</span><div><b>경로 / 시설 / 인파</b><small>경로가 막히거나 비용이 변하는 상황</small></div></div>
+                  <div class="scenario-compact-grid">
+                    <button class="scenario-compact simulation-only" data-scenario="east_shutter" data-note="동측 방화셔터 SH-02를 닫아 E02를 차단합니다."><i>▧</i><b>방화셔터</b><span>SH-02 CLOSED</span></button>
+                    <button class="scenario-compact simulation-only" data-scenario="mid_route_block" data-note="대피 중 선택된 E02 통로에 장애물이 생겨 즉시 우회 경로를 계산합니다."><i>🚧</i><b>이동 중 통로 폐쇄</b><span>E02 BLOCK</span></button>
+                    <button class="scenario-compact warning simulation-only" data-scenario="crowd_congestion" data-note="동측 통로를 막지 않고 Edge 가중치만 높여 인파 혼잡에 따른 우회 경로를 계산합니다."><i>👥</i><b>인파 혼잡</b><span>Dynamic Weight</span></button>
+                  </div>
+                </div>
+
+                <div class="scenario-group">
+                  <div class="scenario-group-title"><span>03</span><div><b>보조 대피 / 한계 상황</b><small>정규 EXIT 이후 Fallback 단계 검증</small></div></div>
+                  <div class="scenario-compact-grid">
+                    <button class="scenario-compact fallback simulation-only" data-scenario="fallback_toilet" data-note="4개 정규 EXIT 진입 Edge를 모두 차단하고 N16/N17 화장실 중 최단 지점을 선택합니다."><i>WC</i><b>화장실 Fallback</b><span>EXIT 전부 불가</span></button>
+                    <button class="scenario-compact fallback simulation-only" data-scenario="fallback_descender" data-note="정규 EXIT와 화장실 접근까지 차단해 4관 왼쪽 N18 완강기로 안내합니다."><i>↧</i><b>완강기 Fallback</b><span>N18</span></button>
+                    <button class="scenario-compact danger simulation-only" data-scenario="no_route" data-note="정규 비상구, 화장실, 완강기까지 모두 접근 불가능해 NO SAFE ROUTE를 표시합니다."><i>×</i><b>대피 경로 없음</b><span>NO SAFE ROUTE</span></button>
+                  </div>
+                </div>
+
+                <div class="scenario-group">
+                  <div class="scenario-group-title"><span>04</span><div><b>통신 / 장비 장애</b><small>Fail-safe와 장치 고장을 구분</small></div></div>
+                  <div class="scenario-compact-grid">
+                    <button class="scenario-compact warning simulation-only" data-scenario="server_off" data-note="외부 서버/Supabase 연결만 단절됩니다. Raspberry Pi 로컬 Dijkstra와 LED는 유지됩니다."><i>☁</i><b>서버 단절</b><span>LOCAL FAIL-SAFE</span></button>
+                    <button class="scenario-compact danger simulation-only" data-scenario="fire_server_off" data-note="실제 위험 상황에서 동시에 외부 서버가 단절되어도 로컬 경로 계산이 유지되는지 보여줍니다."><i>🔥☁</i><b>화재 + 서버 단절</b><span>Fail-safe Test</span></button>
+                    <button class="scenario-compact danger simulation-only" data-scenario="pi_off" data-note="Raspberry Pi 현장 제어기 자체가 끊긴 상황입니다. 서버 단절과 달리 로컬 LED 제어 유지가 불가능한 장애로 구분합니다."><i>⌁</i><b>Pi 제어기 단절</b><span>EDGE OFFLINE</span></button>
+                    <button class="scenario-compact warning simulation-only" data-scenario="sensor_fault" data-note="동측 비상구의 Flame/MQ-2 센서 두 개가 통신 단절된 상황을 장비 관리 화면에 표시합니다."><i>⚠</i><b>센서 통신 장애</b><span>FLM-15 + MQ2-05</span></button>
+                  </div>
+                </div>
+              </details>
+
+              <div class="scenario-explanation" id="scenarioExplanation">
+                <span>SCENARIO READY</span>
+                <strong>상황 버튼을 선택하면 여기에서 시연 목적을 바로 확인할 수 있습니다.</strong>
+              </div>
+
+              <p class="fallback-safety-note">※ 화장실/완강기는 캡스톤 시뮬레이션용 보조 대피지점입니다. 실제 적용 시 건물 방재계획·피난설비 위치·소방안전 검토가 필요합니다.</p>
 
               <div class="auto-demo-row">
                 <span id="demoStep">READY</span>
@@ -408,6 +457,172 @@
               <p id="mobileRoutePreview">-</p>
             </div>
           </section>
+        </div>
+      </section>
+
+
+      <!-- MAP EDITOR -->
+      <section id="mapEditor" class="page">
+        <div class="page-header-card editor-header">
+          <div>
+            <span class="panel-kicker">VISUAL MAP EDITOR</span>
+            <h2>Node / Edge 위치 편집</h2>
+            <p>사이트에서 직접 드래그하여 대시보드의 Node와 Edge 위치를 맞출 수 있습니다. 저장하면 <code>floorplan.json</code>에 반영됩니다.</p>
+          </div>
+          <div class="editor-save-state">
+            <span id="editorDirtyBadge" class="editor-badge clean">SAVED</span>
+            <strong id="editorSelectionLabel">선택 없음</strong>
+          </div>
+        </div>
+
+        <div class="map-editor-layout">
+          <section class="panel map-editor-panel">
+            <div class="map-editor-toolbar">
+              <div class="editor-mode-toggle">
+                <button id="editorNodeModeBtn" class="active" type="button">● Node 이동</button>
+                <button id="editorEdgeModeBtn" type="button">━ Edge 이동</button>
+              </div>
+
+              <label class="editor-check">
+                <input id="editorSnapToggle" type="checkbox" checked>
+                <span>5px 스냅</span>
+              </label>
+
+              <div class="editor-toolbar-actions">
+                <button id="editorUndoBtn" class="btn ghost" type="button" disabled>↶ 실행 취소</button>
+                <button id="editorReloadBtn" class="btn secondary" type="button">↻ 저장값 다시 불러오기</button>
+                <button id="editorSaveBtn" class="btn primary" type="button">저장</button>
+              </div>
+            </div>
+
+            <div class="map-editor-help">
+              <span><b>Node 모드</b> 원을 직접 드래그</span>
+              <span><b>Edge 모드</b> 선을 드래그하면 양 끝 Node가 함께 이동</span>
+              <span><b>Exit</b> 초록 사각형도 Node 모드에서 이동 가능</span>
+            </div>
+
+            <div id="mapEditorStage" class="map-editor-stage">
+              <svg class="schematic-base editor-schematic" viewBox="0 0 584 858" aria-hidden="true">
+                <rect class="plan-bg" x="8" y="8" width="568" height="842" rx="10"/>
+                <rect class="plan-corridor" x="34" y="62" width="80" height="488" rx="2"/>
+                <rect class="plan-corridor" x="88" y="520" width="458" height="68" rx="2"/>
+                <rect class="plan-corridor" x="442" y="390" width="104" height="198" rx="2"/>
+                <rect class="plan-corridor" x="110" y="192" width="326" height="52" rx="2"/>
+                <rect class="plan-corridor" x="372" y="242" width="174" height="146" rx="2"/>
+
+                <rect class="room cinema" x="126" y="72" width="210" height="118" rx="2"/>
+                <text class="room-title" x="231" y="125">5관</text>
+                <text class="room-sub" x="231" y="149">Cinema 5</text>
+
+                <rect class="room cinema" x="126" y="246" width="222" height="198" rx="2"/>
+                <text class="room-title" x="237" y="334">4관</text>
+                <text class="room-sub" x="237" y="360">Cinema 4</text>
+
+                <rect class="room shop" x="350" y="74" width="76" height="167" rx="2"/>
+                <text class="room-title small" x="388" y="142">매점</text>
+
+                <rect class="room public" x="430" y="74" width="116" height="208" rx="2"/>
+                <text class="room-title small" x="488" y="145">POPCORN</text>
+                <text class="room-title small" x="488" y="170">FACTORY</text>
+
+                <rect class="room public" x="378" y="344" width="152" height="113" rx="2"/>
+                <text class="room-title small" x="454" y="385">TICKET BOX</text>
+                <text class="room-title small" x="454" y="413">매표</text>
+
+                <rect class="room utility toilet-room" x="175" y="453" width="78" height="72" rx="3"/>
+                <text class="toilet-pictogram" x="214" y="477">🚻</text>
+                <text class="room-title tiny" x="214" y="498">화장실 1</text>
+                <text class="room-sub tiny" x="214" y="515">Toilet</text>
+
+                <rect class="room utility toilet-room" x="258" y="453" width="78" height="72" rx="3"/>
+                <text class="toilet-pictogram" x="297" y="477">🚻</text>
+                <text class="room-title tiny" x="297" y="498">화장실 2</text>
+                <text class="room-sub tiny" x="297" y="515">Toilet</text>
+
+                <rect class="room cinema" x="72" y="590" width="138" height="210" rx="2"/>
+                <text class="room-title" x="141" y="690">4DX관</text>
+                <text class="room-sub" x="141" y="714">4DX Screen</text>
+
+                <rect class="room cinema" x="214" y="590" width="138" height="210" rx="2"/>
+                <text class="room-title" x="283" y="690">2관</text>
+                <text class="room-sub" x="283" y="714">Cinema 2</text>
+
+                <rect class="room cinema" x="356" y="590" width="138" height="210" rx="2"/>
+                <text class="room-title" x="425" y="690">1관</text>
+                <text class="room-sub" x="425" y="714">Cinema 1</text>
+
+                <rect class="screen" x="88" y="760" width="106" height="14"/>
+                <rect class="screen" x="230" y="760" width="106" height="14"/>
+                <rect class="screen" x="372" y="760" width="106" height="14"/>
+
+                <rect class="descender-fixture" x="74" y="337" width="44" height="28" rx="7"></rect>
+                <text class="descender-label" x="96" y="355">완강기</text>
+              </svg>
+
+              <svg id="mapEditorSvg" class="overlay-svg editor-overlay" viewBox="0 0 584 858">
+                <g id="editorEdgeLayer"></g>
+                <g id="editorNodeLayer"></g>
+              </svg>
+            </div>
+          </section>
+
+          <aside class="panel editor-inspector">
+            <div class="panel-heading compact">
+              <div>
+                <span class="panel-kicker">INSPECTOR</span>
+                <h2>선택 항목</h2>
+              </div>
+            </div>
+
+            <div id="editorInspectorEmpty" class="editor-empty">
+              지도에서 Node 또는 Edge를 선택하세요.
+            </div>
+
+            <div id="editorInspectorBody" class="hidden">
+              <div class="editor-field">
+                <span>유형</span>
+                <strong id="editorItemType">-</strong>
+              </div>
+              <div class="editor-field">
+                <span>ID</span>
+                <strong id="editorItemId">-</strong>
+              </div>
+              <div class="editor-field">
+                <span>이름 / 연결</span>
+                <strong id="editorItemName">-</strong>
+              </div>
+
+              <div id="editorNodeFields">
+                <label class="editor-input-row">
+                  <span>X</span>
+                  <input id="editorXInput" type="number" step="1">
+                </label>
+                <label class="editor-input-row">
+                  <span>Y</span>
+                  <input id="editorYInput" type="number" step="1">
+                </label>
+                <button id="editorApplyCoordBtn" class="btn secondary" type="button">좌표 적용</button>
+              </div>
+
+              <div id="editorEdgeFields" class="hidden">
+                <div class="editor-field">
+                  <span>FROM</span>
+                  <strong id="editorEdgeFrom">-</strong>
+                </div>
+                <div class="editor-field">
+                  <span>TO</span>
+                  <strong id="editorEdgeTo">-</strong>
+                </div>
+                <p class="editor-note">Edge는 독립 좌표가 없습니다. 선을 드래그하면 FROM/TO 두 Node가 같은 거리만큼 같이 이동합니다.</p>
+              </div>
+            </div>
+
+            <div class="editor-tip-card">
+              <span>TIP</span>
+              <strong>실제 폼보드와 화면을 맞출 때</strong>
+              <p>모형 사진이나 실측 위치를 보면서 Node를 먼저 맞춘 뒤 Edge를 확인하는 방식이 가장 빠릅니다.</p>
+            </div>
+          </aside>
         </div>
       </section>
 
