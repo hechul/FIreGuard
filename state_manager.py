@@ -58,6 +58,7 @@ class SimulationState:
         self.server_link_connected = True  # Supabase/외부 관제 링크 상태를 시연한다.
         self.connection_changed_at = {"pi": now, "server": now}
         self.manual_blocked_edges = set()
+        self.edge_weight_overrides: dict[str, float] = {}
         self.route: dict[str, Any] | None = None
         self.blocked_nodes: set[str] = set()
         self.blocked_edges: set[str] = set()
@@ -103,11 +104,20 @@ class SimulationState:
         self.blocked_nodes = blocked_nodes
         self.blocked_edges = shutter_edges | self.manual_blocked_edges
 
+        # 1순위는 정규 EXIT, 2순위는 지정된 화장실/완강기 보조 대피 지점이다.
         route = self.graph.shortest_route(
             self.start_node,
             blocked_nodes=self.blocked_nodes,
             blocked_edges=self.blocked_edges,
+            edge_weight_overrides=self.edge_weight_overrides,
         )
+        if route is None:
+            route = self.graph.shortest_fallback_route(
+                self.start_node,
+                blocked_nodes=self.blocked_nodes,
+                blocked_edges=self.blocked_edges,
+                edge_weight_overrides=self.edge_weight_overrides,
+            )
         self.route = route.as_dict() if route else None
 
     def set_operation_mode(self, mode: str) -> None:
@@ -228,6 +238,46 @@ class SimulationState:
                 self._route_result_text(),
             )
 
+    def set_edge_weight(self, edge_id: str, weight: float | None, source: str = "SIM") -> None:
+        """혼잡/우회 시연용 동적 Edge 가중치.
+
+        weight=None 이면 원래 floorplan 가중치로 복구한다.
+        """
+        with self._lock:
+            if edge_id not in self.graph.edges:
+                raise ValueError(f"알 수 없는 Edge입니다: {edge_id}")
+            if weight is None:
+                self.edge_weight_overrides.pop(edge_id, None)
+                change = "혼잡 가중치 해제"
+            else:
+                weight = float(weight)
+                if weight <= 0:
+                    raise ValueError("Edge 가중치는 0보다 커야 합니다.")
+                self.edge_weight_overrides[edge_id] = weight
+                base = float(self.graph.edges[edge_id]["weight"])
+                change = f"혼잡 가중치 {base:.1f} → {weight:.1f}"
+            self._recompute()
+            self._add_event("CONGESTION", edge_id, f"{change} ({source})", self._route_result_text())
+
+    def set_sensor_connection(self, sensor_id: str, connected: bool, source: str = "SIM") -> None:
+        """특정 센서 통신 단절/복구 시뮬레이션."""
+        with self._lock:
+            if sensor_id in self.flame_sensors:
+                target = self.flame_sensors[sensor_id]
+            elif sensor_id in self.mq2_sensors:
+                target = self.mq2_sensors[sensor_id]
+            else:
+                raise ValueError(f"알 수 없는 센서입니다: {sensor_id}")
+            target["connected"] = bool(connected)
+            target["updatedAt"] = self._now()
+            self._recompute()
+            self._add_event(
+                "SENSOR",
+                sensor_id,
+                f"{'연결 복구' if connected else '통신 단절'} ({source})",
+                self._route_result_text(),
+            )
+
     def set_connection(self, target: str, connected: bool, source: str = "SIM") -> None:
         with self._lock:
             if target == "pi":
@@ -239,11 +289,17 @@ class SimulationState:
             else:
                 raise ValueError("연결 대상은 pi 또는 server여야 합니다.")
             self.connection_changed_at[target] = self._now()
+            if connected:
+                result = "정상 통신"
+            elif target == "server" and self.pi_connected:
+                result = "외부 서버 없이 Raspberry Pi 로컬 Fail-safe 유지"
+            else:
+                result = "현장 제어기 단절 - 센서 수집/LED 출력 확인 필요"
             self._add_event(
                 "CONNECTION",
                 location,
                 f"{'연결' if connected else '단절'} ({source})",
-                "정상 통신" if connected else "Raspberry Pi 로컬 Fail-safe 유지",
+                result,
             )
 
     def reset(self, clear_events: bool = False) -> None:
@@ -263,9 +319,12 @@ class SimulationState:
 
     def _route_result_text(self) -> str:
         if not self.route:
-            return "안전한 대피 경로 없음"
-        exit_name = self.graph.exits[self.route["exitId"]].get("name", self.route["exitId"])
-        return f"{exit_name} 경로 계산 완료"
+            return "사용 가능한 대피 경로 없음"
+        destination_id = self.route.get("destinationId") or self.route["exitId"]
+        destination_name = self.graph.destination_name(destination_id)
+        if self.route.get("routeMode") == "fallback":
+            return f"정규 비상구 불가 → {destination_name} 보조 대피 경로 계산 완료"
+        return f"{destination_name} 경로 계산 완료"
 
     def _equipment_snapshot(self) -> list[dict[str, Any]]:
         equipment: list[dict[str, Any]] = [
@@ -358,20 +417,29 @@ class SimulationState:
             fire_ids = [sid for sid, value in self.flame_sensors.items() if value["active"] and value["connected"]]
             mq_danger_ids = [sid for sid, value in self.mq2_sensors.items() if value["status"] == "danger" and value["connected"]]
             mq_warning_ids = [sid for sid, value in self.mq2_sensors.items() if value["status"] == "warning" and value["connected"]]
+            sensor_offline_ids = [
+                sid for sid, value in {**self.flame_sensors, **self.mq2_sensors}.items()
+                if not value["connected"]
+            ]
+
+            route_mode = self.route.get("routeMode", "exit") if self.route else "none"
 
             if not self.route:
                 overall_status = "no_route"
             elif fire_ids or mq_danger_ids:
                 overall_status = "fire"
-            elif mq_warning_ids:
+            elif route_mode == "fallback" or mq_warning_ids:
                 overall_status = "warning"
             else:
                 overall_status = "normal"
 
             fail_safe_active = self.pi_connected and not self.server_link_connected
-            exit_name = None
+            destination_name = None
+            destination_type = None
             if self.route:
-                exit_name = self.graph.exits[self.route["exitId"]].get("name", self.route["exitId"])
+                destination_id = self.route.get("destinationId") or self.route["exitId"]
+                destination_name = self.graph.destination_name(destination_id)
+                destination_type = self.route.get("destinationType", "exit")
 
             return {
                 "updatedAt": self._now(),
@@ -380,10 +448,16 @@ class SimulationState:
                 "failSafeActive": fail_safe_active,
                 "startNode": self.start_node,
                 "route": deepcopy(self.route),
-                "selectedExitName": exit_name,
+                "routeMode": route_mode,
+                "fallbackActive": route_mode == "fallback",
+                "selectedExitName": destination_name,
+                "selectedDestinationName": destination_name,
+                "selectedDestinationType": destination_type,
                 "blockedNodes": sorted(self.blocked_nodes),
                 "blockedEdges": sorted(self.blocked_edges),
                 "manualBlockedEdges": sorted(self.manual_blocked_edges),
+                "edgeWeightOverrides": deepcopy(self.edge_weight_overrides),
+                "congestionActive": bool(self.edge_weight_overrides),
                 "connections": {"pi": self.pi_connected, "server": self.server_link_connected},
                 "connectionChangedAt": deepcopy(self.connection_changed_at),
                 "flameSensors": deepcopy(self.flame_sensors),
@@ -395,6 +469,7 @@ class SimulationState:
                     "mq2Total": len(self.mq2_sensors),
                     "mq2Danger": len(mq_danger_ids),
                     "mq2Warning": len(mq_warning_ids),
+                    "offline": len(sensor_offline_ids),
                 },
                 "equipment": self._equipment_snapshot(),
                 "events": deepcopy(self.events),

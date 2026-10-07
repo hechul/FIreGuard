@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import math
+import re
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
 
@@ -8,6 +11,7 @@ from flask import Flask, jsonify, render_template, request
 from flask_socketio import SocketIO, emit
 
 from state_manager import SimulationState
+from route_service import FloorGraph
 
 BASE_DIR = Path(__file__).resolve().parent
 FLOORPLAN_PATH = BASE_DIR / "static" / "data" / "floorplan.json"
@@ -56,6 +60,87 @@ def mobile(node_id: str):
 @app.get("/api/floorplan")
 def get_floorplan():
     return jsonify(floorplan)
+
+
+def _save_floorplan(candidate=None) -> None:
+    """현재 floorplan을 JSON 파일에 안전하게 저장."""
+    temp_path = FLOORPLAN_PATH.with_suffix(".json.tmp")
+    with temp_path.open("w", encoding="utf-8") as file:
+        json.dump(candidate if candidate is not None else floorplan, file, ensure_ascii=False, indent=2)
+    temp_path.replace(FLOORPLAN_PATH)
+
+
+@app.post("/api/floorplan/layout")
+def update_floorplan_layout():
+    """수정 모드의 좌표 및 추가 노드/간선을 검증한 뒤 함께 저장한다.
+
+    Edge는 from/to Node 연결 관계로 계산되므로 별도 좌표를 가지지 않는다.
+    편집 화면의 '간선 이동'은 연결된 두 끝점을 동시에 이동한다.
+    """
+    try:
+        data = payload()
+        positions = data.get("positions")
+        if not isinstance(positions, dict):
+            raise ValueError("positions 객체가 필요합니다.")
+
+        with state._lock:
+            if "baseFloorplan" in data and data["baseFloorplan"] != floorplan:
+                return jsonify({"ok": False, "error": "다른 화면에서 지도가 변경되었습니다. 저장값을 다시 불러오세요."}), 409
+            candidate = deepcopy(floorplan)
+            editable = {item["id"]: item for item in [*candidate["nodes"], *candidate["exits"]]}
+            new_nodes = data.get("nodes", [])
+            new_edges = data.get("edges", [])
+            if not isinstance(new_nodes, list) or not isinstance(new_edges, list):
+                raise ValueError("추가할 노드와 간선은 목록이어야 합니다.")
+            for node in new_nodes:
+                if not isinstance(node, dict) or not re.fullmatch(r"N[1-9][0-9]*", str(node.get("id", ""))):
+                    raise ValueError("노드 ID 형식이 올바르지 않습니다.")
+                if node["id"] in editable or node["id"] not in positions:
+                    raise ValueError("노드 ID가 중복되거나 좌표가 없습니다.")
+                name = node.get("name", node["id"])
+                if not isinstance(name, str) or not name.strip() or len(name) > 80:
+                    raise ValueError("노드 이름은 1~80자로 입력하세요.")
+                item = {"id": node["id"], "name": name.strip()}
+                candidate["nodes"].append(item)
+                editable[item["id"]] = item
+            for item_id, point in positions.items():
+                if item_id not in editable or not isinstance(point, dict):
+                    raise ValueError(f"{item_id} 좌표 형식이 올바르지 않습니다.")
+                x, y = float(point["x"]), float(point["y"])
+                if not math.isfinite(x) or not math.isfinite(y):
+                    raise ValueError("좌표는 유한한 숫자여야 합니다.")
+                editable[item_id].update(x=round(max(8, min(576, x)), 2), y=round(max(8, min(850, y)), 2))
+            edge_ids = {edge["id"] for edge in candidate["edges"]}
+            pairs = {frozenset((edge["from"], edge["to"])) for edge in candidate["edges"]}
+            for edge in new_edges:
+                if not isinstance(edge, dict) or not re.fullmatch(r"E[0-9]+", str(edge.get("id", ""))):
+                    raise ValueError("간선 ID 형식이 올바르지 않습니다.")
+                start, end = edge.get("from"), edge.get("to")
+                if not isinstance(start, str) or not isinstance(end, str) or start not in editable or end not in editable or start == end:
+                    raise ValueError("서로 다른 두 지점을 연결하세요.")
+                pair = frozenset((start, end))
+                if edge["id"] in edge_ids or pair in pairs:
+                    raise ValueError("이미 존재하는 간선입니다.")
+                weight = float(edge["weight"])
+                if not math.isfinite(weight) or weight <= 0:
+                    raise ValueError("간선 비용은 0보다 큰 유한한 숫자여야 합니다.")
+                candidate["edges"].append({"id": edge["id"], "from": start, "to": end, "weight": weight})
+                edge_ids.add(edge["id"])
+                pairs.add(pair)
+            if not positions and not new_edges:
+                raise ValueError("저장할 변경 사항이 없습니다.")
+            graph = FloorGraph(candidate)
+            _save_floorplan(candidate)
+            floorplan.clear()
+            floorplan.update(candidate)
+            state.graph = graph
+            state._recompute()
+        socketio.emit("floorplan:update", floorplan)
+        return jsonify({"ok": True, "floorplan": floorplan, "changed": len(positions), "state": broadcast_state()})
+    except (ValueError, TypeError, KeyError) as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
+    except OSError:
+        return jsonify({"ok": False, "error": "지도를 파일에 저장하지 못했습니다. 다시 시도하세요."}), 500
 
 
 @app.get("/api/state")
@@ -111,6 +196,20 @@ def set_connection():
     return apply_action(lambda: state.set_connection(data["target"], data["connected"], source="SIM"))
 
 
+
+@app.post("/api/simulation/sensor-connection")
+def set_sensor_connection():
+    data = payload()
+    return apply_action(lambda: state.set_sensor_connection(data["sensorId"], data["connected"], source="SIM"))
+
+
+@app.post("/api/simulation/edge-weight")
+def set_edge_weight():
+    data = payload()
+    value = data.get("weight")
+    return apply_action(lambda: state.set_edge_weight(data["edgeId"], value, source="SIM"))
+
+
 @app.post("/api/simulation/reset")
 def reset():
     data = request.get_json(silent=True) or {}
@@ -123,29 +222,112 @@ def run_scenario():
     scenario_id = data["scenarioId"]
 
     def action():
+        # -----------------------------------------------------------
+        # BASIC
+        # -----------------------------------------------------------
         if scenario_id == "normal":
             state.reset(clear_events=False)
+
+        # -----------------------------------------------------------
+        # SENSOR / FIRE
+        # -----------------------------------------------------------
+        elif scenario_id == "smoke_warning":
+            state.reset(clear_events=False)
+            state.set_mq2("MQ2-02", 450, source="SCENARIO")
+
+        elif scenario_id == "smoke_danger":
+            state.reset(clear_events=False)
+            state.set_mq2("MQ2-05", 760, source="SCENARIO")
+
         elif scenario_id == "east_exit_fire":
             state.reset(clear_events=False)
             state.set_node_fire("N3", True, source="SCENARIO")
+
+        elif scenario_id == "ticket_fire":
+            state.reset(clear_events=False)
+            state.set_node_fire("N14", True, source="SCENARIO")
+
         elif scenario_id == "cinema4_fire":
             state.reset(clear_events=False)
             state.set_node_fire("N9", True, source="SCENARIO")
+
+        elif scenario_id == "large_fire":
+            state.reset(clear_events=False)
+            # 동측 출구와 서측 분기점을 동시에 위험 Node로 만들어 남측 출구 우회를 유도한다.
+            state.set_node_fire("N3", True, source="SCENARIO")
+            state.set_node_fire("N7", True, source="SCENARIO")
+
+        # -----------------------------------------------------------
+        # ROUTE / BLOCK / CROWD
+        # -----------------------------------------------------------
         elif scenario_id == "east_shutter":
             state.reset(clear_events=False)
             state.set_shutter("SH-02", True, source="SCENARIO")
-        elif scenario_id == "server_off":
-            state.set_connection("server", False, source="SCENARIO")
-        elif scenario_id == "server_on":
-            state.set_connection("server", True, source="SCENARIO")
+
+        elif scenario_id == "mid_route_block":
+            state.reset(clear_events=False)
+            # 정상 최단경로 N1-N2-N3-EXIT_E 중 E02가 갑자기 막힌 상황.
+            state.set_manual_edge("E02", True)
+
+        elif scenario_id == "crowd_congestion":
+            state.reset(clear_events=False)
+            # 차단은 아니지만 동측 통로 혼잡 비용을 크게 올려 Dijkstra가 다른 출구를 선택하게 한다.
+            state.set_edge_weight("E02", 14.0, source="SCENARIO")
+            state.set_edge_weight("E03", 8.0, source="SCENARIO")
+
+        # -----------------------------------------------------------
+        # FALLBACK / IMPOSSIBLE
+        # -----------------------------------------------------------
+        elif scenario_id == "fallback_toilet":
+            state.reset(clear_events=False)
+            for edge_id in ("E03", "E09", "E12", "E16"):
+                state.set_manual_edge(edge_id, True)
+
+        elif scenario_id == "fallback_descender":
+            state.reset(clear_events=False)
+            for edge_id in ("E03", "E09", "E12", "E16", "E21", "E22"):
+                state.set_manual_edge(edge_id, True)
+
         elif scenario_id == "no_route":
             state.reset(clear_events=False)
-            for shutter in floorplan.get("shutters", []):
-                state.set_shutter(shutter["id"], True, source="SCENARIO")
-            # 서측 우회 경로까지 차단하여 '경로 없음'을 시연한다.
-            state.set_manual_edge("E08", True)
-            state.set_manual_edge("E16", True)
-            state.set_manual_edge("E12", True)
+            for edge_id in ("E03", "E09", "E12", "E16", "E21", "E22", "E23"):
+                state.set_manual_edge(edge_id, True)
+
+        # -----------------------------------------------------------
+        # SYSTEM / COMMUNICATION
+        # -----------------------------------------------------------
+        elif scenario_id == "server_off":
+            state.reset(clear_events=False)
+            state.set_connection("server", False, source="SCENARIO")
+
+        elif scenario_id == "fire_server_off":
+            state.reset(clear_events=False)
+            state.set_node_fire("N3", True, source="SCENARIO")
+            state.set_connection("server", False, source="SCENARIO")
+
+        elif scenario_id == "server_on":
+            state.set_connection("server", True, source="SCENARIO")
+
+        elif scenario_id == "pi_off":
+            state.reset(clear_events=False)
+            state.set_connection("pi", False, source="SCENARIO")
+
+        elif scenario_id == "pi_on":
+            state.set_connection("pi", True, source="SCENARIO")
+
+        # -----------------------------------------------------------
+        # SENSOR FAULT
+        # -----------------------------------------------------------
+        elif scenario_id == "sensor_fault":
+            state.reset(clear_events=False)
+            # 동측 비상구의 Flame + MQ-2가 동시에 통신 단절된 상황.
+            state.set_sensor_connection("FLM-15", False, source="SCENARIO")
+            state.set_sensor_connection("MQ2-05", False, source="SCENARIO")
+
+        elif scenario_id == "sensor_recover":
+            state.set_sensor_connection("FLM-15", True, source="SCENARIO")
+            state.set_sensor_connection("MQ2-05", True, source="SCENARIO")
+
         else:
             raise ValueError(f"알 수 없는 시나리오입니다: {scenario_id}")
 
