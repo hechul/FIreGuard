@@ -182,6 +182,16 @@
       }
       const descender = floorplan.nodes.find(n => n.id === 'N18');
       if (descender) svg.appendChild(element('text', {class: 'descender-label', x: descender.x, y: descender.y-18}, '완강기'));
+      // Keep physical LEDs separate from editable nodes and evacuation edges.
+      if (svg.closest('#mapStage')) {
+        const leds = element('g', {class: 'physical-led-layer', 'pointer-events': 'none', 'aria-label': 'LED 유도등'});
+        for (const [start, end] of window.FireGuardLedPlan) {
+          const attrs = {x1: start[0], y1: start[1], x2: end[0], y2: end[1], 'stroke-linecap': 'round'};
+          leds.appendChild(element('line', {...attrs, stroke: '#059669', 'stroke-width': 5}));
+          leds.appendChild(element('line', {...attrs, stroke: '#d1fae5', 'stroke-width': 2, 'stroke-dasharray': '1 12'}));
+        }
+        svg.appendChild(leds);
+      }
     });
   }
 
@@ -1139,6 +1149,8 @@
       card.classList.add('hidden'); return;
     }
     const sensors = floorplan.sensors.filter((s) => s.node === selectedNodeId);
+    byId('selectedFireBtn').disabled = sensors.length === 0;
+    byId('selectedClearBtn').disabled = sensors.length === 0;
     byId('selectedNodeTitle').textContent = `${node.id} · ${node.name}`;
     byId('selectedNodeSensors').textContent = sensors.length ? `연결 센서: ${sensors.map((s) => `${s.id}(${s.type === 'mq2' ? 'MQ-2' : 'Flame'})`).join(', ')}` : '연결된 센서 없음';
     card.classList.remove('hidden');

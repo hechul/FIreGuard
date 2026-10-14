@@ -59,7 +59,7 @@ def mobile(node_id: str):
 
 @app.get("/3d")
 def preview_3d():
-    return render_template("3d_preview.html")
+    return render_template("3d_preview.html", floorplan=floorplan)
 
 
 @app.get("/api/floorplan")
@@ -302,9 +302,9 @@ def run_scenario():
 
         elif scenario_id == "large_fire":
             state.reset(clear_events=False)
-            # 동측 출구와 서측 분기점을 동시에 위험 Node로 만들어 남측 출구 우회를 유도한다.
+            # 불꽃센서가 설치된 동측/서측 비상구 앞을 동시에 차단한다.
             state.set_node_fire("N3", True, source="SCENARIO")
-            state.set_node_fire("N7", True, source="SCENARIO")
+            state.set_node_fire("N8", True, source="SCENARIO")
 
         # -----------------------------------------------------------
         # ROUTE / BLOCK / CROWD

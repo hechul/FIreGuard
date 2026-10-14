@@ -132,7 +132,7 @@
     <div class="legend-item"><div class="legend-color" style="background:#475569;"></div><span>하판 10T 받침판 (제어기 거치)</span></div>
     <div class="legend-item"><div class="legend-color" style="background:#059669;"></div><span>라즈베리파이 4 + 레벨시프터</span></div>
     <div class="legend-item"><div class="legend-color" style="background:#EAB308;"></div><span>MQ-2 연기/가스 센서 (5개)</span></div>
-    <div class="legend-item"><div class="legend-color" style="background:#DC2626;"></div><span>불꽃(Flame) 센서 (8개)</span></div>
+    <div class="legend-item"><div class="legend-color" style="background:#DC2626;"></div><span>불꽃(Flame) 센서 ({{ floorplan.sensors | selectattr('type', 'equalto', 'flame') | list | length }}개)</span></div>
     <div class="legend-item"><div class="legend-color" style="background:#00E676; box-shadow:0 0 8px #00E676;"></div><span>WS2812B LED 바닥 유도선</span></div>
     <div class="legend-item"><div class="legend-color" style="background:#A855F7;"></div><span>LED 데이터 직렬선 (J01~J17)</span></div>
     <div class="legend-item"><div class="legend-color" style="background:#38BDF8;"></div><span>센서 3핀 신호선 번들 (→ RPi GPIO)</span></div>
@@ -426,7 +426,7 @@
     });
 
     // ==========================================
-    // 4. SENSORS (MQ-2 가스 센서 5개 + 불꽃 센서 8개)
+    // 4. SENSORS (불꽃센서는 대시보드의 현재 설치 구성을 공유)
     // ==========================================
     // MQ-2 3D Model: Blue PCB + Round Silver Mesh Sensor
     function createMQ2Sensor(label) {
@@ -475,17 +475,20 @@
       { id: 'MQ2-05', name: 'MQ2-05 (동측 비상구)', x: 450, y: 650 }
     ];
 
-    // 8 Flame Sensors Placement (Key evacuation routes & cinema halls)
-    const flameList = [
-      { id: 'FLM-01', name: 'FLM-01 (5관)', x: 245, y: 160 },
-      { id: 'FLM-02', name: 'FLM-02 (4관)', x: 250, y: 380 },
-      { id: 'FLM-03', name: 'FLM-03 (4DX관)', x: 170, y: 730 },
-      { id: 'FLM-04', name: 'FLM-04 (2관)', x: 315, y: 730 },
-      { id: 'FLM-05', name: 'FLM-05 (1관)', x: 460, y: 730 },
-      { id: 'FLM-06', name: 'FLM-06 (매점)', x: 395, y: 180 },
-      { id: 'FLM-07', name: 'FLM-07 (서측출구 W)', x: 115, y: 650 },
-      { id: 'FLM-08', name: 'FLM-08 (북측출구 N)', x: 115, y: 140 }
-    ];
+    // Convert dashboard coordinates (584 x 858) to this physical board (600 x 900).
+    const dashboardFloorplan = {{ floorplan | tojson }};
+    const dashboardNodes = new Map(dashboardFloorplan.nodes.map(node => [node.id, node]));
+    const flameList = dashboardFloorplan.sensors
+      .filter(sensor => sensor.type === 'flame')
+      .map(sensor => {
+        const node = dashboardNodes.get(sensor.node);
+        return {
+          id: sensor.id,
+          name: `${sensor.id} (${node.id})`,
+          x: node.x * BW / dashboardFloorplan.viewBox.width,
+          y: node.y * BL / dashboardFloorplan.viewBox.height,
+        };
+      });
 
     const sensorHolePositions = [];
 
@@ -498,7 +501,7 @@
     });
 
     flameList.forEach(s => {
-      const m = createFlameSensor(s.id);
+      const m = createFlameSensor(s.name);
       const x = to3DX(s.x), z = to3DZ(s.y);
       m.position.set(x, 4, z);
       topGroup.add(m);

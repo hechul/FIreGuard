@@ -9,6 +9,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="{{ url_for('static', filename='js/led_plan.js') }}"></script>
   <script src="{{ url_for('static', filename='js/map3d.js') }}"></script>
 </head>
 <body>
@@ -241,7 +242,7 @@
                     <button class="scenario-compact simulation-only" data-scenario="smoke_danger" data-note="동측 비상구 MQ2-05를 760으로 올려 N3를 위험 Node로 차단합니다."><i>☁</i><b>연기 위험</b><span>MQ-2 760</span></button>
                     <button class="scenario-compact simulation-only" data-scenario="ticket_fire" data-note="매표소 앞 N14 화재를 발생시켜 인접 경로 재계산을 확인합니다."><i>🔥</i><b>매표소 화재</b><span>N14</span></button>
                     <button class="scenario-compact simulation-only" data-scenario="cinema4_fire" data-note="4관 앞 N9 화재로 서측 상부 경로를 회피합니다."><i>🔥</i><b>4관 화재</b><span>N9</span></button>
-                    <button class="scenario-compact danger simulation-only" data-scenario="large_fire" data-note="N3와 N7에서 동시 화재가 발생한 대형 화재 상황입니다. 남아 있는 정규 출구를 재탐색합니다."><i>🔥🔥</i><b>복합 대형화재</b><span>N3 + N7</span></button>
+                    <button class="scenario-compact danger simulation-only" data-scenario="large_fire" data-note="N3와 N8에서 동시 화재가 발생한 대형 화재 상황입니다. 남아 있는 정규 출구를 재탐색합니다."><i>🔥🔥</i><b>복합 대형화재</b><span>N3 + N8</span></button>
                   </div>
                 </div>
 
