@@ -57,6 +57,11 @@ def mobile(node_id: str):
     return render_template("mobile.html", node_id=node_id)
 
 
+@app.get("/3d")
+def preview_3d():
+    return render_template("3d_preview.html")
+
+
 @app.get("/api/floorplan")
 def get_floorplan():
     return jsonify(floorplan)
@@ -87,6 +92,32 @@ def update_floorplan_layout():
             if "baseFloorplan" in data and data["baseFloorplan"] != floorplan:
                 return jsonify({"ok": False, "error": "다른 화면에서 지도가 변경되었습니다. 저장값을 다시 불러오세요."}), 409
             candidate = deepcopy(floorplan)
+
+            deleted_nodes = set(data.get("deletedNodes", []))
+            deleted_edges = set(data.get("deletedEdges", []))
+
+            exit_ids = {item["id"] for item in candidate["exits"]}
+            if any(d in exit_ids for d in deleted_nodes):
+                raise ValueError("비상구(EXIT)는 삭제할 수 없습니다.")
+
+            # Remove deleted nodes and connected edges/sensors
+            if deleted_nodes:
+                candidate["nodes"] = [n for n in candidate["nodes"] if n["id"] not in deleted_nodes]
+                candidate["edges"] = [e for e in candidate["edges"] if e["from"] not in deleted_nodes and e["to"] not in deleted_nodes]
+                if "fallbackDestinations" in candidate:
+                    candidate["fallbackDestinations"] = [f for f in candidate["fallbackDestinations"] if f["id"] not in deleted_nodes]
+                if "sensors" in candidate:
+                    candidate["sensors"] = [s for s in candidate["sensors"] if s.get("node") not in deleted_nodes]
+
+            # Remove deleted edges
+            if deleted_edges:
+                candidate["edges"] = [e for e in candidate["edges"] if e["id"] not in deleted_edges]
+
+            # Prune shutters on removed edges
+            remaining_edge_ids = {e["id"] for e in candidate["edges"]}
+            if "shutters" in candidate:
+                candidate["shutters"] = [s for s in candidate["shutters"] if s.get("edge") in remaining_edge_ids]
+
             editable = {item["id"]: item for item in [*candidate["nodes"], *candidate["exits"]]}
             new_nodes = data.get("nodes", [])
             new_edges = data.get("edges", [])
@@ -104,6 +135,8 @@ def update_floorplan_layout():
                 candidate["nodes"].append(item)
                 editable[item["id"]] = item
             for item_id, point in positions.items():
+                if item_id in deleted_nodes:
+                    continue
                 if item_id not in editable or not isinstance(point, dict):
                     raise ValueError(f"{item_id} 좌표 형식이 올바르지 않습니다.")
                 x, y = float(point["x"]), float(point["y"])
@@ -127,8 +160,24 @@ def update_floorplan_layout():
                 candidate["edges"].append({"id": edge["id"], "from": start, "to": end, "weight": weight})
                 edge_ids.add(edge["id"])
                 pairs.add(pair)
-            if not positions and not new_edges:
+            if not positions and not new_edges and not deleted_nodes and not deleted_edges:
                 raise ValueError("저장할 변경 사항이 없습니다.")
+
+            # Update state references if needed
+            if state.start_node in deleted_nodes:
+                if candidate["nodes"]:
+                    state.start_node = candidate["nodes"][0]["id"]
+                elif candidate["exits"]:
+                    state.start_node = candidate["exits"][0]["id"]
+            state.blocked_nodes = {n for n in state.blocked_nodes if n not in deleted_nodes}
+            state.blocked_edges = {e for e in state.blocked_edges if e in remaining_edge_ids}
+            state.manual_blocked_edges = {e for e in state.manual_blocked_edges if e in remaining_edge_ids}
+
+            active_sensor_ids = {s["id"] for s in candidate.get("sensors", [])}
+            state.flame_sensors = {sid: val for sid, val in state.flame_sensors.items() if sid in active_sensor_ids}
+            state.mq2_sensors = {sid: val for sid, val in state.mq2_sensors.items() if sid in active_sensor_ids}
+            active_shutter_ids = {s["id"] for s in candidate.get("shutters", [])}
+            state.shutters = {sid: val for sid, val in state.shutters.items() if sid in active_shutter_ids}
             graph = FloorGraph(candidate)
             _save_floorplan(candidate)
             floorplan.clear()
@@ -402,4 +451,4 @@ def socket_connected():
 
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True, use_reloader=False)
+    socketio.run(app, host="0.0.0.0", port=8080, debug=True, use_reloader=False)

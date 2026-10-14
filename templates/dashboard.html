@@ -6,6 +6,10 @@
   <title>FireGuard · 영화관 화재 대피 통합 관제 시스템</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
   <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="{{ url_for('static', filename='js/map3d.js') }}"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -25,6 +29,7 @@
         <button class="nav-item" data-page="events"><span class="nav-icon">▤</span><div>이벤트 로그<small>Events</small></div></button>
         <button class="nav-item" data-page="qr"><span class="nav-icon">▦</span><div>QR / 모바일<small>QR / Mobile</small></div></button>
         <button class="nav-item" data-page="mapEditor"><span class="nav-icon">✥</span><div>수정 모드<small>Map Editor</small></div></button>
+        <a href="/3d" target="_blank" class="nav-item" style="text-decoration:none;"><span class="nav-icon">🧊</span><div>3D 모형/배선<small>3D Digital Twin</small></div></a>
       </nav>
 
       <div class="sidebar-footer">
@@ -87,38 +92,60 @@
                 <span class="panel-kicker">DIGITAL TWIN</span>
                 <h2>영화관 화재 대피 경로</h2>
               </div>
-              <div class="legend">
-                <span><i class="legend-line active"></i>대피 경로</span>
-                <span><i class="legend-dot normal"></i>일반 노드</span>
-                <span><i class="legend-dot danger"></i>화재</span>
-                <span><i class="legend-square shutter"></i>통행 제한</span>
-                <span><i class="legend-exit">EXIT</i>비상구</span>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <div class="legend" id="map2dLegend">
+                  <span><i class="legend-line active"></i>대피 경로</span>
+                  <span><i class="legend-dot normal"></i>일반 노드</span>
+                  <span><i class="legend-dot danger"></i>화재</span>
+                  <span><i class="legend-square shutter"></i>통행 제한</span>
+                  <span><i class="legend-exit">EXIT</i>비상구</span>
+                </div>
+                <!-- 2D / 3D View Toggle -->
+                <div class="mode-toggle" id="mapViewToggle" style="flex-shrink:0;">
+                  <button id="mapView2dBtn" class="active" type="button">2D</button>
+                  <button id="mapView3dBtn" type="button">3D</button>
+                </div>
               </div>
             </div>
 
-            <div class="map-stage schematic" id="mapStage">
-              <!-- 실제 영화관 맵을 발표용 도면 스타일로 단순화한 베이스 -->
-              <svg class="schematic-base" viewBox="0 0 584 858" aria-hidden="true"></svg>
+            <div class="map-stage-container" style="position: relative;">
+              <!-- 2D SVG Layer -->
+              <div class="map-stage schematic" id="mapStage">
+                <!-- 실제 영화관 맵을 발표용 도면 스타일로 단순화한 베이스 -->
+                <svg class="schematic-base" viewBox="0 0 584 858" aria-hidden="true"></svg>
 
-              <!-- 동적 Node/Edge/센서 오버레이 -->
-              <svg id="floorSvg" class="overlay-svg" viewBox="0 0 584 858" aria-label="노드, 간선, 센서 및 대피 경로 오버레이">
-                <defs>
-                  <marker id="arrowGreen" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
-                    <path d="M0,0 L0,7 L8,3.5 z" fill="#3182f6"></path>
-                  </marker>
-                  <filter id="softGlow">
-                    <feGaussianBlur stdDeviation="3" result="blur"></feGaussianBlur>
-                    <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
-                  </filter>
-                </defs>
-                <g id="edgeLayer"></g>
-                <g id="routeLayer"></g>
-                <g id="shutterLayer"></g>
-                <g id="sensorLayer"></g>
-                <g id="nodeLayer"></g>
-                <g id="exitLayer"></g>
-              </svg>
+                <!-- 동적 Node/Edge/센서 오버레이 -->
+                <svg id="floorSvg" class="overlay-svg" viewBox="0 0 584 858" aria-label="노드, 간선, 센서 및 대피 경로 오버레이">
+                  <defs>
+                    <marker id="arrowGreen" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
+                      <path d="M0,0 L0,7 L8,3.5 z" fill="#3182f6"></path>
+                    </marker>
+                    <filter id="softGlow">
+                      <feGaussianBlur stdDeviation="3" result="blur"></feGaussianBlur>
+                      <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+                    </filter>
+                  </defs>
+                  <g id="edgeLayer"></g>
+                  <g id="routeLayer"></g>
+                  <g id="shutterLayer"></g>
+                  <g id="sensorLayer"></g>
+                  <g id="nodeLayer"></g>
+                  <g id="exitLayer"></g>
+                </svg>
+              </div>
 
+              <!-- 3D Map Container (hidden by default; shown on 3D toggle) -->
+              <div class="map-stage" id="mapStage3d" style="display:none; position:relative; overflow:hidden; background:#111418; border-color:#2A3441;">
+                <!-- Three.js canvas injected here by Map3D.init() -->
+                <div id="map3dViewControls" style="position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:5;">
+                  <button onclick="Map3D.setView('iso')"  class="btn ghost" style="padding:6px 12px;font-size:12px;background:rgba(30,40,55,0.85);color:#E2E8F0;border:1px solid rgba(255,255,255,0.1);border-radius:999px;">📐 아이소메트릭</button>
+                  <button onclick="Map3D.setView('top')"  class="btn ghost" style="padding:6px 12px;font-size:12px;background:rgba(30,40,55,0.85);color:#E2E8F0;border:1px solid rgba(255,255,255,0.1);border-radius:999px;">🔝 탑뷰</button>
+                  <button onclick="Map3D.setView('side')" class="btn ghost" style="padding:6px 12px;font-size:12px;background:rgba(30,40,55,0.85);color:#E2E8F0;border:1px solid rgba(255,255,255,0.1);border-radius:999px;">↗ 사이드뷰</button>
+                </div>
+                <div style="position:absolute;top:12px;right:14px;font-size:11px;color:#64748B;pointer-events:none;background:rgba(15,23,42,0.6);padding:4px 8px;border-radius:6px;">🖱️ 드래그: 360도 회전 | 우클릭: 이동 | 휠: 줌 | 노드 클릭: 제어</div>
+              </div>
+
+              <!-- Action Card (floats over 2D and 3D maps) -->
               <div id="nodeActionCard" class="node-action-card hidden">
                 <button type="button" id="nodeActionClose" class="icon-btn" aria-label="닫기">×</button>
                 <span class="tiny-label">SELECTED NODE</span>
@@ -498,6 +525,10 @@
                   <strong id="editorEdgeTo">-</strong>
                 </div>
                 <p class="editor-note">Edge는 독립 좌표가 없습니다. 선을 드래그하면 FROM/TO 두 Node가 같은 거리만큼 같이 이동합니다.</p>
+              </div>
+
+              <div class="editor-action-row" style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line);">
+                <button id="editorDeleteItemBtn" class="btn danger" type="button" style="width: 100%; justify-content: center; font-size: 13px;">🗑️ 선택 항목 삭제</button>
               </div>
             </div>
 

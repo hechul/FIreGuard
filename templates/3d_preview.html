@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FireGuard 3D 하드웨어 2단 샌드위치 구조 & 배선 뷰어</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard-dynamic-subset.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Pretendard', sans-serif;
+      background: #0E1217;
+      color: #F2F4F6;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+    #canvas-container { width: 100%; height: 100%; display: block; }
+    
+    /* Top Bar */
+    .header-bar {
+      position: absolute;
+      top: 16px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .title-box {
+      background: rgba(22, 27, 34, 0.88);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 14px 22px;
+      border-radius: 14px;
+      pointer-events: auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .title-box h1 { font-size: 18px; font-weight: 800; color: #FFFFFF; display: flex; align-items: center; gap: 8px; }
+    .title-box p { font-size: 12px; color: #94A3B8; margin-top: 4px; font-weight: 500; }
+    .badge {
+      display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 800;
+      background: #3182F6; color: #FFFFFF;
+    }
+
+    /* Control Panel */
+    .controls-panel {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(22, 27, 34, 0.92);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 10px 18px;
+      border-radius: 999px;
+      display: flex;
+      gap: 10px;
+      z-index: 10;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+    }
+    .btn {
+      background: #252D38;
+      color: #E2E8F0;
+      border: 1px solid rgba(255,255,255,0.08);
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .btn:hover { background: #333F4E; color: #FFFFFF; transform: translateY(-1px); }
+    .btn.active { background: #3182F6; color: #FFFFFF; border-color: #3182F6; box-shadow: 0 2px 10px rgba(49,130,246,0.5); }
+    .btn.explode-btn { background: #8B5CF6; color: white; border-color: #A78BFA; }
+    .btn.explode-btn.active { background: #6D28D9; }
+
+    /* Info Legend */
+    .legend-card {
+      position: absolute;
+      top: 90px;
+      right: 20px;
+      background: rgba(22, 27, 34, 0.9);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 18px;
+      border-radius: 16px;
+      font-size: 12px;
+      z-index: 10;
+      width: 260px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    }
+    .legend-card h3 { font-size: 14px; font-weight: 800; margin-bottom: 12px; color: #FFFFFF; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; }
+    .legend-item { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; color: #CBD5E1; }
+    .legend-color { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
+    
+    .view-instruction {
+      position: absolute;
+      bottom: 24px;
+      left: 20px;
+      font-size: 12px;
+      color: #64748B;
+      background: rgba(14, 18, 23, 0.8);
+      padding: 8px 14px;
+      border-radius: 8px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header-bar">
+    <div class="title-box">
+      <h1>FireGuard 2단 샌드위치 폼보드 & 센서 배선 뷰어 <span class="badge">실물 축척 1:3</span></h1>
+      <p>상판(건물/LED) ↔ 하판(라즈베리파이/SMPS/센서 신호 하네스) 2층 매설 아키텍처</p>
+    </div>
+    <div>
+      <a href="/" style="text-decoration:none;" class="btn">대시보드로 돌아가기 →</a>
+    </div>
+  </div>
+
+  <div class="legend-card">
+    <h3>하드웨어 구성 및 배선 범례</h3>
+    <div class="legend-item"><div class="legend-color" style="background:#E2E8F0; border:1px solid #94A3B8;"></div><span>상판 10T (룸 벽체 60mm & LED)</span></div>
+    <div class="legend-item"><div class="legend-color" style="background:#475569;"></div><span>하판 10T 받침판 (제어기 거치)</span></div>
+    <div class="legend-item"><div class="legend-color" style="background:#059669;"></div><span>라즈베리파이 4 + 레벨시프터</span></div>
+    <div class="legend-item"><div class="legend-color" style="background:#EAB308;"></div><span>MQ-2 연기/가스 센서 (5개)</span></div>
+    <div class="legend-item"><div class="legend-color" style="background:#DC2626;"></div><span>불꽃(Flame) 센서 (8개)</span></div>
+    <div class="legend-item"><div class="legend-color" style="background:#00E676; box-shadow:0 0 8px #00E676;"></div><span>WS2812B LED 바닥 유도선</span></div>
+    <div class="legend-item"><div class="legend-color" style="background:#A855F7;"></div><span>LED 데이터 직렬선 (J01~J17)</span></div>
+    <div class="legend-item"><div class="legend-color" style="background:#38BDF8;"></div><span>센서 3핀 신호선 번들 (→ RPi GPIO)</span></div>
+  </div>
+
+  <div class="controls-panel">
+    <button class="btn explode-btn" id="btnExplode">💥 2단 분해도 (Exploded)</button>
+    <button class="btn active" id="btnIso">📐 3D 조감도</button>
+    <button class="btn" id="btnTop">🔝 상단 탑뷰</button>
+    <button class="btn" id="btnWiring">🔌 하부 배선 집중 뷰</button>
+    <button class="btn" id="btnXray">🏢 X-Ray 투시 모드</button>
+    <button class="btn" id="btnCapture" style="background:#3182F6; color:white;">📸 캡처 저장</button>
+  </div>
+
+  <div class="view-instruction">
+    🖱️ 마우스 좌클릭: 360도 회전 | 우클릭: 이동 | 휠: 줌 | <b>[💥 2단 분해도] 클릭 시 상판이 분리됩니다!</b>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <script>
+    // --- 3D Scene Initialization ---
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0E1217);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 6000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI - 0.02; // Can view from underneath!
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xFFFFFF, 0.7);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xFFFFFF, 0.85);
+    dirLight.position.set(400, 900, 300);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.camera.near = 100;
+    dirLight.shadow.camera.far = 2500;
+    const d = 700;
+    dirLight.shadow.camera.left = -d; dirLight.shadow.camera.right = d;
+    dirLight.shadow.camera.top = d; dirLight.shadow.camera.bottom = -d;
+    scene.add(dirLight);
+
+    const bottomLight = new THREE.DirectionalLight(0x60A5FA, 0.45);
+    bottomLight.position.set(0, -600, 0);
+    scene.add(bottomLight);
+
+    // Coordinate conversion
+    const BW = 600;
+    const BL = 900;
+    const BH = 10;
+    const WH = 60;
+    const WT = 5;
+    const GAP_HEIGHT = 45; // Height between top & bottom boards for wiring!
+
+    function to3DX(bx) { return bx - BW / 2; }
+    function to3DZ(by) { return by - BL / 2; }
+
+    // --- GROUPS FOR EXPLODED VIEW ---
+    // topGroup will move up/down when exploded
+    const topGroup = new THREE.Group();
+    scene.add(topGroup);
+
+    // bottomGroup stays fixed at the base
+    const bottomGroup = new THREE.Group();
+    scene.add(bottomGroup);
+
+    let isExploded = false;
+    let targetTopY = 0;
+
+    // --- MATERIALS ---
+    const topBoardMat = new THREE.MeshStandardMaterial({
+      color: 0xF1F5F9, roughness: 0.8, metalness: 0.05, transparent: true, opacity: 0.95
+    });
+    const bottomBoardMat = new THREE.MeshStandardMaterial({
+      color: 0x334155, roughness: 0.7, metalness: 0.2
+    });
+    const wallMat = new THREE.MeshStandardMaterial({
+      color: 0xE2E8F0, roughness: 0.6, metalness: 0.05, transparent: true, opacity: 0.95
+    });
+    const ledMat = new THREE.MeshBasicMaterial({ color: 0x00FF88 });
+    const wireDataMat = new THREE.LineBasicMaterial({ color: 0xC084FC, linewidth: 3 });
+    const wireSensorMat = new THREE.LineBasicMaterial({ color: 0x38BDF8, linewidth: 2 });
+    const wirePowerMat = new THREE.LineBasicMaterial({ color: 0xEF4444, linewidth: 2 });
+    const wireGndMat = new THREE.LineBasicMaterial({ color: 0x1E293B, linewidth: 2 });
+
+    // ==========================================
+    // 1. BOTTOM LAYER (하판 받침판 & 주요 제어기)
+    // ==========================================
+    // Bottom 10T Baseboard
+    const bottomBoard = new THREE.Mesh(new THREE.BoxGeometry(BW, BH, BL), bottomBoardMat);
+    bottomBoard.position.set(0, -GAP_HEIGHT - BH/2, 0);
+    bottomBoard.receiveShadow = true;
+    bottomGroup.add(bottomBoard);
+
+    // 4 Corner Spacer Pillars (스페이서 받침 기둥)
+    const pillarGeo = new THREE.CylinderGeometry(8, 8, GAP_HEIGHT, 16);
+    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x94A3B8, metalness: 0.8 });
+    const pillarCoords = [
+      [-BW/2 + 25, -BL/2 + 25],
+      [BW/2 - 25, -BL/2 + 25],
+      [-BW/2 + 25, BL/2 - 25],
+      [BW/2 - 25, BL/2 - 25],
+      [0, 0] // Center pillar
+    ];
+    pillarCoords.forEach(([px, pz]) => {
+      const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+      pillar.position.set(px, -GAP_HEIGHT/2, pz);
+      bottomGroup.add(pillar);
+    });
+
+    // Raspberry Pi 4 Model B on Bottom Board
+    const rpiGroup = new THREE.Group();
+    const rpiPcb = new THREE.Mesh(new THREE.BoxGeometry(85, 4, 56), new THREE.MeshStandardMaterial({ color: 0x065F46, roughness: 0.4 }));
+    rpiGroup.add(rpiPcb);
+    // USB/Ethernet Ports
+    const rpiPort = new THREE.Mesh(new THREE.BoxGeometry(20, 15, 40), new THREE.MeshStandardMaterial({ color: 0x94A3B8, metalness: 0.9 }));
+    rpiPort.position.set(35, 9, 0);
+    rpiGroup.add(rpiPort);
+    // 40-pin GPIO Header (Black)
+    const gpioHeader = new THREE.Mesh(new THREE.BoxGeometry(50, 8, 6), new THREE.MeshStandardMaterial({ color: 0x111827 }));
+    gpioHeader.position.set(-10, 6, -22);
+    rpiGroup.add(gpioHeader);
+    
+    // Label for RPi
+    const rpiLabel = createTextSprite("Raspberry Pi 4", "#10B981", 80);
+    rpiLabel.position.set(0, 25, 0);
+    rpiGroup.add(rpiLabel);
+
+    rpiGroup.position.set(to3DX(80), -GAP_HEIGHT + 4, to3DZ(800));
+    bottomGroup.add(rpiGroup);
+
+    // TXS0108E Level Shifter Module (Near RPi)
+    const levelShifter = new THREE.Mesh(new THREE.BoxGeometry(25, 3, 16), new THREE.MeshStandardMaterial({ color: 0x6D28D9 }));
+    levelShifter.position.set(to3DX(80) + 60, -GAP_HEIGHT + 3, to3DZ(800) - 20);
+    bottomGroup.add(levelShifter);
+    const lsLabel = createTextSprite("TXS0108E", "#A78BFA", 50);
+    lsLabel.position.set(to3DX(80) + 60, -GAP_HEIGHT + 16, to3DZ(800) - 20);
+    bottomGroup.add(lsLabel);
+
+    // LRS-100-5 SMPS (5V 18A Power Supply)
+    const smps = new THREE.Mesh(new THREE.BoxGeometry(70, 32, 110), new THREE.MeshStandardMaterial({ color: 0x94A3B8, metalness: 0.85, roughness: 0.2 }));
+    smps.position.set(to3DX(80) - 20, -GAP_HEIGHT + 16, to3DZ(650));
+    bottomGroup.add(smps);
+    const smpsLabel = createTextSprite("5V SMPS (LRS-100-5)", "#EF4444", 80);
+    smpsLabel.position.set(to3DX(80) - 20, -GAP_HEIGHT + 38, to3DZ(650));
+    bottomGroup.add(smpsLabel);
+
+    // ==========================================
+    // 2. TOP LAYER (상판 폼보드 & 룸 벽체 & LED)
+    // ==========================================
+    const topBoard = new THREE.Mesh(new THREE.BoxGeometry(BW, BH, BL), topBoardMat);
+    topBoard.position.set(0, -BH/2, 0);
+    topBoard.receiveShadow = true;
+    topGroup.add(topBoard);
+
+    // Grid helper on top of board
+    const grid = new THREE.GridHelper(900, 18, 0x94A3B8, 0xCBD5E1);
+    grid.position.set(0, 0.1, 0);
+    topGroup.add(grid);
+
+    // 10 Rooms Walls Creation
+    const rooms = [
+      { id: 'A', name: '5관', x: 140, y: 100, w: 210, l: 120, doors: [{ side: 'S', offset: 80, width: 50 }] },
+      { id: 'B', name: '4관', x: 140, y: 290, w: 220, l: 180, doors: [{ side: 'E', offset: 65, width: 50 }] },
+      { id: 'C', name: '4DX관', x: 100, y: 640, w: 140, l: 180, doors: [{ side: 'N', offset: 45, width: 50 }] },
+      { id: 'D', name: '2관', x: 245, y: 640, w: 140, l: 180, doors: [{ side: 'N', offset: 45, width: 50 }] },
+      { id: 'E', name: '1관', x: 390, y: 640, w: 140, l: 180, doors: [{ side: 'N', offset: 45, width: 50 }, { side: 'S', offset: 45, width: 50 }] },
+      { id: 'F', name: '매점', x: 360, y: 100, w: 70, l: 170, doors: [{ side: 'S', offset: 10, width: 50 }] },
+      { id: 'G', name: '팝콘매장', x: 440, y: 100, w: 100, l: 210, doors: [{ side: 'S', offset: 25, width: 50 }] },
+      { id: 'H', name: '매표소', x: 410, y: 370, w: 130, l: 120, doors: [{ side: 'W', offset: 35, width: 50 }] },
+      { id: 'I', name: '화장실1', x: 180, y: 475, w: 80, l: 75, doors: [{ side: 'S', offset: 15, width: 50 }] },
+      { id: 'J', name: '화장실2', x: 265, y: 475, w: 80, l: 75, doors: [{ side: 'S', offset: 15, width: 50 }] }
+    ];
+
+    function createWallSegment(x, z, length, isHorizontal, hasDoor, doorOffset, doorWidth) {
+      const g = new THREE.Group();
+      if (!hasDoor) {
+        const geo = isHorizontal ? new THREE.BoxGeometry(length, WH, WT) : new THREE.BoxGeometry(WT, WH, length);
+        const m = new THREE.Mesh(geo, wallMat);
+        m.castShadow = true; m.receiveShadow = true;
+        m.position.set(x, WH/2, z); g.add(m);
+      } else {
+        const DH = 50; const beamH = WH - DH;
+        const p1 = doorOffset; const p2 = length - (doorOffset + doorWidth);
+        if (isHorizontal) {
+          if (p1 > 0) {
+            const m1 = new THREE.Mesh(new THREE.BoxGeometry(p1, WH, WT), wallMat);
+            m1.position.set(x - length/2 + p1/2, WH/2, z); m1.castShadow = true; g.add(m1);
+          }
+          if (p2 > 0) {
+            const m2 = new THREE.Mesh(new THREE.BoxGeometry(p2, WH, WT), wallMat);
+            m2.position.set(x + length/2 - p2/2, WH/2, z); m2.castShadow = true; g.add(m2);
+          }
+          const beam = new THREE.Mesh(new THREE.BoxGeometry(doorWidth, beamH, WT), wallMat);
+          beam.position.set(x - length/2 + doorOffset + doorWidth/2, DH + beamH/2, z);
+          beam.castShadow = true; g.add(beam);
+        } else {
+          if (p1 > 0) {
+            const m1 = new THREE.Mesh(new THREE.BoxGeometry(WT, WH, p1), wallMat);
+            m1.position.set(x, WH/2, z - length/2 + p1/2); m1.castShadow = true; g.add(m1);
+          }
+          if (p2 > 0) {
+            const m2 = new THREE.Mesh(new THREE.BoxGeometry(WT, WH, p2), wallMat);
+            m2.position.set(x, WH/2, z + length/2 - p2/2); m2.castShadow = true; g.add(m2);
+          }
+          const beam = new THREE.Mesh(new THREE.BoxGeometry(WT, beamH, doorWidth), wallMat);
+          beam.position.set(x, DH + beamH/2, z - length/2 + doorOffset + doorWidth/2);
+          beam.castShadow = true; g.add(beam);
+        }
+      }
+      return g;
+    }
+
+    rooms.forEach(r => {
+      const cx = to3DX(r.x + r.w / 2);
+      const cz = to3DZ(r.y + r.l / 2);
+      const dN = r.doors.find(d => d.side === 'N');
+      const dS = r.doors.find(d => d.side === 'S');
+      const dW = r.doors.find(d => d.side === 'W');
+      const dE = r.doors.find(d => d.side === 'E');
+
+      topGroup.add(createWallSegment(cx, to3DZ(r.y), r.w, true, !!dN, dN?.offset, dN?.width));
+      topGroup.add(createWallSegment(cx, to3DZ(r.y + r.l), r.w, true, !!dS, dS?.offset, dS?.width));
+      topGroup.add(createWallSegment(to3DX(r.x), cz, r.l, false, !!dW, dW?.offset, dW?.width));
+      topGroup.add(createWallSegment(to3DX(r.x + r.w), cz, r.l, false, !!dE, dE?.offset, dE?.width));
+
+      const sp = createTextSprite(r.name, "#64748B", 60);
+      sp.position.set(cx, 1, cz);
+      topGroup.add(sp);
+    });
+
+    // 3. LED STRIPS (S01 ~ S17) - Physical Wiring Plan Aligned
+    const ledSegments = [
+      { id: 'S01', pts: [[45, 140], [115, 140]] },
+      { id: 'S02', pts: [[115, 140], [115, 567]] },
+      { id: 'S03', pts: [[45, 567], [535, 567]] },
+      { id: 'S04', pts: [[165, 567], [165, 660]] },
+      { id: 'S05', pts: [[214, 567], [214, 490]] },
+      { id: 'S06', pts: [[297, 567], [297, 490]] },
+      { id: 'S07', pts: [[307, 567], [307, 660]] },
+      { id: 'S08', pts: [[448, 567], [448, 820]] },
+      { id: 'S09', pts: [[375, 567], [375, 362]] },
+      { id: 'S10', pts: [[375, 410], [435, 410]] },
+      { id: 'S11', pts: [[375, 362], [260, 362]] },
+      { id: 'S12', pts: [[375, 315], [460, 315]] },
+      { id: 'S13', pts: [[460, 315], [460, 243]] },
+      { id: 'S14', pts: [[460, 243], [375, 243]] },
+      { id: 'S15', pts: [[375, 243], [240, 243]] },
+      { id: 'S16', pts: [[240, 243], [115, 243]] },
+      { id: 'S17', pts: [[240, 243], [240, 140]] }
+    ];
+
+    const holePositions = [];
+    ledSegments.forEach(seg => {
+      const p1 = seg.pts[0]; const p2 = seg.pts[1];
+      const x1 = to3DX(p1[0]), z1 = to3DZ(p1[1]);
+      const x2 = to3DX(p2[0]), z2 = to3DZ(p2[1]);
+      const dx = x2 - x1, dz = z2 - z1;
+      const len = Math.hypot(dx, dz);
+      const angle = Math.atan2(dx, dz);
+
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(8, 2, len), ledMat);
+      strip.position.set((x1 + x2)/2, 1, (z1 + z2)/2);
+      strip.rotation.y = angle;
+      topGroup.add(strip);
+
+      holePositions.push({ x: x1, z: z1, id: seg.id + '_IN' });
+      holePositions.push({ x: x2, z: z2, id: seg.id + '_OUT' });
+    });
+
+    // Drill holes on top board
+    const holeGeo = new THREE.CylinderGeometry(3.5, 3.5, BH + 2, 16);
+    const holeMat = new THREE.MeshBasicMaterial({ color: 0x0F172A });
+    holePositions.forEach(h => {
+      const hole = new THREE.Mesh(holeGeo, holeMat);
+      hole.position.set(h.x, -BH/2, h.z);
+      topGroup.add(hole);
+    });
+
+    // ==========================================
+    // 4. SENSORS (MQ-2 가스 센서 5개 + 불꽃 센서 8개)
+    // ==========================================
+    // MQ-2 3D Model: Blue PCB + Round Silver Mesh Sensor
+    function createMQ2Sensor(label) {
+      const g = new THREE.Group();
+      // PCB Board (Blue)
+      const pcb = new THREE.Mesh(new THREE.BoxGeometry(22, 3, 32), new THREE.MeshStandardMaterial({ color: 0x1E40AF, roughness: 0.5 }));
+      g.add(pcb);
+      // Silver Gas Chamber
+      const chamber = new THREE.Mesh(new THREE.CylinderGeometry(7, 7, 10, 24), new THREE.MeshStandardMaterial({ color: 0xE2E8F0, metalness: 0.9, roughness: 0.2 }));
+      chamber.position.set(0, 6, -4);
+      g.add(chamber);
+      // Sensitivity Trimmer (Blue potentiometer)
+      const trim = new THREE.Mesh(new THREE.BoxGeometry(6, 6, 6), new THREE.MeshStandardMaterial({ color: 0x3B82F6 }));
+      trim.position.set(0, 4, 10);
+      g.add(trim);
+      // Label
+      const sp = createTextSprite(label, "#F59E0B", 60);
+      sp.position.set(0, 20, 0);
+      g.add(sp);
+      return g;
+    }
+
+    // Flame Sensor 3D Model: Blue PCB + Black Phototransistor IR LED
+    function createFlameSensor(label) {
+      const g = new THREE.Group();
+      // PCB Board
+      const pcb = new THREE.Mesh(new THREE.BoxGeometry(16, 3, 30), new THREE.MeshStandardMaterial({ color: 0x0284C7, roughness: 0.5 }));
+      g.add(pcb);
+      // Black Flame IR receiver bulb
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(4, 16, 16), new THREE.MeshStandardMaterial({ color: 0x0F172A, roughness: 0.1 }));
+      bulb.position.set(0, 3, -13);
+      g.add(bulb);
+      // Label
+      const sp = createTextSprite(label, "#EF4444", 50);
+      sp.position.set(0, 16, 0);
+      g.add(sp);
+      return g;
+    }
+
+    // 5 MQ-2 Sensors Placement
+    const mq2List = [
+      { id: 'MQ2-01', name: 'MQ2-01 (팝콘팩토리)', x: 490, y: 310 },
+      { id: 'MQ2-02', name: 'MQ2-02 (중앙복도)', x: 230, y: 650 },
+      { id: 'MQ2-03', name: 'MQ2-03 (매표소 앞)', x: 410, y: 550 },
+      { id: 'MQ2-04', name: 'MQ2-04 (4관 앞)', x: 360, y: 400 },
+      { id: 'MQ2-05', name: 'MQ2-05 (동측 비상구)', x: 450, y: 650 }
+    ];
+
+    // 8 Flame Sensors Placement (Key evacuation routes & cinema halls)
+    const flameList = [
+      { id: 'FLM-01', name: 'FLM-01 (5관)', x: 245, y: 160 },
+      { id: 'FLM-02', name: 'FLM-02 (4관)', x: 250, y: 380 },
+      { id: 'FLM-03', name: 'FLM-03 (4DX관)', x: 170, y: 730 },
+      { id: 'FLM-04', name: 'FLM-04 (2관)', x: 315, y: 730 },
+      { id: 'FLM-05', name: 'FLM-05 (1관)', x: 460, y: 730 },
+      { id: 'FLM-06', name: 'FLM-06 (매점)', x: 395, y: 180 },
+      { id: 'FLM-07', name: 'FLM-07 (서측출구 W)', x: 115, y: 650 },
+      { id: 'FLM-08', name: 'FLM-08 (북측출구 N)', x: 115, y: 140 }
+    ];
+
+    const sensorHolePositions = [];
+
+    mq2List.forEach(s => {
+      const m = createMQ2Sensor(s.id);
+      const x = to3DX(s.x), z = to3DZ(s.y);
+      m.position.set(x, 4, z);
+      topGroup.add(m);
+      sensorHolePositions.push({ x: x, z: z, type: 'MQ2', id: s.id });
+    });
+
+    flameList.forEach(s => {
+      const m = createFlameSensor(s.id);
+      const x = to3DX(s.x), z = to3DZ(s.y);
+      m.position.set(x, 4, z);
+      topGroup.add(m);
+      sensorHolePositions.push({ x: x, z: z, type: 'FLAME', id: s.id });
+    });
+
+    // ==========================================
+    // 5. WIRING HARNESSES (하부 배선 공간)
+    // ==========================================
+    // In topGroup: LED J01~J16 jumping wires underneath top board
+    const wiringJumps = [
+      ['S01_OUT', 'S02_IN'], ['S02_OUT', 'S03_IN'], ['S03_OUT', 'S04_IN'],
+      ['S04_OUT', 'S05_IN'], ['S05_OUT', 'S06_IN'], ['S06_OUT', 'S07_IN'],
+      ['S07_OUT', 'S08_IN'], ['S08_OUT', 'S09_IN'], ['S09_OUT', 'S10_IN'],
+      ['S10_OUT', 'S11_IN'], ['S11_OUT', 'S12_IN'], ['S12_OUT', 'S13_IN'],
+      ['S13_OUT', 'S14_IN'], ['S14_OUT', 'S15_IN'], ['S15_OUT', 'S16_IN'],
+      ['S16_OUT', 'S17_IN']
+    ];
+
+    wiringJumps.forEach(([startId, endId], idx) => {
+      const pStart = holePositions.find(h => h.id === startId);
+      const pEnd = holePositions.find(h => h.id === endId);
+      if (pStart && pEnd) {
+        const wireH = -BH - 4 - (idx % 3) * 2;
+        const pts = [
+          new THREE.Vector3(pStart.x, 0, pStart.z),
+          new THREE.Vector3(pStart.x, wireH, pStart.z),
+          new THREE.Vector3(pEnd.x, wireH, pEnd.z),
+          new THREE.Vector3(pEnd.x, 0, pEnd.z)
+        ];
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wireDataMat);
+        topGroup.add(line);
+      }
+    });
+
+    // Sensor Wires (3-pin ribbon) dropping from each sensor hole to RPi on Bottom Board!
+    // Connects top hole to bottom RPi GPIO
+    const rpiGpioPos = new THREE.Vector3(to3DX(80) - 10, -GAP_HEIGHT + 10, to3DZ(800) - 22);
+
+    sensorHolePositions.forEach((sh, idx) => {
+      // Curve routing through middle gap to RPi
+      const startP = new THREE.Vector3(sh.x, -BH, sh.z);
+      const midP = new THREE.Vector3((sh.x + rpiGpioPos.x)/2 + (idx%4)*8, -GAP_HEIGHT/2, (sh.z + rpiGpioPos.z)/2);
+      const curve = new THREE.CatmullRomCurve3([
+        startP,
+        new THREE.Vector3(sh.x, -GAP_HEIGHT + 8, sh.z),
+        midP,
+        rpiGpioPos
+      ]);
+      const pts = curve.getPoints(20);
+      const wire = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wireSensorMat);
+      bottomGroup.add(wire);
+    });
+
+    // Text Sprite Helper
+    function createTextSprite(text, color, scale) {
+      const c = document.createElement('canvas');
+      c.width = 300; c.height = 100;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = color;
+      ctx.font = 'bold 32px Pretendard, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(text, 150, 60);
+      const tex = new THREE.CanvasTexture(c);
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.9 });
+      const sp = new THREE.Sprite(mat);
+      sp.scale.set(scale, scale/3, 1);
+      return sp;
+    }
+
+    // Camera presets
+    function setCamera(x, y, z, targetY = 0) {
+      const startPos = camera.position.clone();
+      const endPos = new THREE.Vector3(x, y, z);
+      let p = 0;
+      function anim() {
+        p += 0.05;
+        camera.position.lerpVectors(startPos, endPos, p);
+        controls.target.set(0, targetY, 0);
+        controls.update();
+        if (p < 1) requestAnimationFrame(anim);
+      }
+      anim();
+    }
+
+    setCamera(480, 700, 700);
+
+    // Button Events
+    const buttons = document.querySelectorAll('.controls-panel .btn');
+    function setActive(btn) {
+      buttons.forEach(b => { if (b !== document.getElementById('btnCapture') && b !== document.getElementById('btnExplode')) b.classList.remove('active'); });
+      if (btn) btn.classList.add('active');
+    }
+
+    // Exploded View Button (💥 상판 리프팅!)
+    const btnExplode = document.getElementById('btnExplode');
+    btnExplode.addEventListener('click', () => {
+      isExploded = !isExploded;
+      targetTopY = isExploded ? 160 : 0; // Lift top board 160mm into the air!
+      btnExplode.classList.toggle('active', isExploded);
+      if (isExploded) {
+        setCamera(520, 500, 680, 60);
+      } else {
+        setCamera(480, 700, 700, 0);
+      }
+    });
+
+    document.getElementById('btnIso').addEventListener('click', (e) => {
+      setActive(e.target);
+      topBoardMat.opacity = 0.95; wallMat.opacity = 0.95;
+      setCamera(480, 700, 700, targetTopY / 2);
+    });
+
+    document.getElementById('btnTop').addEventListener('click', (e) => {
+      setActive(e.target);
+      topBoardMat.opacity = 0.95; wallMat.opacity = 0.95;
+      setCamera(0, 1100, 1, targetTopY / 2);
+    });
+
+    document.getElementById('btnWiring').addEventListener('click', (e) => {
+      setActive(e.target);
+      // Lift slightly and view underneath
+      targetTopY = 120;
+      isExploded = true;
+      btnExplode.classList.add('active');
+      topBoardMat.opacity = 0.4; wallMat.opacity = 0.3;
+      setCamera(400, -350, 500, 20);
+    });
+
+    document.getElementById('btnXray').addEventListener('click', (e) => {
+      setActive(e.target);
+      topBoardMat.opacity = 0.45; wallMat.opacity = 0.35;
+      setCamera(480, 550, 550, targetTopY / 2);
+    });
+
+    document.getElementById('btnCapture').addEventListener('click', () => {
+      renderer.render(scene, camera);
+      const link = document.createElement('a');
+      link.download = 'FireGuard_3D_Exploded_Wiring.png';
+      link.href = renderer.domElement.toDataURL('image/png');
+      link.click();
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Animation Loop
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Smoothly interpolate Top Board Y position for Exploded View
+      topGroup.position.y += (targetTopY - topGroup.position.y) * 0.08;
+
+      // Pulse LED strips
+      const t = Date.now() * 0.003;
+      const intensity = 0.7 + Math.sin(t) * 0.3;
+      ledMat.color.setRGB(0, intensity, intensity * 0.5);
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>

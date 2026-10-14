@@ -12,6 +12,10 @@
   let pollTimer = null;
   let demoRunId = 0;
 
+  // 2D / 3D map view state
+  let mapViewMode = '2d'; // '2d' | '3d'
+  let map3dReady   = false;
+
   // Map Editor state
   let editorMode = 'node';
   let editorPositions = {};
@@ -348,9 +352,10 @@
 
       hit.addEventListener('pointerdown', (event) => {
         if (!editorActive() || event.button !== 0) return;
+        if (editorMode === 'add') return; // Let event bubble to SVG for node addition / edge splitting
         event.preventDefault();
         event.stopPropagation();
-        if (editorMode === 'add' || editorMode === 'connect') return;
+        if (editorMode === 'connect') return;
         byId('mapEditorSvg').setPointerCapture(event.pointerId);
         selectEditorItem('edge', edge.id);
         if (editorMode !== 'edge') return;
@@ -369,7 +374,10 @@
         byId('mapEditorSvg').setPointerCapture?.(event.pointerId);
       });
 
-      hit.addEventListener('click', () => selectEditorItem('edge', edge.id));
+      hit.addEventListener('click', (event) => {
+        if (editorMode === 'add' || editorMode === 'connect') return;
+        selectEditorItem('edge', edge.id);
+      });
       group.append(visible, hit, label);
       edgeLayer.appendChild(group);
     });
@@ -519,21 +527,64 @@
     }
   }
 
+  function deleteEditorItem() {
+    if (!editorActive() || !editorSelected) return;
+
+    if (editorSelected.type === 'node') {
+      if (floorplan.exits.some((e) => e.id === editorSelected.id)) {
+        showToast('비상구(EXIT)는 삭제할 수 없습니다.', true);
+        return;
+      }
+      const id = editorSelected.id;
+      if (!window.confirm(`${id} 노드를 삭제하시겠습니까?\n연결된 간선도 함께 삭제됩니다.`)) return;
+      pushEditorUndo();
+      editorDraft.nodes = editorDraft.nodes.filter((n) => n.id !== id);
+      editorDraft.edges = editorDraft.edges.filter((e) => e.from !== id && e.to !== id);
+      delete editorPositions[id];
+      editorSelected = null;
+      editorConnectFrom = null;
+      updateEditorDirtyState();
+      renderMapEditor();
+      updateEditorInspector();
+      showToast(`${id} 노드 및 연결된 간선을 삭제했습니다.`);
+    } else if (editorSelected.type === 'edge') {
+      const id = editorSelected.id;
+      if (!window.confirm(`${id} 간선을 삭제하시겠습니까?`)) return;
+      pushEditorUndo();
+      editorDraft.edges = editorDraft.edges.filter((e) => e.id !== id);
+      editorSelected = null;
+      updateEditorDirtyState();
+      renderMapEditor();
+      updateEditorInspector();
+      showToast(`${id} 간선을 삭제했습니다.`);
+    }
+  }
+
   async function saveEditorLayout() {
     if (!editorActive() || !editorDirty()) return;
     editorSaving = true;
     byId('editorSaveBtn').disabled = true;
     try {
+      const baseNodeIds = new Set(editorBase.nodes.map(n => n.id));
+      const draftNodeIds = new Set(editorDraft.nodes.map(n => n.id));
+      const deletedNodes = [...baseNodeIds].filter(id => !draftNodeIds.has(id));
+
+      const baseEdgeIds = new Set(editorBase.edges.map(e => e.id));
+      const draftEdgeIds = new Set(editorDraft.edges.map(e => e.id));
+      const deletedEdges = [...baseEdgeIds].filter(id => !draftEdgeIds.has(id));
+
       const result = await api('/api/floorplan/layout', {
         positions: editorPositions,
-        nodes: editorDraft.nodes.filter(n => !editorBase.nodes.some(old => old.id === n.id)),
-        edges: editorDraft.edges.filter(e => !editorBase.edges.some(old => old.id === e.id)),
+        nodes: editorDraft.nodes.filter(n => !baseNodeIds.has(n.id)),
+        edges: editorDraft.edges.filter(e => !baseEdgeIds.has(e.id)),
+        deletedNodes,
+        deletedEdges,
         baseFloorplan: editorBase,
       });
       floorplan = result.floorplan;
       initEditorPositions();
 
-      // 기존 대시보드/컨트롤도 즉시 갱신
+      // 기존 2D 대시보드 / 컨트롤 갱신
       buildControls();
       if (result.state) updateState(result.state);
       if (currentState) {
@@ -541,7 +592,12 @@
         renderResponse(currentState);
         renderQr(currentState);
       }
-      showToast('지도 변경 사항을 저장했습니다.');
+
+      // 3D 대시보드도 즉시 동기화 리빌드
+      if (map3dReady && typeof Map3D !== 'undefined') {
+        Map3D.rebuild(floorplan, currentState);
+      }
+      showToast('지도 변경 사항을 저장하고 2D/3D 대시보드에 동기화했습니다.');
     } catch (error) {
       showToast(error.message || '맵 좌표 저장에 실패했습니다.', true);
     } finally {
@@ -557,7 +613,12 @@
       floorplan = await api('/api/floorplan');
       initEditorPositions();
       buildControls();
-      if (currentState) renderMap(currentState);
+      if (currentState) {
+        renderMap(currentState);
+        if (map3dReady && typeof Map3D !== 'undefined') {
+          Map3D.rebuild(floorplan, currentState);
+        }
+      }
       showToast('저장된 좌표를 다시 불러왔습니다.');
     } catch (error) {
       showToast(error.message || '좌표를 다시 불러오지 못했습니다.', true);
@@ -599,18 +660,116 @@
     return prefix + (prefix === 'E' ? String(n).padStart(2, '0') : n);
   }
 
+  function pointToSegmentDistance(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const l2 = dx * dx + dy * dy;
+    if (l2 === 0) return Math.hypot(px - x1, py - y1);
+    let t = ((px - x1) * dx + (py - y1) * dy) / l2;
+    t = Math.max(0, Math.min(1, t));
+    const projX = x1 + t * dx;
+    const projY = y1 + t * dy;
+    return Math.hypot(px - projX, py - projY);
+  }
+
   function addEditorNode(event) {
-    if (!editorActive() || editorMode !== 'add' || event.button !== 0 || event.target !== byId('mapEditorSvg')) return;
-    const point = editorSvgPoint(event);
-    if (point.x < 8 || point.x > 576 || point.y < 8 || point.y > 850) return;
-    if (!router().validPoint(clampEditorPoint(point))) { showToast('벽 위에는 노드를 추가할 수 없습니다.', true); return; }
+    if (!editorActive() || editorMode !== 'add' || event.button !== 0) return;
+    if (event.target.closest('.editor-node-group')) return;
+
+    const rawPoint = editorSvgPoint(event);
+    if (rawPoint.x < 8 || rawPoint.x > 576 || rawPoint.y < 8 || rawPoint.y > 850) return;
+    const point = clampEditorPoint(rawPoint);
+    if (!router().validPoint(point)) { showToast('벽 위에는 노드를 추가할 수 없습니다.', true); return; }
+
     pushEditorUndo();
     const id = nextEditorId('N', [...editorDraft.nodes, ...editorDraft.exits]);
-    editorPositions[id] = clampEditorPoint(point);
-    editorDraft.nodes.push({id, name: `추가 노드 ${id}`, ...editorPositions[id]});
+    editorPositions[id] = point;
+    editorDraft.nodes.push({ id, name: `추가 노드 ${id}`, ...point });
+
+    // 1. 기존 간선 위 또는 부근에 생성된 경우: 해당 간선을 자동 분할하여 양 끝 노드와 연결
+    const SPLIT_THRESHOLD = 36;
+    let splitEdge = null;
+    let minEdgeDist = Infinity;
+
+    for (const edge of editorDraft.edges) {
+      const pFrom = editorPositions[edge.from];
+      const pTo   = editorPositions[edge.to];
+      if (!pFrom || !pTo) continue;
+
+      let waypoints = [pFrom, pTo];
+      try {
+        const routed = router().route(pFrom, pTo);
+        if (routed && routed.length >= 2) waypoints = routed;
+      } catch (_) {}
+
+      for (let i = 0; i < waypoints.length - 1; i++) {
+        const d = pointToSegmentDistance(point.x, point.y, waypoints[i].x, waypoints[i].y, waypoints[i+1].x, waypoints[i+1].y);
+        if (d < minEdgeDist) {
+          minEdgeDist = d;
+          if (d <= SPLIT_THRESHOLD) {
+            splitEdge = edge;
+          }
+        }
+      }
+    }
+
+    const connected = [];
+
+    if (splitEdge) {
+      const fromNode = splitEdge.from;
+      const toNode   = splitEdge.to;
+      const origWeight = Number(splitEdge.weight) || 1.0;
+
+      // 기존 간선 삭제
+      editorDraft.edges = editorDraft.edges.filter(e => e.id !== splitEdge.id);
+
+      // 분할된 두 간선 자동 생성 (from <-> new, new <-> to)
+      const e1Id = nextEditorId('E', editorDraft.edges);
+      const e1 = { id: e1Id, from: fromNode, to: id, weight: Math.max(0.5, Math.round((origWeight / 2) * 10) / 10) };
+      editorDraft.edges.push(e1);
+
+      const e2Id = nextEditorId('E', editorDraft.edges);
+      const e2 = { id: e2Id, from: id, to: toNode, weight: Math.max(0.5, Math.round((origWeight / 2) * 10) / 10) };
+      editorDraft.edges.push(e2);
+
+      connected.push(fromNode, toNode);
+    } else {
+      // 2. 간선 위가 아닌 경우: 통행 가능한 가장 가까운 인접 노드 1~2개와 자동 연결
+      const allOtherNodes = [...editorDraft.nodes.filter(n => n.id !== id), ...editorDraft.exits];
+      const candidates = [];
+      for (const target of allOtherNodes) {
+        const targetPos = editorPositions[target.id];
+        if (!targetPos) continue;
+        const dist = Math.hypot(point.x - targetPos.x, point.y - targetPos.y);
+        if (dist <= 180) {
+          try {
+            const routed = router().route(point, targetPos);
+            if (routed && routed.length >= 2) {
+              candidates.push({ id: target.id, dist });
+            }
+          } catch (_) {}
+        }
+      }
+      candidates.sort((a, b) => a.dist - b.dist);
+      const toConnect = candidates.slice(0, 2);
+      for (const target of toConnect) {
+        const edgeId = nextEditorId('E', editorDraft.edges);
+        const weight = Math.max(0.5, Math.round((target.dist / 80) * 10) / 10);
+        editorDraft.edges.push({ id: edgeId, from: target.id, to: id, weight });
+        connected.push(target.id);
+      }
+    }
+
     selectEditorItem('node', id);
     updateEditorDirtyState();
-    showToast(`${id} 추가 완료. 간선 연결로 다른 지점과 연결하세요.`);
+    renderMapEditor();
+    updateEditorInspector();
+
+    if (connected.length > 0) {
+      showToast(`${id} 생성 완료 · ${connected.join(', ')} 지점과 간선이 자동 연결되었습니다.`);
+    } else {
+      showToast(`${id} 추가 완료. 간선 연결 모드로 원하는 지점과 연결하세요.`);
+    }
   }
 
   function connectEditorPoint(id) {
@@ -635,6 +794,38 @@
     selectEditorItem('edge', edgeId);
     updateEditorDirtyState();
     byId('editorModeHint').textContent = '연결 완료 · 다음 연결의 첫 번째 지점을 클릭하세요.';
+  }
+
+  // ------------------------------------------------------------------ //
+  // 2D / 3D Map View Toggle                                             //
+  // ------------------------------------------------------------------ //
+  function setMapView(mode) {
+    mapViewMode = mode;
+    const stage2d = byId('mapStage');
+    const stage3d = byId('mapStage3d');
+    const legend  = byId('map2dLegend');
+    const btn2d   = byId('mapView2dBtn');
+    const btn3d   = byId('mapView3dBtn');
+
+    if (mode === '3d') {
+      stage2d.style.display = 'none';
+      stage3d.style.display = 'block';
+      if (legend) legend.style.display = 'none';
+      btn2d.classList.remove('active');
+      btn3d.classList.add('active');
+      // Init 3D engine once (lazy)
+      if (!map3dReady && typeof Map3D !== 'undefined' && floorplan) {
+        Map3D.init(floorplan, stage3d);
+        map3dReady = true;
+      }
+      if (map3dReady && currentState) Map3D.update(currentState);
+    } else {
+      stage2d.style.display = '';
+      stage3d.style.display = 'none';
+      if (legend) legend.style.display = '';
+      btn2d.classList.add('active');
+      btn3d.classList.remove('active');
+    }
   }
 
   function renderMap(state) {
@@ -765,6 +956,9 @@
     byId('costLabel').textContent = state.route ? state.route.cost.toFixed(1) : '-';
     byId('blockedLabel').textContent = `${state.blockedNodes.length + state.blockedEdges.length} 구간`;
     updateRouteVisualScale();
+
+    // Sync 3D scene whenever state changes (if 3D is ready)
+    if (map3dReady && typeof Map3D !== 'undefined') Map3D.update(state);
   }
 
   function renderHeader(state) {
@@ -935,6 +1129,7 @@
     refreshNodeActionCard();
     renderMap(currentState);
   }
+  window.__onSelectNode3D = selectNode;
 
   function refreshNodeActionCard() {
     if (!floorplan || !selectedNodeId) return;
@@ -1003,6 +1198,7 @@
     document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === pageId));
     const titles = { overview: '실시간 화재 대피 통합 관제', equipment: '장비 관리', routing: '경로 및 수동 설정', events: '이벤트 기록', qr: 'QR 기반 모바일 대피 안내', mapEditor: '수정 모드 · 지도 편집' };
     if (pageId === 'mapEditor') setEditorMode('node');
+    if (pageId === 'overview' && mapViewMode === '3d') setMapView('3d');
     byId('pageTitle').textContent = titles[pageId] || 'FireGuard';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -1024,6 +1220,11 @@
     byId('autoDemoBtn').addEventListener('click', runAutoDemo);
     byId('stopDemoBtn').addEventListener('click', stopAutoDemo);
     byId('serverRestoreBtn').addEventListener('click', () => runScenario('server_on'));
+
+    const btn2d = byId('mapView2dBtn');
+    const btn3d = byId('mapView3dBtn');
+    if (btn2d) btn2d.addEventListener('click', () => setMapView('2d'));
+    if (btn3d) btn3d.addEventListener('click', () => setMapView('3d'));
 
     byId('nodeActionClose').addEventListener('click', closeNodeActionCard);
     byId('selectedFireBtn').addEventListener('click', () => selectedNodeId && safeApi('/api/simulation/node-fire', { nodeId: selectedNodeId, active: true }));
@@ -1048,6 +1249,7 @@
     byId('editorReloadBtn').addEventListener('click', reloadEditorLayout);
     byId('editorUndoBtn').addEventListener('click', undoEditorLayout);
     byId('editorApplyCoordBtn').addEventListener('click', applyEditorCoordinates);
+    byId('editorDeleteItemBtn')?.addEventListener('click', deleteEditorItem);
     byId('editorSnapToggle').addEventListener('change', renderMapEditor);
 
     const editorSvg = byId('mapEditorSvg');
@@ -1097,7 +1299,12 @@
       floorplan = updatedFloorplan;
       if (!editorDrag && !editorDirty() && !editorSaving) initEditorPositions();
       buildControls();
-      if (currentState) renderMap(currentState);
+      if (currentState) {
+        renderMap(currentState);
+        if (map3dReady && typeof Map3D !== 'undefined') {
+          Map3D.rebuild(floorplan, currentState);
+        }
+      }
     });
     socket.on('connect_error', () => { setBrowserConnection(false); startPollingFallback(); });
   }
