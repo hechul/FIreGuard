@@ -976,6 +976,12 @@
     setChip('cloudChip', state.connections.server);
     setChip('flaskChip', browserConnected);
 
+    const fireSwitch = byId('realFireSwitchBtn');
+    const pendingRealFire = state.operationMode === 'simulation' && state.realFireDetected;
+    fireSwitch.disabled = !pendingRealFire;
+    fireSwitch.classList.toggle('fire-detected', Boolean(pendingRealFire));
+    fireSwitch.textContent = pendingRealFire ? '실제 화재 발생 · REAL 전환' : state.realFireDetected ? '실제 화재 관제 중' : '실제 화재 감지 없음';
+    fireSwitch.title = (state.realFireSensorIds || []).join(', ');
     const realBtn = byId('realModeBtn');
     const simBtn = byId('simModeBtn');
     realBtn.classList.toggle('active', state.operationMode === 'real');
@@ -1227,6 +1233,10 @@
       await runScenario(button.dataset.scenario);
     }));
 
+    byId('realFireSwitchBtn').addEventListener('click', () => {
+      if (currentState?.operationMode !== 'simulation' || !currentState?.realFireDetected) return;
+      if (window.confirm('실제 센서에서 화재가 감지되었습니다. REAL 모드로 전환하시겠습니까?')) setMode('real');
+    });
     byId('realModeBtn').addEventListener('click', () => setMode('real'));
     byId('simModeBtn').addEventListener('click', () => setMode('simulation'));
     byId('autoDemoBtn').addEventListener('click', runAutoDemo);

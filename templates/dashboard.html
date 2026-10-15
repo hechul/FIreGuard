@@ -51,9 +51,13 @@
           <div class="connection-chip" id="flaskChip"><span class="status-dot"></span><b>Flask Server</b><em>ONLINE</em></div>
           <div class="connection-chip" id="cloudChip"><span class="status-dot"></span><b>Supabase</b><em>ONLINE</em></div>
 
+          <div class="mode-controls">
           <div class="mode-toggle" aria-label="운영 모드">
             <button id="realModeBtn" type="button">REAL</button>
             <button id="simModeBtn" type="button" class="active">SIMULATION</button>
+          </div>
+
+          <button id="realFireSwitchBtn" type="button" class="real-fire-switch" disabled aria-live="polite">실제 화재 감지 없음</button>
           </div>
 
           <div class="clock-block">

@@ -34,7 +34,10 @@ def broadcast_state() -> dict[str, Any]:
 
 def apply_action(action: Callable[[], None]):
     try:
-        action()
+        with state._lock:
+            if request.path.startswith("/api/simulation/") and state.operation_mode != "simulation":
+                return jsonify({"ok": False, "error": "SIMULATION 모드에서만 사용할 수 있습니다."}), 409
+            action()
     except (ValueError, TypeError, KeyError) as error:
         return jsonify({"ok": False, "error": str(error)}), 400
     return jsonify({"ok": True, "state": broadcast_state()})
@@ -389,8 +392,8 @@ def run_scenario():
 @app.post("/api/hardware/heartbeat")
 def hardware_heartbeat():
     def action():
-        state.set_operation_mode("real")
-        state.hardware_heartbeat()
+        with state.hardware_input():
+            state.hardware_heartbeat()
 
     return apply_action(action)
 
@@ -400,9 +403,9 @@ def hardware_flame():
     data = payload()
 
     def action():
-        state.set_operation_mode("real")
-        state.hardware_heartbeat()
-        state.set_flame(data["sensorId"], data["active"], source="REAL")
+        with state.hardware_input():
+            state.hardware_heartbeat()
+            state.set_flame(data["sensorId"], data["active"], source="REAL")
 
     return apply_action(action)
 
@@ -412,9 +415,9 @@ def hardware_mq2():
     data = payload()
 
     def action():
-        state.set_operation_mode("real")
-        state.hardware_heartbeat()
-        state.set_mq2(data["sensorId"], data["value"], source="REAL")
+        with state.hardware_input():
+            state.hardware_heartbeat()
+            state.set_mq2(data["sensorId"], data["value"], source="REAL")
 
     return apply_action(action)
 
@@ -433,14 +436,14 @@ def hardware_batch():
     data = payload()
 
     def action():
-        state.set_operation_mode("real")
-        state.hardware_heartbeat()
-        for sensor_id, active in (data.get("flame") or {}).items():
-            state.set_flame(sensor_id, bool(active), source="REAL")
-        for sensor_id, value in (data.get("mq2") or {}).items():
-            state.set_mq2(sensor_id, int(value), source="REAL")
-        for shutter_id, closed in (data.get("shutters") or {}).items():
-            state.set_shutter(shutter_id, bool(closed), source="REAL")
+        with state.hardware_input():
+            state.hardware_heartbeat()
+            for sensor_id, active in (data.get("flame") or {}).items():
+                state.set_flame(sensor_id, bool(active), source="REAL")
+            for sensor_id, value in (data.get("mq2") or {}).items():
+                state.set_mq2(sensor_id, int(value), source="REAL")
+            for shutter_id, closed in (data.get("shutters") or {}).items():
+                state.set_shutter(shutter_id, bool(closed), source="REAL")
 
     return apply_action(action)
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
 from threading import RLock
@@ -11,13 +12,16 @@ from route_service import FloorGraph
 class SimulationState:
     """FireGuard의 단일 상태 저장소.
 
-    실제 하드웨어 이벤트와 시뮬레이션 이벤트가 동일한 메서드를 사용하도록
-    구성해 UI/경로 계산 로직을 한 곳에서 유지한다.
+    실제 하드웨어와 시뮬레이션 상태를 모드별로 분리해 보관하며,
+    UI/경로 계산 로직은 공통으로 사용한다.
     """
 
     MQ2_WARNING = 350
     MQ2_DANGER = 650
     MAX_EVENTS = 200
+    MODE_FIELDS = ("start_node", "flame_sensors", "mq2_sensors", "shutters",
+                   "pi_connected", "server_link_connected", "connection_changed_at",
+                   "manual_blocked_edges", "edge_weight_overrides", "events")
 
     def __init__(self, floorplan: dict[str, Any]):
         self._lock = RLock()
@@ -27,6 +31,7 @@ class SimulationState:
         self.operation_mode = "simulation"
         self.manual_blocked_edges: set[str] = set()
         self._reset_state(clear_events=False)
+        self._mode_states = {"real": self._capture_mode()}
         self._add_event("SYSTEM", "관제 시스템", "초기화", "FireGuard 관제 시스템 준비 완료")
 
     @staticmethod
@@ -120,6 +125,47 @@ class SimulationState:
             )
         self.route = route.as_dict() if route else None
 
+    def _capture_mode(self):
+        return {key: deepcopy(getattr(self, key)) for key in self.MODE_FIELDS}
+
+    def _restore_mode(self, data):
+        for key, value in data.items():
+            setattr(self, key, deepcopy(value))
+        # Map edits apply to both modes; discard references to deleted equipment.
+        sensor_ids = {s["id"] for s in self.floorplan["sensors"]}
+        self.flame_sensors = {k: v for k, v in self.flame_sensors.items() if k in sensor_ids}
+        self.mq2_sensors = {k: v for k, v in self.mq2_sensors.items() if k in sensor_ids}
+        shutter_ids = {s["id"] for s in self.floorplan.get("shutters", [])}
+        self.shutters = {k: v for k, v in self.shutters.items() if k in shutter_ids}
+        self.manual_blocked_edges.intersection_update(self.graph.edges)
+        self.edge_weight_overrides = {k: v for k, v in self.edge_weight_overrides.items() if k in self.graph.edges}
+        if self.start_node not in self.graph.nodes:
+            self.start_node = self.floorplan["nodes"][0]["id"]
+        self._recompute()
+
+    @contextmanager
+    def hardware_input(self):
+        """Update the real bank atomically without changing the selected mode."""
+        with self._lock:
+            if self.operation_mode == "real":
+                yield
+                return
+            simulation = self._capture_mode()
+            self._restore_mode(self._mode_states["real"])
+            try:
+                yield
+            finally:
+                self._mode_states["real"] = self._capture_mode()
+                self._restore_mode(simulation)
+
+    def _real_fire_sensor_ids(self):
+        data = self._capture_mode() if self.operation_mode == "real" else self._mode_states["real"]
+        valid = {s["id"] for s in self.floorplan["sensors"]}
+        return sorted(
+            [sid for sid, v in data["flame_sensors"].items() if sid in valid and v["active"] and v["connected"]]
+            + [sid for sid, v in data["mq2_sensors"].items() if sid in valid and v["status"] == "danger" and v["connected"]]
+        )
+
     def set_operation_mode(self, mode: str) -> None:
         with self._lock:
             mode = str(mode).lower()
@@ -128,6 +174,8 @@ class SimulationState:
             if self.operation_mode == mode:
                 return
             before = self.operation_mode
+            self._mode_states[before] = self._capture_mode()
+            self._restore_mode(self._mode_states[mode])
             self.operation_mode = mode
             self._add_event("MODE", "관제 시스템", f"{before} → {mode}", "운영 모드 변경")
 
@@ -445,6 +493,8 @@ class SimulationState:
                 "updatedAt": self._now(),
                 "overallStatus": overall_status,
                 "operationMode": self.operation_mode,
+                "realFireSensorIds": self._real_fire_sensor_ids(),
+                "realFireDetected": bool(self._real_fire_sensor_ids()),
                 "failSafeActive": fail_safe_active,
                 "startNode": self.start_node,
                 "route": deepcopy(self.route),

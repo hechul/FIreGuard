@@ -12,7 +12,7 @@ with (ROOT / "static" / "data" / "floorplan.json").open(encoding="utf-8") as f:
 
 s = SimulationState(floor)
 
-assert len(s.mq2_sensors) == 5
+assert len(s.mq2_sensors) == sum(sensor["type"] == "mq2" for sensor in floor["sensors"])
 assert s.snapshot()["route"] is not None
 assert s.snapshot()["routeMode"] == "exit"
 
@@ -73,7 +73,9 @@ assert snap["selectedDestinationType"] == "descender"
 assert snap["route"]["destinationId"] == "N3"
 
 # no route
-s.set_manual_edge("E23", True)
+for edge in floor["edges"]:
+    if s.start_node in (edge["from"], edge["to"]):
+        s.set_manual_edge(edge["id"], True)
 snap = s.snapshot()
 assert snap["route"] is None
 assert snap["overallStatus"] == "no_route"
