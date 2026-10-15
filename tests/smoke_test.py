@@ -21,14 +21,14 @@ s.reset()
 s.set_mq2("MQ2-02", 450)
 snap = s.snapshot()
 assert snap["overallStatus"] == "warning"
-assert "N5" not in snap["blockedNodes"]
+assert "N34" not in snap["blockedNodes"]
 
 # MQ-2 danger blocks node
 s.reset()
 s.set_mq2("MQ2-05", 760)
 snap = s.snapshot()
 assert snap["overallStatus"] == "fire"
-assert "N3" in snap["blockedNodes"]
+assert "N10" in snap["blockedNodes"]
 
 # congestion: dynamic weight reroutes away from default east exit
 s.reset()
@@ -70,7 +70,7 @@ for edge_id in ("E21", "E22"):
     s.set_manual_edge(edge_id, True)
 snap = s.snapshot()
 assert snap["selectedDestinationType"] == "descender"
-assert snap["route"]["destinationId"] == "N18"
+assert snap["route"]["destinationId"] == "N3"
 
 # no route
 s.set_manual_edge("E23", True)

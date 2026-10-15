@@ -135,7 +135,7 @@
   }
 
   function router() {
-    const signature = JSON.stringify(floorplan.rooms || []);
+    const signature = JSON.stringify([floorplan.rooms || [], floorplan.edges || []]);
     if (!geometryRouter || geometrySignature !== signature) {
       geometryRouter = MapGeometry.createRouter(floorplan);
       geometrySignature = signature;
@@ -180,7 +180,7 @@
           svg.appendChild(element('text', {class: 'door-label', x: horizontal ? x+door.width/2 : x+7, y: horizontal ? y-7 : y+door.width/2-5, 'text-anchor': horizontal ? 'middle' : 'start'}, '문'));
         }
       }
-      const descender = floorplan.nodes.find(n => n.id === 'N18');
+      const descender = floorplan.nodes.find(n => n.id === 'N3');
       if (descender) svg.appendChild(element('text', {class: 'descender-label', x: descender.x, y: descender.y-18}, '완강기'));
       // Keep physical LEDs separate from editable nodes and evacuation edges.
       if (svg.closest('#mapStage')) {

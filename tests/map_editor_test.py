@@ -38,7 +38,7 @@ class MapEditorTest(unittest.TestCase):
         edge_id = 'E' + str(max(int(e['id'][1:]) for e in self.original['edges']) + 1)
         response = self.post(
             baseFloorplan=self.original,
-            positions={"N1": {"x": 400, "y": 480}, node_id: {"x": 470, "y": 500}},
+            positions={"N33": {"x": 400, "y": 480}, node_id: {"x": 470, "y": 500}},
             nodes=[{"id": node_id, "name": "테스트 노드"}],
             edges=[{"id": edge_id, "from": node_id, "to": "EXIT_E", "weight": 1}],
         )
@@ -47,7 +47,7 @@ class MapEditorTest(unittest.TestCase):
         self.assertEqual(server.state.snapshot()["route"]["edges"], [edge_id])
         persisted = json.loads(self.path.read_text(encoding="utf-8"))
         self.assertEqual(persisted, server.floorplan)
-        self.assertEqual(persisted["nodes"][0]["x"], 400)
+        self.assertEqual(next(n for n in persisted["nodes"] if n["id"] == "N33")["x"], 400)
         reloaded = SimulationState(persisted)
         reloaded.set_start_node(node_id)
         self.assertEqual(reloaded.snapshot()["route"]["edges"], [edge_id])
@@ -55,11 +55,11 @@ class MapEditorTest(unittest.TestCase):
     def test_invalid_edits_leave_memory_and_file_unchanged(self):
         before = self.path.read_bytes()
         invalid = [
-            {"positions": {"N1": {"x": 100, "y": 100}, "N2": {"x": "bad", "y": 0}}},
+            {"positions": {"N1": {"x": 100, "y": 100}, "N33": {"x": "bad", "y": 0}}},
             {"positions": {"N1": {"x": float('nan'), "y": 100}}},
-            {"positions": {}, "edges": [{"id": "E24", "from": "N2", "to": "N1", "weight": 1}]},
+            {"positions": {}, "edges": [{"id": "E24", "from": "N33", "to": "N1", "weight": 1}]},
             {"positions": {}, "edges": [{"id": "E24", "from": "N1", "to": "N999", "weight": 1}]},
-            {"positions": {}, "edges": [{"id": "E24", "from": "N1", "to": "N3", "weight": -1}]},
+            {"positions": {}, "edges": [{"id": "E24", "from": "N1", "to": "N10", "weight": -1}]},
         ]
         for body in invalid:
             with self.subTest(body=body):

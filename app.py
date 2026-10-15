@@ -290,7 +290,7 @@ def run_scenario():
 
         elif scenario_id == "east_exit_fire":
             state.reset(clear_events=False)
-            state.set_node_fire("N3", True, source="SCENARIO")
+            state.set_node_fire("N10", True, source="SCENARIO")
 
         elif scenario_id == "ticket_fire":
             state.reset(clear_events=False)
@@ -298,13 +298,13 @@ def run_scenario():
 
         elif scenario_id == "cinema4_fire":
             state.reset(clear_events=False)
-            state.set_node_fire("N9", True, source="SCENARIO")
+            state.set_node_fire("N36", True, source="SCENARIO")
 
         elif scenario_id == "large_fire":
             state.reset(clear_events=False)
             # 불꽃센서가 설치된 동측/서측 비상구 앞을 동시에 차단한다.
-            state.set_node_fire("N3", True, source="SCENARIO")
-            state.set_node_fire("N8", True, source="SCENARIO")
+            state.set_node_fire("N10", True, source="SCENARIO")
+            state.set_node_fire("N7", True, source="SCENARIO")
 
         # -----------------------------------------------------------
         # ROUTE / BLOCK / CROWD
@@ -315,7 +315,7 @@ def run_scenario():
 
         elif scenario_id == "mid_route_block":
             state.reset(clear_events=False)
-            # 정상 최단경로 N1-N2-N3-EXIT_E 중 E02가 갑자기 막힌 상황.
+            # 정상 최단경로 N1-N33-N10-EXIT_E 중 E02가 갑자기 막힌 상황.
             state.set_manual_edge("E02", True)
 
         elif scenario_id == "crowd_congestion":
@@ -351,7 +351,7 @@ def run_scenario():
 
         elif scenario_id == "fire_server_off":
             state.reset(clear_events=False)
-            state.set_node_fire("N3", True, source="SCENARIO")
+            state.set_node_fire("N10", True, source="SCENARIO")
             state.set_connection("server", False, source="SCENARIO")
 
         elif scenario_id == "server_on":

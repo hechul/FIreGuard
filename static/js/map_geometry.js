@@ -160,6 +160,18 @@
       a = {x: rounded(a.x), y: rounded(a.y)};
       b = {x: rounded(b.x), y: rounded(b.y)};
       if (!validPoint(a) || !validPoint(b)) return null;
+      // Explicit physical segments can use a room's secondary doorway.
+      // Ignore saved geometry after its endpoints have been moved in the editor.
+      for (const edge of floorplan.edges || []) {
+        const path = edge.waypoints;
+        if (!path || path.length < 2) continue;
+        const same = (p, q) => Math.abs(p.x-q.x) < EPS && Math.abs(p.y-q.y) < EPS;
+        const forward = same(a, path[0]) && same(b, path.at(-1));
+        const backward = same(b, path[0]) && same(a, path.at(-1));
+        if ((forward || backward) && path.every((p,i) => validPoint(p) && (!i || segmentClear(path[i-1],p,obstacles)))) {
+          return (forward ? path : [...path].reverse()).map(p => ({...p}));
+        }
+      }
       const roomA = roomFor(a), roomB = roomFor(b);
       if (roomA && roomA === roomB) return findRoute(a, b);
       const start = roomStem(a, roomA), end = roomStem(b, roomB);
