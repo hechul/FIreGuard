@@ -187,8 +187,8 @@
         const leds = element('g', {class: 'physical-led-layer', 'pointer-events': 'none', 'aria-label': 'LED 유도등'});
         for (const [start, end] of window.FireGuardLedPlan) {
           const attrs = {x1: start[0], y1: start[1], x2: end[0], y2: end[1], 'stroke-linecap': 'round'};
-          leds.appendChild(element('line', {...attrs, stroke: '#059669', 'stroke-width': 5}));
-          leds.appendChild(element('line', {...attrs, stroke: '#d1fae5', 'stroke-width': 2, 'stroke-dasharray': '1 12'}));
+          leds.appendChild(element('line', {...attrs, stroke: '#64748b', 'stroke-width': 5}));
+          leds.appendChild(element('line', {...attrs, stroke: '#e2e8f0', 'stroke-width': 2, 'stroke-dasharray': '1 12'}));
         }
         svg.appendChild(leds);
       }

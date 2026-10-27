@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1620" viewBox="0 0 1500 1620">
+<rect width="1500" height="1620" fill="#f2f6fa"/>
+<style>text{font-family:"Malgun Gothic","Noto Sans KR",sans-serif;fill:#142d45} .title{font-size:38px;font-weight:700}.h{font-size:26px;font-weight:700}.body{font-size:22px}.small{font-size:18px}.port{font-size:23px;font-weight:700}</style>
+<rect x="20" y="20" width="1460" height="120" rx="12" fill="#142d45" stroke="#142d45" stroke-width="2"/>
+<text x="48" y="76" class="title" style="fill:#fff">FireGuard — TXS · LRS · Raspberry Pi · LED</text>
+<text x="48" y="113" class="body" style="fill:#fff">확정 연결표 기반 배선도 | S1~S15 · 총 155 LED · S1 / S10 전원 공급</text>
+<text x="50" y="183" class="h">① LED 전원: LRS에서 S1과 S10으로 직접 공급</text>
+<rect x="60" y="204" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<rect x="880" y="204" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<text x="80" y="239" class="port">LRS +V 첫 단자</text>
+<text x="900" y="239" class="port">S1 별도 빨강선  +5V</text>
+<path d="M635 231H853" fill="none" stroke="#df3030" stroke-width="5"/><path d="M853 224L865 231L853 238Z" fill="#df3030"/>
+<rect x="60" y="272" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<rect x="880" y="272" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<text x="80" y="307" class="port">LRS -V 첫 단자</text>
+<text x="900" y="307" class="port">S1 별도 하양선  GND</text>
+<path d="M635 299H853" fill="none" stroke="#384653" stroke-width="5"/><path d="M853 292L865 299L853 306Z" fill="#384653"/>
+<rect x="60" y="340" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<rect x="880" y="340" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<text x="80" y="375" class="port">LRS +V 다른 단자</text>
+<text x="900" y="375" class="port">S10  +5V 패드</text>
+<path d="M635 367H853" fill="none" stroke="#df3030" stroke-width="5"/><path d="M853 360L865 367L853 374Z" fill="#df3030"/>
+<rect x="60" y="408" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<rect x="880" y="408" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<text x="80" y="443" class="port">LRS -V 다른 단자</text>
+<text x="900" y="443" class="port">S10  GND 패드</text>
+<path d="M635 435H853" fill="none" stroke="#384653" stroke-width="5"/><path d="M853 428L865 435L853 442Z" fill="#384653"/>
+<text x="65" y="486" class="small">LRS의 같은 기호 단자끼리는 공통입니다. +V와 -V는 서로 연결하지 않습니다.</text>
+<text x="50" y="542" class="h">② TXS 전원: S1의 남은 3핀 커넥터와 Pi에서 공급</text>
+<rect x="60" y="563" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<rect x="880" y="563" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<text x="80" y="598" class="port">S1 커넥터 빨강선  +5V</text>
+<text x="900" y="598" class="port">TXS  VB</text>
+<path d="M635 590H853" fill="none" stroke="#df3030" stroke-width="5"/><path d="M853 583L865 590L853 597Z" fill="#df3030"/>
+<rect x="60" y="631" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<rect x="880" y="631" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<text x="80" y="666" class="port">S1 커넥터 하양선  GND</text>
+<text x="900" y="666" class="port">TXS  GND</text>
+<path d="M635 658H853" fill="none" stroke="#384653" stroke-width="5"/><path d="M853 651L865 658L853 665Z" fill="#384653"/>
+<rect x="60" y="699" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<rect x="880" y="699" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<text x="80" y="734" class="port">Pi 물리 1번  3.3V</text>
+<text x="900" y="734" class="port">TXS  VA + OE  (같은 3.3V 묶음)</text>
+<path d="M635 726H853" fill="none" stroke="#df8100" stroke-width="5"/><path d="M853 719L865 726L853 733Z" fill="#df8100"/>
+<rect x="60" y="767" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<rect x="880" y="767" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<text x="80" y="802" class="port">Pi 물리 6번  GND</text>
+<text x="900" y="802" class="port">TXS  GND  (위 GND와 같은 묶음)</text>
+<path d="M635 794H853" fill="none" stroke="#384653" stroke-width="5"/><path d="M853 787L865 794L853 801Z" fill="#384653"/>
+<text x="65" y="844" class="small">S1 빨강 2가닥은 같은 +5V, 하양 2가닥은 같은 GND입니다. LRS→TXS 별도 직결선은 없습니다.</text>
+<text x="50" y="900" class="h">③ 데이터: Pi → TXS → 저항 → 첫 LED</text>
+<rect x="60" y="921" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<rect x="880" y="921" width="560" height="54" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<text x="80" y="956" class="port">Pi 물리 12번  GPIO18 (BCM)</text>
+<text x="900" y="956" class="port">TXS  A1</text>
+<path d="M635 948H853" fill="none" stroke="#8554cc" stroke-width="5"/><path d="M853 941L865 948L853 955Z" fill="#8554cc"/>
+<rect x="60" y="989" width="350" height="62" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<text x="80" y="1028" class="port">TXS  B1</text>
+<path d="M425 1020H578" fill="none" stroke="#079866" stroke-width="5"/><path d="M578 1013L590 1020L578 1027Z" fill="#079866"/>
+<rect x="605" y="989" width="270" height="62" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<text x="638" y="1028" class="port">330Ω 저항</text>
+<path d="M890 1020H1028" fill="none" stroke="#079866" stroke-width="5"/><path d="M1028 1013L1040 1020L1028 1027Z" fill="#079866"/>
+<rect x="1055" y="989" width="385" height="62" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<text x="1070" y="1028" class="port">S1 커넥터 초록 DIN</text>
+<text x="65" y="1085" class="small">저항은 S1 DIN 가까이에 배치합니다. 초록 DIN은 LRS 전원 단자에 연결하지 않습니다.</text>
+<text x="50" y="1140" class="h">④ LED 구간 사이: 세 가닥으로 순서대로 연결</text>
+<rect x="50" y="1160" width="1400" height="140" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<text x="75" y="1200" class="port">앞 +5V → 다음 +5V     |     앞 GND → 다음 GND     |     앞 DOUT → 다음 DIN</text>
+<text x="75" y="1240" class="body">S1 → S2 → S3 → S4 → S5 → S6 → S7 → S8 → S9 → S10 → S11 → S12 → S13 → S14 → S15</text>
+<text x="75" y="1278" class="body">S10에는 전원만 추가합니다. S9 DOUT → S10 DIN 유지 / S15 DOUT은 미연결</text>
+<rect x="50" y="1320" width="1400" height="245" rx="12" fill="#fff" stroke="#ccd8e3" stroke-width="2"/>
+<text x="75" y="1359" class="h">실제 작업 시 확인</text>
+<text x="75" y="1400" class="small">Pi는 별도 USB-C 어댑터로 공급. Pi 5V 핀과 LED +5V를 연결하지 않습니다.</text>
+<text x="75" y="1432" class="small">TXS 핀헤더를 납땜하고 브레드보드 중앙 홈을 가로질러 꽂습니다. VA=3.3V / VB=5V / OE=3.3V.</text>
+<text x="75" y="1464" class="small">LED 전체 전류는 브레드보드로 보내지 않습니다. 전원선·기존 꼬리선·접합부·퓨즈 정격을 확인합니다.</text>
+<text x="75" y="1496" class="small">모든 작업은 전원 분리 후 진행합니다. 이 도면은 실제 핀 배치도나 220V 입력 시공도가 아닙니다.</text>
+<text x="75" y="1528" class="small">TXS는 짧은 신호선으로 먼저 시험합니다. 긴 배선의 신호 안정성은 실제 점등으로 확인합니다.</text>
+<text x="50" y="1600" class="small">2026-10-26 · 최신 수정본 — 앞서 생성된 이미지 대신 이 벡터 도면과 연결표를 사용하세요.</text>
+</svg>
