@@ -52,7 +52,7 @@ def payload() -> dict[str, Any]:
 
 @app.get("/")
 def dashboard():
-    return render_template("dashboard.html")
+    return render_template("dashboard.html", floorplan=floorplan)
 
 
 @app.get("/mobile/<node_id>")
@@ -178,7 +178,6 @@ def update_floorplan_layout():
 
             active_sensor_ids = {s["id"] for s in candidate.get("sensors", [])}
             state.flame_sensors = {sid: val for sid, val in state.flame_sensors.items() if sid in active_sensor_ids}
-            state.mq2_sensors = {sid: val for sid, val in state.mq2_sensors.items() if sid in active_sensor_ids}
             active_shutter_ids = {s["id"] for s in candidate.get("shutters", [])}
             state.shutters = {sid: val for sid, val in state.shutters.items() if sid in active_shutter_ids}
             graph = FloorGraph(candidate)
@@ -216,12 +215,6 @@ def set_start_node():
 def set_flame():
     data = payload()
     return apply_action(lambda: state.set_flame(data["sensorId"], data["active"], source="SIM"))
-
-
-@app.post("/api/simulation/mq2")
-def set_mq2():
-    data = payload()
-    return apply_action(lambda: state.set_mq2(data["sensorId"], data["value"], source="SIM"))
 
 
 @app.post("/api/simulation/node-fire")
@@ -283,14 +276,6 @@ def run_scenario():
         # -----------------------------------------------------------
         # SENSOR / FIRE
         # -----------------------------------------------------------
-        elif scenario_id == "smoke_warning":
-            state.reset(clear_events=False)
-            state.set_mq2("MQ2-02", 450, source="SCENARIO")
-
-        elif scenario_id == "smoke_danger":
-            state.reset(clear_events=False)
-            state.set_mq2("MQ2-05", 760, source="SCENARIO")
-
         elif scenario_id == "east_exit_fire":
             state.reset(clear_events=False)
             state.set_node_fire("N10", True, source="SCENARIO")
@@ -301,7 +286,7 @@ def run_scenario():
 
         elif scenario_id == "cinema4_fire":
             state.reset(clear_events=False)
-            state.set_node_fire("N36", True, source="SCENARIO")
+            state.set_node_fire("N9", True, source="SCENARIO")
 
         elif scenario_id == "large_fire":
             state.reset(clear_events=False)
@@ -372,13 +357,11 @@ def run_scenario():
         # -----------------------------------------------------------
         elif scenario_id == "sensor_fault":
             state.reset(clear_events=False)
-            # 동측 비상구의 Flame + MQ-2가 동시에 통신 단절된 상황.
+            # 동측 비상구 불꽃 센서가 통신 단절된 상황.
             state.set_sensor_connection("FLM-15", False, source="SCENARIO")
-            state.set_sensor_connection("MQ2-05", False, source="SCENARIO")
 
         elif scenario_id == "sensor_recover":
             state.set_sensor_connection("FLM-15", True, source="SCENARIO")
-            state.set_sensor_connection("MQ2-05", True, source="SCENARIO")
 
         else:
             raise ValueError(f"알 수 없는 시나리오입니다: {scenario_id}")
@@ -410,18 +393,6 @@ def hardware_flame():
     return apply_action(action)
 
 
-@app.post("/api/hardware/mq2")
-def hardware_mq2():
-    data = payload()
-
-    def action():
-        with state.hardware_input():
-            state.hardware_heartbeat()
-            state.set_mq2(data["sensorId"], data["value"], source="REAL")
-
-    return apply_action(action)
-
-
 @app.post("/api/hardware/batch")
 def hardware_batch():
     """라즈베리파이가 한 번에 여러 센서 값을 전송할 때 사용한다.
@@ -429,19 +400,18 @@ def hardware_batch():
     예시:
     {
       "flame": {"FLM-01": false, "FLM-07": true},
-      "mq2": {"MQ2-01": 120, "MQ2-04": 731},
       "shutters": {"SH-01": false}
     }
     """
     data = payload()
+    if "mq2" in data:
+        return jsonify({"ok": False, "error": "MQ-2 입력은 지원하지 않습니다. batch에서 mq2 항목을 제거하세요."}), 400
 
     def action():
         with state.hardware_input():
             state.hardware_heartbeat()
             for sensor_id, active in (data.get("flame") or {}).items():
                 state.set_flame(sensor_id, bool(active), source="REAL")
-            for sensor_id, value in (data.get("mq2") or {}).items():
-                state.set_mq2(sensor_id, int(value), source="REAL")
             for shutter_id, closed in (data.get("shutters") or {}).items():
                 state.set_shutter(shutter_id, bool(closed), source="REAL")
 

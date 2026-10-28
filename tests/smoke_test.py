@@ -12,20 +12,13 @@ with (ROOT / "static" / "data" / "floorplan.json").open(encoding="utf-8") as f:
 
 s = SimulationState(floor)
 
-assert len(s.mq2_sensors) == sum(sensor["type"] == "mq2" for sensor in floor["sensors"])
+assert all(sensor["type"] == "flame" for sensor in floor["sensors"])
 assert s.snapshot()["route"] is not None
 assert s.snapshot()["routeMode"] == "exit"
 
-# MQ-2 warning does not block node
+# Flame detection blocks its configured node
 s.reset()
-s.set_mq2("MQ2-02", 450)
-snap = s.snapshot()
-assert snap["overallStatus"] == "warning"
-assert "N34" not in snap["blockedNodes"]
-
-# MQ-2 danger blocks node
-s.reset()
-s.set_mq2("MQ2-05", 760)
+s.set_flame("FLM-15", True)
 snap = s.snapshot()
 assert snap["overallStatus"] == "fire"
 assert "N10" in snap["blockedNodes"]
@@ -43,9 +36,8 @@ assert snap["selectedDestinationName"] != default_exit
 # sensor fault
 s.reset()
 s.set_sensor_connection("FLM-15", False)
-s.set_sensor_connection("MQ2-05", False)
 snap = s.snapshot()
-assert snap["sensorCounts"]["offline"] == 2
+assert snap["sensorCounts"]["offline"] == 1
 assert snap["flameSensors"]["FLM-15"]["connected"] is False
 
 # server fail-safe vs PI offline distinction

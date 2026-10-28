@@ -45,9 +45,6 @@ const Map3D = (() => {
     ledDanger: 0xFF4444,
     flameSafe: 0x10B981,
     flameFire: 0xEF4444,
-    mq2Normal: 0x3B82F6,
-    mq2Warn:   0xF59E0B,
-    mq2Danger: 0xDC2626,
   };
 
   /* ------------------------------------------------------------------ */
@@ -353,23 +350,20 @@ const Map3D = (() => {
     if (!_floorplan.sensors) return;
     const ptMap = _allPoints();
 
-    _floorplan.sensors.forEach(sensor => {
+    _floorplan.sensors.filter(sensor => sensor.type === 'flame').forEach(sensor => {
       const pt = ptMap[sensor.node]; if (!pt) return;
-      const isFlame = sensor.type === 'flame';
-      const geo = isFlame
-        ? new THREE.ConeGeometry(5, 12, 8)
-        : new THREE.BoxGeometry(8, 8, 8);
+      const geo = new THREE.ConeGeometry(5, 12, 8);
       const mat = new THREE.MeshStandardMaterial({
-        color: isFlame ? COLORS.flameSafe : COLORS.mq2Normal,
+        color: COLORS.flameSafe,
         roughness: 0.4, metalness: 0.1,
-        emissive: isFlame ? COLORS.flameSafe : COLORS.mq2Normal,
+        emissive: COLORS.flameSafe,
         emissiveIntensity: 0.2,
       });
       const mesh = new THREE.Mesh(geo, mat);
-      const offset = isFlame ? 12 : 18;
+      const offset = 12;
       mesh.position.set(bx(pt.x) + offset, 10, bz(pt.y) + offset);
       _dynamicGroup.add(mesh);
-      pool.sensors[sensor.id] = { mesh, isFlame };
+      pool.sensors[sensor.id] = { mesh };
     });
   }
 
@@ -462,17 +456,9 @@ const Map3D = (() => {
     });
 
     // 5. Sensor colours
-    Object.entries(pool.sensors).forEach(([sid, { mesh, isFlame }]) => {
-      let c;
-      if (isFlame) {
-        const active = Boolean(state.flameSensors?.[sid]?.active);
-        c = active ? COLORS.flameFire : COLORS.flameSafe;
-      } else {
-        const mq = state.mq2Sensors?.[sid];
-        if (mq?.status === 'danger')  c = COLORS.mq2Danger;
-        else if (mq?.status === 'warning') c = COLORS.mq2Warn;
-        else c = COLORS.mq2Normal;
-      }
+    Object.entries(pool.sensors).forEach(([sid, { mesh }]) => {
+      const active = Boolean(state.flameSensors?.[sid]?.active);
+      const c = active ? COLORS.flameFire : COLORS.flameSafe;
       mesh.material.color.set(c);
       mesh.material.emissive.set(c);
     });

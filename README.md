@@ -1,17 +1,12 @@
 # FireGuard 영화관 통합 관제 UI v5
 
-영화관 2층 피난도를 디지털 트윈 배경으로 사용하고, Flask + Flask-SocketIO + Dijkstra 기반으로 화재/연기/방화셔터 상태와 대피 경로를 실시간 표시하는 캡스톤 시연용 프로젝트입니다.
+영화관 2층 피난도를 디지털 트윈 배경으로 사용하고, Flask + Flask-SocketIO + Dijkstra 기반으로 불꽃 감지/방화셔터 상태와 대피 경로를 실시간 표시하는 캡스톤 시연용 프로젝트입니다.
 
 ## v5 핵심 변경
 
 - 목업 디자인에 맞춘 다크 관제 대시보드 전면 재설계
 - 영화관 평면도를 발표용 도면(Schematic) 스타일로 재설계하고 Node / Edge / Exit / Sensor 오버레이
-- MQ-2 **5개** 반영
-  - MQ2-01 팝콘팩토리 N15
-  - MQ2-02 중앙복도 N5
-  - MQ2-03 매표소 N1
-  - MQ2-04 4관 앞 N9
-  - MQ2-05 동측 비상구 앞 N3
+- 불꽃 센서만 사용하며 MQ-2 연기/가스 센서는 제외
 - 지도 Node 직접 클릭 → 화재 발생/해제/출발 위치 설정
 - Quick Scenario + Auto Demo
 - REAL / SIMULATION 모드 분리
@@ -69,16 +64,7 @@ http://127.0.0.1:5000
 POST /api/hardware/flame
 Content-Type: application/json
 
-{"sensorId":"FLM-07","active":true}
-```
-
-### MQ-2
-
-```http
-POST /api/hardware/mq2
-Content-Type: application/json
-
-{"sensorId":"MQ2-04","value":731}
+{"sensorId":"FLM-15","active":true}
 ```
 
 ### 여러 센서 한 번에
@@ -88,13 +74,12 @@ POST /api/hardware/batch
 Content-Type: application/json
 
 {
-  "flame":{"FLM-07":true},
-  "mq2":{"MQ2-04":731,"MQ2-02":120},
+  "flame":{"FLM-15":true},
   "shutters":{"SH-01":false}
 }
 ```
 
-하드웨어 API가 들어오면 운영 모드는 자동으로 `REAL`로 변경됩니다.
+하드웨어 입력은 실제 상태만 갱신합니다. 운영 모드는 대시보드에서 명시적으로 선택하며 SIMULATION을 자동으로 해제하지 않습니다.
 
 ## 파일 구조
 
@@ -130,7 +115,7 @@ FireGuard_Cinema_UI_v5/
 - 기존 사진형 영화관 맵을 대시보드 내부의 **도면형 SVG 평면도**로 교체
 - 메인 상태 `SAFE / FIRE / LOCAL FAIL-SAFE`를 대형 배너로 표시
 - 중앙 Digital Twin 영역 확대
-- 센서 수치를 크게 표시: Flame **15개**, MQ-2 **5개**
+- 센서 수치를 크게 표시: 현재 지도에 설정된 불꽃 센서 수
 - Quick Demo를 발표용 5개 버튼으로 단순화
 - 영화관 Node 클릭 시 화재 발생/해제/출발 위치 지정
 - 화면 전체 글자와 카드 크기를 확대해 프로젝터 발표 가독성 개선
@@ -185,7 +170,7 @@ Quick Demo:
 
 예외상황 시연을 위해 시나리오 제어를 확장했습니다.
 
-- MQ-2 주의 / 위험 임계값
+- 불꽃 센서 감지 상태
 - 매표소/4관/동측 출구 화재
 - 복합 대형화재
 - 방화셔터 및 이동 중 통로 폐쇄

@@ -11,7 +11,6 @@ class ModeIsolationTest(unittest.TestCase):
         server.state = SimulationState(server.floorplan)
         self.client = server.app.test_client()
         self.flame = next(s['id'] for s in server.floorplan['sensors'] if s['type'] == 'flame')
-        self.mq = next(s['id'] for s in server.floorplan['sensors'] if s['type'] == 'mq2')
 
     def tearDown(self):
         server.state = self.previous
@@ -42,17 +41,46 @@ class ModeIsolationTest(unittest.TestCase):
 
     def test_simulated_fire_never_activates_real_alert(self):
         self.post('simulation/flame', {'sensorId':self.flame,'active':True})
-        s = self.post('hardware/batch', {'flame':{self.flame:False},'mq2':{self.mq:450}})
+        s = self.post('hardware/batch', {'flame':{self.flame:False}})
         self.assertTrue(s['flameSensors'][self.flame]['active'])
         self.assertFalse(s['realFireDetected'])
         self.post('mode', {'mode':'real'})
         s = self.post('mode', {'mode':'simulation'})
         self.assertTrue(s['flameSensors'][self.flame]['active'])
-        s = self.post('hardware/mq2', {'sensorId':self.mq,'value':650})
+        s = self.post('hardware/flame', {'sensorId':self.flame,'active':True})
         self.assertTrue(s['realFireDetected'])
-        self.assertEqual(s['mq2Sensors'][self.mq]['value'], 0)
-        s = self.post('hardware/mq2', {'sensorId':self.mq,'value':0})
+        s = self.post('hardware/flame', {'sensorId':self.flame,'active':False})
         self.assertFalse(s['realFireDetected'])
+
+    def test_sensor_demo_then_simulation_survives_continuous_hardware(self):
+        self.post('mode', {'mode': 'real'})
+        s = self.post('hardware/flame', {'sensorId': self.flame, 'active': True})
+        self.assertTrue(s['flameSensors'][self.flame]['active'])
+        self.post('hardware/flame', {'sensorId': self.flame, 'active': False})
+        self.post('mode', {'mode': 'simulation'})
+        expected = self.post('simulation/scenario', {'scenarioId': 'east_shutter'})
+        events = expected['events']
+        for _ in range(10):
+            # Normal readings and heartbeat continue after the flame is removed.
+            self.post('hardware/heartbeat')
+            self.post('hardware/flame', {'sensorId': self.flame, 'active': False})
+            s = self.post('hardware/batch', {
+                'flame': {self.flame: False},
+                'shutters': {'SH-02': False},
+            })
+            self.assertEqual(s['operationMode'], 'simulation')
+            self.assertEqual(s['route'], expected['route'])
+            self.assertEqual(s['shutters'], expected['shutters'])
+            self.assertEqual(s['events'], events)
+            self.assertFalse(s['realFireDetected'])
+        # Even another real alert must preserve the explicitly selected mode.
+        s = self.post('hardware/flame', {'sensorId': self.flame, 'active': True})
+        self.assertEqual(s['operationMode'], 'simulation')
+        self.assertTrue(s['realFireDetected'])
+        self.assertEqual(s['shutters'], expected['shutters'])
+        s = self.post('mode', {'mode': 'real'})
+        self.assertTrue(s['flameSensors'][self.flame]['active'])
+        self.assertFalse(s['shutters']['SH-02']['closed'])
 
     def test_invalid_sensor_does_not_leave_real_bank_selected(self):
         self.post('simulation/flame', {'sensorId':self.flame,'active':True})

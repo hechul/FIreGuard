@@ -131,7 +131,6 @@
     <div class="legend-item"><div class="legend-color" style="background:#E2E8F0; border:1px solid #94A3B8;"></div><span>상판 10T (룸 벽체 60mm & LED)</span></div>
     <div class="legend-item"><div class="legend-color" style="background:#475569;"></div><span>하판 10T 받침판 (제어기 거치)</span></div>
     <div class="legend-item"><div class="legend-color" style="background:#059669;"></div><span>라즈베리파이 4 + 레벨시프터</span></div>
-    <div class="legend-item"><div class="legend-color" style="background:#EAB308;"></div><span>MQ-2 연기/가스 센서 (5개)</span></div>
     <div class="legend-item"><div class="legend-color" style="background:#DC2626;"></div><span>불꽃(Flame) 센서 ({{ floorplan.sensors | selectattr('type', 'equalto', 'flame') | list | length }}개)</span></div>
     <div class="legend-item"><div class="legend-color" style="background:#00E676; box-shadow:0 0 8px #00E676;"></div><span>WS2812B LED 바닥 유도선</span></div>
     <div class="legend-item"><div class="legend-color" style="background:#A855F7;"></div><span>LED 데이터 직렬선 (J01~J17)</span></div>
@@ -428,27 +427,6 @@
     // ==========================================
     // 4. SENSORS (불꽃센서는 대시보드의 현재 설치 구성을 공유)
     // ==========================================
-    // MQ-2 3D Model: Blue PCB + Round Silver Mesh Sensor
-    function createMQ2Sensor(label) {
-      const g = new THREE.Group();
-      // PCB Board (Blue)
-      const pcb = new THREE.Mesh(new THREE.BoxGeometry(22, 3, 32), new THREE.MeshStandardMaterial({ color: 0x1E40AF, roughness: 0.5 }));
-      g.add(pcb);
-      // Silver Gas Chamber
-      const chamber = new THREE.Mesh(new THREE.CylinderGeometry(7, 7, 10, 24), new THREE.MeshStandardMaterial({ color: 0xE2E8F0, metalness: 0.9, roughness: 0.2 }));
-      chamber.position.set(0, 6, -4);
-      g.add(chamber);
-      // Sensitivity Trimmer (Blue potentiometer)
-      const trim = new THREE.Mesh(new THREE.BoxGeometry(6, 6, 6), new THREE.MeshStandardMaterial({ color: 0x3B82F6 }));
-      trim.position.set(0, 4, 10);
-      g.add(trim);
-      // Label
-      const sp = createTextSprite(label, "#F59E0B", 60);
-      sp.position.set(0, 20, 0);
-      g.add(sp);
-      return g;
-    }
-
     // Flame Sensor 3D Model: Blue PCB + Black Phototransistor IR LED
     function createFlameSensor(label) {
       const g = new THREE.Group();
@@ -465,15 +443,6 @@
       g.add(sp);
       return g;
     }
-
-    // 5 MQ-2 Sensors Placement
-    const mq2List = [
-      { id: 'MQ2-01', name: 'MQ2-01 (팝콘팩토리)', x: 490, y: 310 },
-      { id: 'MQ2-02', name: 'MQ2-02 (중앙복도)', x: 230, y: 650 },
-      { id: 'MQ2-03', name: 'MQ2-03 (매표소 앞)', x: 410, y: 550 },
-      { id: 'MQ2-04', name: 'MQ2-04 (4관 앞)', x: 360, y: 400 },
-      { id: 'MQ2-05', name: 'MQ2-05 (동측 비상구)', x: 450, y: 650 }
-    ];
 
     // Convert dashboard coordinates (584 x 858) to this physical board (600 x 900).
     const dashboardFloorplan = {{ floorplan | tojson }};
@@ -492,13 +461,6 @@
 
     const sensorHolePositions = [];
 
-    mq2List.forEach(s => {
-      const m = createMQ2Sensor(s.id);
-      const x = to3DX(s.x), z = to3DZ(s.y);
-      m.position.set(x, 4, z);
-      topGroup.add(m);
-      sensorHolePositions.push({ x: x, z: z, type: 'MQ2', id: s.id });
-    });
 
     flameList.forEach(s => {
       const m = createFlameSensor(s.name);

@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FireGuard · 영화관 화재 대피 통합 관제 시스템</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css', v='flame-only-20261028') }}">
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="{{ url_for('static', filename='js/led_plan.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/map3d.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/map3d.js', v='flame-only-20261028') }}"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -210,11 +210,7 @@
               <div class="sensor-metric-grid">
                 <div class="sensor-metric flame">
                   <div class="sensor-icon">🔥</div>
-                  <div><span>화염 센서</span><strong id="flameCount">0 / 15</strong><small id="flameStateText">정상</small></div>
-                </div>
-                <div class="sensor-metric mq2">
-                  <div class="sensor-icon gas">◉</div>
-                  <div><span>MQ-2 가스 센서</span><strong id="mq2Count">0 / 5</strong><small id="mq2StateText">정상</small></div>
+                  <div><span>화염 센서</span><strong id="flameCount">0 / {{ floorplan.sensors | selectattr("type", "equalto", "flame") | list | length }}</strong><small id="flameStateText">정상</small></div>
                 </div>
               </div>
               <div class="sensor-detail-list" id="sensorSummary"></div>
@@ -236,16 +232,14 @@
               <details class="scenario-lab" open>
                 <summary>
                   <span><b>예외 상황 Scenario Lab</b><small>센서 · 화재 · 통로 · 혼잡 · 통신 장애 · Fallback</small></span>
-                  <strong>14 CASES</strong>
+                  <strong>13 CASES</strong>
                 </summary>
 
                 <div class="scenario-group">
-                  <div class="scenario-group-title"><span>01</span><div><b>감지 / 화재</b><small>임계값과 복합 화재 확인</small></div></div>
+                  <div class="scenario-group-title"><span>01</span><div><b>감지 / 화재</b><small>불꽃 감지와 복합 화재 확인</small></div></div>
                   <div class="scenario-compact-grid">
-                    <button class="scenario-compact simulation-only" data-scenario="smoke_warning" data-note="MQ2-02를 450으로 설정합니다. WARNING만 표시하고 Node는 차단하지 않습니다."><i>🌫</i><b>연기 주의</b><span>MQ-2 450</span></button>
-                    <button class="scenario-compact simulation-only" data-scenario="smoke_danger" data-note="동측 비상구 MQ2-05를 760으로 올려 N10를 위험 Node로 차단합니다."><i>☁</i><b>연기 위험</b><span>MQ-2 760</span></button>
                     <button class="scenario-compact simulation-only" data-scenario="ticket_fire" data-note="매표소 앞 N14 화재를 발생시켜 인접 경로 재계산을 확인합니다."><i>🔥</i><b>매표소 화재</b><span>N14</span></button>
-                    <button class="scenario-compact simulation-only" data-scenario="cinema4_fire" data-note="4관 앞 N36 화재로 서측 상부 경로를 회피합니다."><i>🔥</i><b>4관 화재</b><span>N36</span></button>
+                    <button class="scenario-compact simulation-only" data-scenario="cinema4_fire" data-note="4관 앞 N9 불꽃 센서 화재로 서측 상부 경로를 회피합니다."><i>🔥</i><b>4관 화재</b><span>N9</span></button>
                     <button class="scenario-compact danger simulation-only" data-scenario="large_fire" data-note="N10와 N7에서 동시 화재가 발생한 대형 화재 상황입니다. 남아 있는 정규 출구를 재탐색합니다."><i>🔥🔥</i><b>복합 대형화재</b><span>N10 + N7</span></button>
                   </div>
                 </div>
@@ -274,7 +268,7 @@
                     <button class="scenario-compact warning simulation-only" data-scenario="server_off" data-note="외부 서버/Supabase 연결만 단절됩니다. Raspberry Pi 로컬 Dijkstra와 LED는 유지됩니다."><i>☁</i><b>서버 단절</b><span>LOCAL FAIL-SAFE</span></button>
                     <button class="scenario-compact danger simulation-only" data-scenario="fire_server_off" data-note="실제 위험 상황에서 동시에 외부 서버가 단절되어도 로컬 경로 계산이 유지되는지 보여줍니다."><i>🔥☁</i><b>화재 + 서버 단절</b><span>Fail-safe Test</span></button>
                     <button class="scenario-compact danger simulation-only" data-scenario="pi_off" data-note="Raspberry Pi 현장 제어기 자체가 끊긴 상황입니다. 서버 단절과 달리 로컬 LED 제어 유지가 불가능한 장애로 구분합니다."><i>⌁</i><b>Pi 제어기 단절</b><span>EDGE OFFLINE</span></button>
-                    <button class="scenario-compact warning simulation-only" data-scenario="sensor_fault" data-note="동측 비상구의 Flame/MQ-2 센서 두 개가 통신 단절된 상황을 장비 관리 화면에 표시합니다."><i>⚠</i><b>센서 통신 장애</b><span>FLM-15 + MQ2-05</span></button>
+                    <button class="scenario-compact warning simulation-only" data-scenario="sensor_fault" data-note="동측 비상구의 불꽃 센서가 통신 단절된 상황을 장비 관리 화면에 표시합니다."><i>⚠</i><b>센서 통신 장애</b><span>FLM-15</span></button>
                   </div>
                 </div>
               </details>
@@ -319,7 +313,7 @@
       <section id="equipment" class="page">
         <div class="page-header-card">
           <div><span class="panel-kicker">DEVICE MANAGEMENT</span><h2>장비 관리</h2><p>Raspberry Pi, 센서, 방화셔터, LED, 전원장치의 실시간 상태를 확인합니다.</p></div>
-          <div class="device-summary"><strong>15</strong><span>Flame</span><strong>5</strong><span>MQ-2</span><strong>2</strong><span>Shutter</span></div>
+          <div class="device-summary"><strong>{{ floorplan.sensors | selectattr("type", "equalto", "flame") | list | length }}</strong><span>Flame</span><strong>2</strong><span>Shutter</span></div>
         </div>
         <section class="panel page-panel">
           <div class="toolbar">
@@ -361,13 +355,6 @@
                 <button id="flameOnBtn" class="btn danger simulation-only" type="button">화재 ON</button>
                 <button id="flameOffBtn" class="btn secondary simulation-only" type="button">해제</button>
               </div>
-            </div>
-            <div class="control-block">
-              <h3>MQ-2 개별 제어</h3>
-              <select id="mq2Select"></select>
-              <input id="mq2Range" type="range" min="0" max="1023" value="0">
-              <div class="range-row"><span>0</span><strong id="mq2Value">0</strong><span>1023</span></div>
-              <button id="mq2ApplyBtn" class="btn primary simulation-only" type="button">센서값 적용</button>
             </div>
           </section>
 
@@ -551,6 +538,6 @@
   </div>
 
   <script src="{{ url_for('static', filename='js/map_geometry.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js', v='flame-only-20261028') }}"></script>
 </body>
 </html>

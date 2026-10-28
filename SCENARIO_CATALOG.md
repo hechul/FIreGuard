@@ -5,11 +5,9 @@
 | 분류 | Scenario ID | 화면 표시 | 핵심 동작 |
 |---|---|---|---|
 | 기본 | `normal` | 정상 | 전체 초기화, 기본 최단경로 복원 |
-| 감지 | `smoke_warning` | 연기 주의 | MQ2-02 = 450, WARNING만 표시 |
-| 감지 | `smoke_danger` | 연기 위험 | MQ2-05 = 760, N3 위험 Node 차단 |
 | 화재 | `east_exit_fire` | 동측 출구 화재 | N3 통합 화재 |
 | 화재 | `ticket_fire` | 매표소 화재 | N14 통합 화재 |
-| 화재 | `cinema4_fire` | 4관 화재 | N9 통합 화재 |
+| 화재 | `cinema4_fire` | 4관 화재 | N9 불꽃 감지 화재 |
 | 화재 | `large_fire` | 복합 대형화재 | N3 + N7 동시 화재 |
 | 시설 | `east_shutter` | 방화셔터 | SH-02 CLOSED → E02 차단 |
 | 경로 | `mid_route_block` | 이동 중 통로 폐쇄 | 현재 기본 경로의 E02 수동 차단 |
@@ -20,10 +18,10 @@
 | 통신 | `server_off` | 서버 단절 | 외부 서버만 OFF, Local Fail-safe 유지 |
 | 통신 | `fire_server_off` | 화재 + 서버 단절 | N3 화재 + 외부 서버 OFF |
 | 장비 | `pi_off` | Pi 제어기 단절 | 현장 제어기 OFF, LED/센서 현장 기능 확인 필요 |
-| 장비 | `sensor_fault` | 센서 통신 장애 | FLM-15 + MQ2-05 OFFLINE |
+| 장비 | `sensor_fault` | 센서 통신 장애 | FLM-15 OFFLINE |
 | 복구 | `server_on` | 서버 복구 | 외부 서버 링크 복구 |
 | 복구 | `pi_on` | Pi 복구 | Raspberry Pi 연결 복구 |
-| 복구 | `sensor_recover` | 센서 복구 | FLM-15 + MQ2-05 연결 복구 |
+| 복구 | `sensor_recover` | 센서 복구 | FLM-15 연결 복구 |
 
 ## 발표 때 특히 좋은 6개
 
@@ -37,8 +35,8 @@
 ## 상태 해석
 
 - **SAFE**: 정상
-- **WARNING**: MQ-2 주의
-- **FIRE DETECTED**: Flame 또는 MQ-2 Danger
+- **WARNING**: 보조 대피 경로 안내
+- **FIRE DETECTED**: 불꽃 감지
 - **CONGESTION REROUTE**: 동적 Edge 가중치 기반 혼잡 우회
 - **SENSOR DEGRADED**: 일부 센서 통신 단절
 - **LOCAL FAIL-SAFE**: 외부 서버 단절, Raspberry Pi 로컬 제어 유지

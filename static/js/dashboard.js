@@ -37,7 +37,7 @@
   const STATUS_COPY = {
     normal: { icon: '✓', title: 'SAFE', description: '현재 화재 상황이 없습니다. 모든 경로를 정상 감시 중입니다.' },
     warning: { icon: '!', title: 'WARNING', description: '일부 센서에서 주의 수준이 감지되었습니다. 상태를 확인하세요.' },
-    fire: { icon: '🔥', title: 'FIRE DETECTED', description: '화재 또는 위험 수준의 연기가 감지되었습니다. 안전 경로를 재계산합니다.' },
+    fire: { icon: '🔥', title: 'FIRE DETECTED', description: '불꽃 센서에서 화재가 감지되었습니다. 안전 경로를 재계산합니다.' },
     no_route: { icon: '×', title: 'NO SAFE ROUTE', description: '현재 시작 위치에서 사용 가능한 안전 대피 경로를 찾을 수 없습니다.' },
   };
 
@@ -912,17 +912,6 @@
       dot.appendChild(title); sensorLayer.appendChild(dot);
     });
 
-    floorplan.sensors.filter((s) => s.type === 'mq2').forEach((sensor, index) => {
-      const p = points[sensor.node]; if (!p) return;
-      const mq = state.mq2Sensors[sensor.id];
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rect.setAttribute('x', p.x - 15 - (index % 2) * 2); rect.setAttribute('y', p.y - 15);
-      rect.setAttribute('width', 6.8); rect.setAttribute('height', 6.8); rect.setAttribute('rx', 2);
-      rect.setAttribute('class', `sensor-dot mq2 ${mq?.status || 'normal'}`);
-      const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-      title.textContent = `${sensor.id} · ${sensor.name} · ${mq?.value ?? 0}`;
-      rect.appendChild(title); sensorLayer.appendChild(rect);
-    });
 
     floorplan.nodes.forEach((node) => {
       const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -1049,24 +1038,16 @@
   function renderSensors(state) {
     const counts = state.sensorCounts;
     byId('flameCount').textContent = `${counts.flameActive} / ${counts.flameTotal}`;
-    byId('mq2Count').textContent = `${counts.mq2Danger} / ${counts.mq2Total}`;
     byId('flameStateText').textContent = counts.flameActive ? '화재 감지' : '정상 (화재 감지 없음)';
-    byId('mq2StateText').textContent = counts.mq2Danger ? '위험 감지' : counts.mq2Warning ? '주의 감지' : '정상 (연기/가스 감지 없음)';
 
     const flameBox = byId('flameCount').closest('.sensor-metric');
-    const mqBox = byId('mq2Count').closest('.sensor-metric');
     flameBox.classList.toggle('has-danger', counts.flameActive > 0);
-    mqBox.classList.toggle('has-danger', counts.mq2Danger > 0);
-    mqBox.classList.toggle('has-warning', counts.mq2Danger === 0 && counts.mq2Warning > 0);
 
     const normalFlame = Object.values(state.flameSensors).filter((v) => v.connected && !v.active).length;
-    const normalMq = Object.values(state.mq2Sensors).filter((v) => v.connected && v.status === 'normal').length;
     const disconnected = state.equipment.filter((e) => e.status === 'offline').length;
     const sensorOffline = counts.offline || 0;
     byId('sensorSummary').innerHTML = `
       <div class="sensor-row"><span>불꽃 센서 정상</span><strong class="${counts.flameActive ? 'state-danger' : 'state-normal'}">${normalFlame}/${counts.flameTotal}</strong></div>
-      <div class="sensor-row"><span>MQ-2 정상</span><strong class="${counts.mq2Danger ? 'state-danger' : counts.mq2Warning ? 'state-warning' : 'state-normal'}">${normalMq}/${counts.mq2Total}</strong></div>
-      <div class="sensor-row"><span>MQ-2 주의 / 위험</span><strong class="${counts.mq2Danger ? 'state-danger' : counts.mq2Warning ? 'state-warning' : 'state-normal'}">${counts.mq2Warning} / ${counts.mq2Danger}</strong></div>
       <div class="sensor-row"><span>센서 통신 장애</span><strong class="${sensorOffline ? 'state-warning' : 'state-normal'}">${sensorOffline}</strong></div>
       <div class="sensor-row"><span>연결 끊김 장비</span><strong class="${disconnected ? 'state-warning' : 'state-normal'}">${disconnected}</strong></div>`;
   }
@@ -1130,7 +1111,6 @@
     renderFloorplanBase();
     byId('startNodeSelect').innerHTML = floorplan.nodes.map((n) => `<option value="${n.id}">${n.id} · ${n.name}</option>`).join('');
     byId('flameSelect').innerHTML = floorplan.sensors.filter((s) => s.type === 'flame').map((s) => `<option value="${s.id}">${s.id} · ${s.name}</option>`).join('');
-    byId('mq2Select').innerHTML = floorplan.sensors.filter((s) => s.type === 'mq2').map((s) => `<option value="${s.id}">${s.id} · ${s.name}</option>`).join('');
     byId('manualEdgeSelect').innerHTML = floorplan.edges.map((e) => `<option value="${e.id}">${e.id} · ${e.from} ↔ ${e.to} · W=${e.weight}</option>`).join('');
     byId('shutterControls').innerHTML = floorplan.shutters.map((s) => `
       <div class="shutter-item"><strong>${s.name}</strong><p>${s.id} · ${s.edge}</p><div class="inline-control"><button type="button" class="btn warning simulation-only" data-shutter="${s.id}" data-closed="true">닫기</button><button type="button" class="btn secondary simulation-only" data-shutter="${s.id}" data-closed="false">열기</button></div></div>`).join('');
@@ -1158,7 +1138,7 @@
     byId('selectedFireBtn').disabled = sensors.length === 0;
     byId('selectedClearBtn').disabled = sensors.length === 0;
     byId('selectedNodeTitle').textContent = `${node.id} · ${node.name}`;
-    byId('selectedNodeSensors').textContent = sensors.length ? `연결 센서: ${sensors.map((s) => `${s.id}(${s.type === 'mq2' ? 'MQ-2' : 'Flame'})`).join(', ')}` : '연결된 센서 없음';
+    byId('selectedNodeSensors').textContent = sensors.length ? `연결 센서: ${sensors.map((s) => `${s.id}(Flame)`).join(', ')}` : '연결된 센서 없음';
     card.classList.remove('hidden');
   }
 
@@ -1258,8 +1238,6 @@
     byId('startApplyBtn').addEventListener('click', () => safeApi('/api/simulation/start-node', { nodeId: byId('startNodeSelect').value }));
     byId('flameOnBtn').addEventListener('click', () => safeApi('/api/simulation/flame', { sensorId: byId('flameSelect').value, active: true }));
     byId('flameOffBtn').addEventListener('click', () => safeApi('/api/simulation/flame', { sensorId: byId('flameSelect').value, active: false }));
-    byId('mq2Range').addEventListener('input', () => { byId('mq2Value').textContent = byId('mq2Range').value; });
-    byId('mq2ApplyBtn').addEventListener('click', () => safeApi('/api/simulation/mq2', { sensorId: byId('mq2Select').value, value: Number(byId('mq2Range').value) }));
     byId('edgeBlockBtn').addEventListener('click', () => safeApi('/api/simulation/manual-edge', { edgeId: byId('manualEdgeSelect').value, blocked: true }));
     byId('edgeOpenBtn').addEventListener('click', () => safeApi('/api/simulation/manual-edge', { edgeId: byId('manualEdgeSelect').value, blocked: false }));
 

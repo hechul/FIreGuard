@@ -16,10 +16,8 @@ class SimulationState:
     UI/경로 계산 로직은 공통으로 사용한다.
     """
 
-    MQ2_WARNING = 350
-    MQ2_DANGER = 650
     MAX_EVENTS = 200
-    MODE_FIELDS = ("start_node", "flame_sensors", "mq2_sensors", "shutters",
+    MODE_FIELDS = ("start_node", "flame_sensors", "shutters",
                    "pi_connected", "server_link_connected", "connection_changed_at",
                    "manual_blocked_edges", "edge_weight_overrides", "events")
 
@@ -49,11 +47,6 @@ class SimulationState:
             sensor["id"]: {"active": False, "connected": True, "updatedAt": now}
             for sensor in self.floorplan["sensors"]
             if sensor["type"] == "flame"
-        }
-        self.mq2_sensors = {
-            sensor["id"]: {"value": 0, "connected": True, "status": "normal", "updatedAt": now}
-            for sensor in self.floorplan["sensors"]
-            if sensor["type"] == "mq2"
         }
         self.shutters = {
             shutter["id"]: {"closed": False, "connected": True, "updatedAt": now}
@@ -94,11 +87,6 @@ class SimulationState:
             for sensor_id, sensor in self.flame_sensors.items()
             if sensor["active"] and sensor["connected"]
         }
-        blocked_nodes.update(
-            self._sensor_config(sensor_id)["node"]
-            for sensor_id, sensor in self.mq2_sensors.items()
-            if sensor["status"] == "danger" and sensor["connected"]
-        )
 
         shutter_edges = {
             shutter["edge"]
@@ -134,7 +122,6 @@ class SimulationState:
         # Map edits apply to both modes; discard references to deleted equipment.
         sensor_ids = {s["id"] for s in self.floorplan["sensors"]}
         self.flame_sensors = {k: v for k, v in self.flame_sensors.items() if k in sensor_ids}
-        self.mq2_sensors = {k: v for k, v in self.mq2_sensors.items() if k in sensor_ids}
         shutter_ids = {s["id"] for s in self.floorplan.get("shutters", [])}
         self.shutters = {k: v for k, v in self.shutters.items() if k in shutter_ids}
         self.manual_blocked_edges.intersection_update(self.graph.edges)
@@ -163,7 +150,6 @@ class SimulationState:
         valid = {s["id"] for s in self.floorplan["sensors"]}
         return sorted(
             [sid for sid, v in data["flame_sensors"].items() if sid in valid and v["active"] and v["connected"]]
-            + [sid for sid, v in data["mq2_sensors"].items() if sid in valid and v["status"] == "danger" and v["connected"]]
         )
 
     def set_operation_mode(self, mode: str) -> None:
@@ -202,24 +188,8 @@ class SimulationState:
                 self._route_result_text(),
             )
 
-    def set_mq2(self, sensor_id: str, value: int, source: str = "SIM") -> None:
-        with self._lock:
-            if sensor_id not in self.mq2_sensors:
-                raise ValueError(f"알 수 없는 MQ-2 센서입니다: {sensor_id}")
-            value = max(0, min(1023, int(value)))
-            previous = self.mq2_sensors[sensor_id]["status"]
-            status = "danger" if value >= self.MQ2_DANGER else "warning" if value >= self.MQ2_WARNING else "normal"
-            self.mq2_sensors[sensor_id].update({"value": value, "status": status, "updatedAt": self._now()})
-            self._recompute()
-            self._add_event(
-                "MQ2",
-                sensor_id,
-                f"{previous} → {status} / {value} ({source})",
-                self._route_result_text(),
-            )
-
     def set_node_fire(self, node_id: str, active: bool, source: str = "SIM") -> None:
-        """선택 Node의 Flame과 MQ-2를 묶어서 바꾸는 시연용 편의 기능."""
+        """선택 Node의 불꽃 센서로 화재를 설정하는 시연용 편의 기능."""
         with self._lock:
             if node_id not in self.graph.nodes:
                 raise ValueError(f"알 수 없는 Node입니다: {node_id}")
@@ -229,26 +199,16 @@ class SimulationState:
                 for sensor in self.floorplan["sensors"]
                 if sensor["type"] == "flame" and sensor["node"] == node_id
             ]
-            mq2_ids = [
-                sensor["id"]
-                for sensor in self.floorplan["sensors"]
-                if sensor["type"] == "mq2" and sensor["node"] == node_id
-            ]
-            if not flame_ids and not mq2_ids:
+            if not flame_ids:
                 raise ValueError(f"{node_id}에 연결된 화재 센서가 없습니다.")
 
             now = self._now()
             for sensor_id in flame_ids:
                 self.flame_sensors[sensor_id].update({"active": bool(active), "updatedAt": now})
-            for sensor_id in mq2_ids:
-                value = 760 if active else 0
-                self.mq2_sensors[sensor_id].update(
-                    {"value": value, "status": "danger" if active else "normal", "updatedAt": now}
-                )
 
             self._recompute()
             node_name = self.graph.nodes[node_id]["name"]
-            linked = ", ".join([*flame_ids, *mq2_ids])
+            linked = ", ".join(flame_ids)
             self._add_event(
                 "FIRE" if active else "CLEAR",
                 f"{node_id} / {node_name}",
@@ -312,8 +272,6 @@ class SimulationState:
         with self._lock:
             if sensor_id in self.flame_sensors:
                 target = self.flame_sensors[sensor_id]
-            elif sensor_id in self.mq2_sensors:
-                target = self.mq2_sensors[sensor_id]
             else:
                 raise ValueError(f"알 수 없는 센서입니다: {sensor_id}")
             target["connected"] = bool(connected)
@@ -423,12 +381,6 @@ class SimulationState:
                 label = "연결 끊김" if status == "offline" else "화재 감지" if status == "danger" else "정상"
                 name = "불꽃 감지 센서"
                 value = "1" if current["active"] else "0"
-            else:
-                current = self.mq2_sensors[sensor_id]
-                status = "offline" if not current["connected"] else current["status"]
-                label = "연결 끊김" if status == "offline" else f"측정값 {current['value']}"
-                name = "MQ-2 연기/가스 센서"
-                value = str(current["value"])
 
             equipment.append(
                 {
@@ -463,10 +415,8 @@ class SimulationState:
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             fire_ids = [sid for sid, value in self.flame_sensors.items() if value["active"] and value["connected"]]
-            mq_danger_ids = [sid for sid, value in self.mq2_sensors.items() if value["status"] == "danger" and value["connected"]]
-            mq_warning_ids = [sid for sid, value in self.mq2_sensors.items() if value["status"] == "warning" and value["connected"]]
             sensor_offline_ids = [
-                sid for sid, value in {**self.flame_sensors, **self.mq2_sensors}.items()
+                sid for sid, value in self.flame_sensors.items()
                 if not value["connected"]
             ]
 
@@ -474,9 +424,9 @@ class SimulationState:
 
             if not self.route:
                 overall_status = "no_route"
-            elif fire_ids or mq_danger_ids:
+            elif fire_ids:
                 overall_status = "fire"
-            elif route_mode == "fallback" or mq_warning_ids:
+            elif route_mode == "fallback":
                 overall_status = "warning"
             else:
                 overall_status = "normal"
@@ -511,14 +461,10 @@ class SimulationState:
                 "connections": {"pi": self.pi_connected, "server": self.server_link_connected},
                 "connectionChangedAt": deepcopy(self.connection_changed_at),
                 "flameSensors": deepcopy(self.flame_sensors),
-                "mq2Sensors": deepcopy(self.mq2_sensors),
                 "shutters": deepcopy(self.shutters),
                 "sensorCounts": {
                     "flameTotal": len(self.flame_sensors),
                     "flameActive": len(fire_ids),
-                    "mq2Total": len(self.mq2_sensors),
-                    "mq2Danger": len(mq_danger_ids),
-                    "mq2Warning": len(mq_warning_ids),
                     "offline": len(sensor_offline_ids),
                 },
                 "equipment": self._equipment_snapshot(),
