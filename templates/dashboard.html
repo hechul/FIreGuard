@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-cloud="{{ 'true' if cloud_enabled else 'false' }}" data-build="{{ build_id }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FireGuard · 영화관 화재 대피 통합 관제 시스템</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css', v='flame-only-20261028') }}">
-  <script src="/socket.io/socket.io.js"></script>
+  {% if not cloud_enabled %}<script src="/socket.io/socket.io.js"></script>{% endif %}
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -47,17 +47,17 @@
         </div>
 
         <div class="topbar-right">
-          <div class="connection-chip" id="piChip"><span class="status-dot"></span><b>Raspberry Pi</b><em>ONLINE</em></div>
-          <div class="connection-chip" id="flaskChip"><span class="status-dot"></span><b>Flask Server</b><em>ONLINE</em></div>
-          <div class="connection-chip" id="cloudChip"><span class="status-dot"></span><b>Supabase</b><em>ONLINE</em></div>
+          <div class="connection-chip{{ ' off' if cloud_enabled else '' }}" id="piChip"><span class="status-dot"></span><b>Raspberry Pi</b><em>{{ '미확인' if cloud_enabled else 'ONLINE' }}</em></div>
+          <div class="connection-chip{{ ' off' if cloud_enabled else '' }}" id="flaskChip"><span class="status-dot"></span><b>Flask Server</b><em>{{ '조회 중' if cloud_enabled else 'ONLINE' }}</em></div>
+          <div class="connection-chip{{ ' off' if cloud_enabled else '' }}" id="cloudChip"><span class="status-dot"></span><b>Supabase</b><em>{{ '조회 중' if cloud_enabled else 'ONLINE' }}</em></div>
 
           <div class="mode-controls">
           <div class="mode-toggle" aria-label="운영 모드">
-            <button id="realModeBtn" type="button">REAL</button>
-            <button id="simModeBtn" type="button" class="active">SIMULATION</button>
+            <button id="realModeBtn" type="button"{% if cloud_enabled %} class="active" disabled{% endif %}>REAL</button>
+            <button id="simModeBtn" type="button"{% if cloud_enabled %} disabled{% else %} class="active"{% endif %}>SIMULATION</button>
           </div>
 
-          <button id="realFireSwitchBtn" type="button" class="real-fire-switch" disabled aria-live="polite">실제 화재 감지 없음</button>
+          <button id="realFireSwitchBtn" type="button" class="real-fire-switch" disabled aria-live="polite">{{ '실제 센서 수신 대기' if cloud_enabled else '실제 화재 감지 없음' }}</button>
           </div>
 
           <div class="clock-block">
@@ -88,19 +88,19 @@
 
       <!-- OVERVIEW -->
       <section id="overview" class="page active">
-        <div id="systemBanner" class="system-banner normal">
-          <div class="system-banner-icon" id="systemIcon">✓</div>
+        <div id="systemBanner" class="system-banner {{ 'device-offline' if cloud_enabled else 'normal' }}">
+          <div class="system-banner-icon" id="systemIcon">{{ '?' if cloud_enabled else '✓' }}</div>
           <div class="system-banner-copy">
             <span>CURRENT STATUS</span>
-            <strong id="systemTitle">SAFE</strong>
+            <strong id="systemTitle">{{ '장비 상태 확인 대기' if cloud_enabled else 'SAFE' }}</strong>
           </div>
           <div class="system-banner-message">
-            <strong id="systemDescription">현재 화재 상황이 없습니다. 모든 경로를 정상 감시 중입니다.</strong>
+            <strong id="systemDescription">{{ 'Pi의 첫 상태 보고를 기다립니다. 현재 장비 상태는 미확인입니다.' if cloud_enabled else '현재 화재 상황이 없습니다. 모든 경로를 정상 감시 중입니다.' }}</strong>
             <span>센서 입력 → 위험구역 차단 → Dijkstra 재계산 → LED 유도 → 대시보드 갱신</span>
           </div>
           <div class="system-banner-meta">
             <span>업데이트</span><strong id="updatedAt">-</strong>
-            <span>운영 모드</span><strong id="operationModeLabel">SIMULATION</strong>
+            <span>운영 모드</span><strong id="operationModeLabel">{{ 'REAL' if cloud_enabled else 'SIMULATION' }}</strong>
           </div>
         </div>
 

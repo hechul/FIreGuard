@@ -48,7 +48,7 @@ python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
 ## 4. Vercel 배포
 
 1. Git 저장소를 Vercel에 연결하고 프로젝트 루트를 이 폴더로 지정합니다.
-2. Flask 자동 인식으로 `app.py`를 배포합니다. 별도 프런트엔드 재작성은 필요하지 않습니다.
+2. `vercel.json`의 `framework: flask`가 루트 `app.py`를 Python 함수로 배포합니다. 별도 프런트엔드 재작성은 필요하지 않습니다. Root Directory는 저장소 루트로 지정하고, 예전 정적 사이트용 Output Directory 오버라이드는 해제합니다.
 3. 위 환경변수를 배포 환경에 등록하고 배포합니다. Git 변경이 반영된 브랜치를 선택합니다.
 4. Vercel Deployment Protection을 사용 중이면 Pi가 API에 접근할 수 있도록 운영 배포의 보호 설정을 확인합니다. 장치 토큰 인증은 계속 유지합니다.
 5. 배포 주소의 `/api/cloud/config`, `/api/state`, `/api/floorplan`과 정적 JS/CSS가 응답하는지 확인합니다.
@@ -96,6 +96,19 @@ Pi 경로/LED 결과 샘플을 보내려면 실제 지도에 맞는 경로 JSON�
 - 2D와 3D 센서 위치·경로가 같은 상태를 표시
 
 LED 실물 구간과 3D 선분의 대응은 아직 확정하지 않았습니다. 이 단계에서는 보고된 S1~S15를 텍스트로 표시하며 3D LED는 중립색입니다. 하드웨어 담당자와 대응표를 확정한 뒤 구간별 색 표시를 연결합니다.
+
+## API 404 또는 SIMULATION/ONLINE이 보일 때
+
+- Vercel Git 연결이 `hechul/FIreGuard`, Production Branch가 `main`인지 확인합니다.
+- 배포 상세의 Source 커밋이 GitHub main 최신 커밋과 같은지 확인합니다. 예전 배포의 Redeploy는 같은 과거 소스로 다시 빌드하므로 최신 커밋의 배포를 선택해야 합니다.
+- Framework는 저장소의 `flask` 설정을 사용하고 Root Directory는 저장소 루트입니다. `templates/`, `static/`, 생성 `public/`을 프로젝트 루트로 선택하지 않습니다. 이전 수동 Build/Output Directory 설정도 초기화합니다.
+- Production 환경변수에 Supabase 설정과 `FIREGUARD_CLOUD=1`을 적용합니다. `VERCEL=1` 또는 `VERCEL_ENV=production/preview`이면 로컬용 `FIREGUARD_CLOUD=0`보다 우선해 REAL 조회 전용으로 동작합니다.
+- 최신 커밋을 캐시 없이 다시 빌드하고 운영 도메인에 연결합니다.
+- `/api/health`의 `buildId`는 `fireguard-cloud-v2`, `cloud`는 `true`, `revision`은 해당 배포의 Git SHA여야 합니다. `/api/cloud/config`는 `enabled: true`여야 합니다.
+- `/api/state`가 503이면 API 라우팅은 살아 있고 DB 설정/연결 단계의 문제입니다. 실제 보고 전에는 200 응답의 `overallStatus: unknown`, `cloud.hasTelemetry: false`, `connections.pi: false`가 정상입니다.
+- `/api/cloud/config`와 `/static/js/cloud_live.js`가 모두 404이고 HTML에 cloudLiveCard가 없다면 과거/다른 소스가 운영 중입니다. `main`을 푸시한 것만으로 운영 도메인의 소스가 바뀌었는지 보장할 수 없으므로 배포 Source를 대조합니다.
+
+클라우드 HTML은 JavaScript나 API 초기화가 실패해도 REAL·장비 미확인 상태로 먼저 렌더합니다. 로컬 실행의 SIMULATION 기본값은 유지됩니다.
 
 ## 하드웨어 담당자 전달물
 

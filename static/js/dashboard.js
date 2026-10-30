@@ -7,7 +7,8 @@
   let floorplan = null;
   let currentState = null;
   let socket = null;
-  let cloudConfig = { enabled: false };
+  const serverCloudMode = document.documentElement.dataset.cloud === 'true';
+  let cloudConfig = { enabled: serverCloudMode };
   let selectedNodeId = null;
   let browserConnected = true;
   let pollTimer = null;
@@ -1376,7 +1377,11 @@
   async function init() {
     updateClock();
     try {
-      cloudConfig = await window.FireGuardCloud.config();
+      const fetchedConfig = await window.FireGuardCloud.config();
+      if (serverCloudMode && !fetchedConfig.enabled) {
+        throw new Error('배포 서버의 클라우드 설정이 일치하지 않습니다. 최신 배포를 확인하세요.');
+      }
+      cloudConfig = fetchedConfig;
       if (cloudConfig.enabled) {
         renderCloudState({ cloud: { enabled: true, deviceId: cloudConfig.deviceId, hasTelemetry: false } });
         byId('systemBanner').className = 'system-banner device-offline';

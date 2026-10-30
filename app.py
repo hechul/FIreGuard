@@ -16,7 +16,7 @@ load_dotenv()
 
 from state_manager import SimulationState
 from route_service import FloorGraph
-from cloud_api import install_cloud, enabled as cloud_enabled
+from cloud_api import install_cloud, enabled as cloud_enabled, deployment_info
 
 BASE_DIR = Path(__file__).resolve().parent
 FLOORPLAN_PATH = BASE_DIR / "static" / "data" / "floorplan.json"
@@ -58,7 +58,8 @@ def payload() -> dict[str, Any]:
 
 @app.get("/")
 def dashboard():
-    return render_template("dashboard.html", floorplan=cloud_plan if cloud_enabled(app) else floorplan)
+    return render_template("dashboard.html", floorplan=cloud_plan if cloud_enabled(app) else floorplan,
+                           cloud_enabled=cloud_enabled(app), build_id=deployment_info()['buildId'])
 
 
 @app.get("/mobile/<node_id>")

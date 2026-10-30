@@ -17,8 +17,18 @@ def enabled(app):
     return app.config.get('CLOUD_ENABLED', False)
 
 
+def deployment_info():
+    return {'buildId': 'fireguard-cloud-v2',
+            'revision': os.environ.get('VERCEL_GIT_COMMIT_SHA') or None}
+
+
 def install_cloud(app, original_floorplan):
-    app.config['CLOUD_ENABLED'] = os.environ.get('FIREGUARD_CLOUD', '').lower() in ('1', 'true') or os.environ.get('VERCEL') == '1'
+    # Hosting markers take precedence over FIREGUARD_CLOUD=0 from local defaults.
+    app.config['CLOUD_ENABLED'] = (
+        os.environ.get('FIREGUARD_CLOUD', '').strip().lower() in ('1', 'true')
+        or os.environ.get('VERCEL', '').strip().lower() in ('1', 'true')
+        or os.environ.get('VERCEL_ENV', '').strip().lower() in ('production', 'preview')
+    )
     app.config['MAX_CONTENT_LENGTH'] = 64 * 1024
     plan = cloud_floorplan(original_floorplan)
 
@@ -54,7 +64,7 @@ def install_cloud(app, original_floorplan):
     @app.get('/api/cloud/config')
     def public_config():
         if not enabled(app):
-            return jsonify(enabled=False)
+            return jsonify(enabled=False, **deployment_info())
         public_key = os.environ.get('SUPABASE_ANON_KEY', '')
         secret = os.environ.get('SUPABASE_SERVICE_ROLE_KEY', '')
         private_key = public_key.startswith('sb_secret_') or (bool(secret) and public_key == secret)
@@ -70,11 +80,11 @@ def install_cloud(app, original_floorplan):
         return jsonify(enabled=True, deviceId=device_id(), mappingVersion=MAPPING_VERSION,
                        supabaseUrl=os.environ.get('SUPABASE_URL', ''),
                        supabaseAnonKey=public_key,
-                       staleAfterSeconds=stale_seconds())
+                       staleAfterSeconds=stale_seconds(), **deployment_info())
 
     @app.get('/api/health')
     def health():
-        return jsonify(ok=True, cloud=enabled(app), mappingVersion=MAPPING_VERSION)
+        return jsonify(ok=True, cloud=enabled(app), mappingVersion=MAPPING_VERSION, **deployment_info())
 
     @app.before_request
     def cloud_dispatch():
@@ -111,8 +121,9 @@ def install_cloud(app, original_floorplan):
 
     @app.after_request
     def no_state_cache(response):
-        if request.path.startswith('/api/'):
+        if request.path.startswith('/api/') or request.path == '/':
             response.headers['Cache-Control'] = 'no-store'
+        response.headers['X-FireGuard-Build'] = deployment_info()['buildId']
         return response
 
     return plan
