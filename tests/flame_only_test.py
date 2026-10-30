@@ -12,6 +12,7 @@ class FlameOnlyTest(unittest.TestCase):
     def setUp(self):
         self.previous = server.state
         server.state = SimulationState(server.floorplan)
+        server.state.REAL_FLAME_CONFIRM_SECONDS = 0
         self.client = server.app.test_client()
 
     def tearDown(self):

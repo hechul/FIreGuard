@@ -15,7 +15,12 @@ const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
     await page.waitForFunction(() => document.querySelector('#startNodeLabel').textContent.includes('N36'));
     const paths = await page.locator('#routeLayer polyline').evaluateAll(elements => elements.map(e=>({id:e.dataset.edgeId,points:e.getAttribute('points')})));
     assert(paths.length > 0);
-    for (const path of paths) assert.equal(path.points, await page.locator(`#edgeLayer [data-edge-id="${path.id}"]`).getAttribute('points'));
+    for (const path of paths) {
+      const canonical = await page.locator(`#edgeLayer [data-edge-id="${path.id}"]`).getAttribute('points');
+      const edge = floor.edges.find(e => e.id === path.id);
+      const from = await page.locator(`#routeLayer [data-edge-id="${path.id}"]`).getAttribute('data-from-node');
+      assert.equal(path.points, edge.from === from ? canonical : canonical.split(' ').reverse().join(' '));
+    }
     await page.locator('#mapStage').screenshot({path:'tmp/pdfs/dashboard-doors.png'});
     await page.locator('[data-page="mapEditor"]').click();
     await page.locator('#editorEdgeLayer polyline').first().waitFor();

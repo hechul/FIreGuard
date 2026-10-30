@@ -58,6 +58,7 @@
           </div>
 
           <button id="realFireSwitchBtn" type="button" class="real-fire-switch" disabled aria-live="polite">{{ '실제 센서 수신 대기' if cloud_enabled else '실제 화재 감지 없음' }}</button>
+          <button id="realFireClearBtn" type="button" class="btn secondary hidden">실제 화재 수동 해제</button>
           </div>
 
           <div class="clock-block">
@@ -553,6 +554,6 @@
 
   <script src="{{ url_for('static', filename='js/map_geometry.js') }}"></script>
   <script src="{{ url_for('static', filename='js/cloud_live.js', v='cloud-20261030') }}"></script>
-  <script src="{{ url_for('static', filename='js/dashboard.js', v='cloud-20261030') }}"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js', v='route-direction-cloud-20261030') }}"></script>
 </body>
 </html>

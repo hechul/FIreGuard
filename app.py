@@ -28,7 +28,7 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 with FLOORPLAN_PATH.open("r", encoding="utf-8") as file:
     floorplan = json.load(file)
 
-state = SimulationState(floorplan)
+state = SimulationState(floorplan, real_fire_path=BASE_DIR / "runtime" / "real_fire_latches.json")
 cloud_plan = install_cloud(app, floorplan)
 
 
@@ -400,6 +400,17 @@ def hardware_heartbeat():
     def action():
         with state.hardware_input():
             state.hardware_heartbeat()
+
+    return apply_action(action)
+
+
+@app.post("/api/real/fire/clear")
+def clear_real_fire():
+    data = payload()
+
+    def action():
+        with state.hardware_input():
+            state.clear_real_fire(data.get("sensorIds"))
 
     return apply_action(action)
 

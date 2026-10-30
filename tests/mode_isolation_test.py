@@ -9,6 +9,8 @@ class ModeIsolationTest(unittest.TestCase):
     def setUp(self):
         self.previous = server.state
         server.state = SimulationState(server.floorplan)
+        # Timing boundaries are covered separately; these tests isolate modes.
+        server.state.REAL_FLAME_CONFIRM_SECONDS = 0
         self.client = server.app.test_client()
         self.flame = next(s['id'] for s in server.floorplan['sensors'] if s['type'] == 'flame')
 
@@ -37,6 +39,8 @@ class ModeIsolationTest(unittest.TestCase):
         s = self.post('mode', {'mode':'simulation'})
         self.assertFalse(s['flameSensors'][self.flame]['active'])
         s = self.post('hardware/flame', {'sensorId':self.flame,'active':False})
+        self.assertTrue(s['realFireDetected'])
+        s = self.post('real/fire/clear', {'sensorIds': [self.flame]})
         self.assertFalse(s['realFireDetected'])
 
     def test_simulated_fire_never_activates_real_alert(self):
@@ -50,6 +54,8 @@ class ModeIsolationTest(unittest.TestCase):
         s = self.post('hardware/flame', {'sensorId':self.flame,'active':True})
         self.assertTrue(s['realFireDetected'])
         s = self.post('hardware/flame', {'sensorId':self.flame,'active':False})
+        self.assertTrue(s['realFireDetected'])
+        s = self.post('real/fire/clear', {'sensorIds': [self.flame]})
         self.assertFalse(s['realFireDetected'])
 
     def test_sensor_demo_then_simulation_survives_continuous_hardware(self):
@@ -57,6 +63,7 @@ class ModeIsolationTest(unittest.TestCase):
         s = self.post('hardware/flame', {'sensorId': self.flame, 'active': True})
         self.assertTrue(s['flameSensors'][self.flame]['active'])
         self.post('hardware/flame', {'sensorId': self.flame, 'active': False})
+        self.post('real/fire/clear', {'sensorIds': [self.flame]})
         self.post('mode', {'mode': 'simulation'})
         expected = self.post('simulation/scenario', {'scenarioId': 'east_shutter'})
         events = expected['events']

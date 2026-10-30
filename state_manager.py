@@ -3,7 +3,10 @@ from __future__ import annotations
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
+import json
+from pathlib import Path
 from threading import RLock
+from time import monotonic
 from typing import Any
 
 from route_service import FloorGraph
@@ -17,11 +20,13 @@ class SimulationState:
     """
 
     MAX_EVENTS = 200
+    REAL_FLAME_CONFIRM_SECONDS = 1.0
+    REAL_FLAME_MAX_SAMPLE_GAP = 1.5
     MODE_FIELDS = ("start_node", "flame_sensors", "shutters",
                    "pi_connected", "server_link_connected", "connection_changed_at",
-                   "manual_blocked_edges", "edge_weight_overrides", "events")
+                   "manual_blocked_edges", "edge_weight_overrides", "events", "_flame_confirmation")
 
-    def __init__(self, floorplan: dict[str, Any]):
+    def __init__(self, floorplan: dict[str, Any], real_fire_path: Path | None = None):
         self._lock = RLock()
         self.floorplan = floorplan
         self.graph = FloorGraph(floorplan)
@@ -30,7 +35,50 @@ class SimulationState:
         self.manual_blocked_edges: set[str] = set()
         self._reset_state(clear_events=False)
         self._mode_states = {"real": self._capture_mode()}
+        self._real_fire_path = real_fire_path
+        self._real_latched_ids: set[str] = set()
+        self._real_latches_dirty = False
+        if real_fire_path is not None and real_fire_path.exists():
+            stored = json.loads(real_fire_path.read_text(encoding="utf-8"))
+            if not isinstance(stored, list) or not all(isinstance(sid, str) for sid in stored):
+                raise ValueError("저장된 실제 화재 상태 형식이 올바르지 않습니다.")
+            self._real_latched_ids = set(stored).intersection(self.flame_sensors)
+            for sid in self._real_latched_ids:
+                self._mode_states["real"]["flame_sensors"][sid].update(active=True, latched=True)
         self._add_event("SYSTEM", "관제 시스템", "초기화", "FireGuard 관제 시스템 준비 완료")
+
+    def _persist_real_fire(self) -> None:
+        if self._real_fire_path is None or not self._real_latches_dirty:
+            return
+        self._real_fire_path.parent.mkdir(parents=True, exist_ok=True)
+        temp = self._real_fire_path.with_suffix(".tmp")
+        temp.write_text(json.dumps(sorted(self._real_latched_ids)), encoding="utf-8")
+        temp.replace(self._real_fire_path)
+        self._real_latches_dirty = False
+
+    def clear_real_fire(self, sensor_ids: list[str]) -> None:
+        """Explicit dashboard action, called inside hardware_input()."""
+        with self._lock:
+            if not isinstance(sensor_ids, list) or not sensor_ids or not all(
+                isinstance(sid, str) and sid in self.flame_sensors for sid in sensor_ids
+            ):
+                raise ValueError("해제할 불꽃 센서 ID 목록이 필요합니다.")
+            remaining = self._real_latched_ids.difference(sensor_ids)
+            # Save first: a failed manual clear must not silently drop the alarm.
+            previous = self._real_latched_ids.copy()
+            self._real_latched_ids = remaining
+            self._real_latches_dirty = True
+            try:
+                self._persist_real_fire()
+            except OSError:
+                self._real_latched_ids = previous
+                self._real_latches_dirty = True
+                raise
+            for sid in sorted(set(sensor_ids)):
+                self._flame_confirmation.pop(sid, None)
+                self.flame_sensors[sid].update(active=False, latched=False, updatedAt=self._now())
+            self._recompute()
+            self._add_event("CLEAR", ", ".join(sorted(set(sensor_ids))), "실제 화재 수동 해제 (MANUAL)", self._route_result_text())
 
     @staticmethod
     def _now() -> str:
@@ -48,6 +96,7 @@ class SimulationState:
             for sensor in self.floorplan["sensors"]
             if sensor["type"] == "flame"
         }
+        self._flame_confirmation: dict[str, tuple[float, float]] = {}
         self.shutters = {
             shutter["id"]: {"closed": False, "connected": True, "updatedAt": now}
             for shutter in self.floorplan.get("shutters", [])
@@ -85,7 +134,7 @@ class SimulationState:
         blocked_nodes = {
             self._sensor_config(sensor_id)["node"]
             for sensor_id, sensor in self.flame_sensors.items()
-            if sensor["active"] and sensor["connected"]
+            if sensor["active"] and (sensor["connected"] or sensor.get("latched", False))
         }
 
         shutter_edges = {
@@ -149,7 +198,7 @@ class SimulationState:
         data = self._capture_mode() if self.operation_mode == "real" else self._mode_states["real"]
         valid = {s["id"] for s in self.floorplan["sensors"]}
         return sorted(
-            [sid for sid, v in data["flame_sensors"].items() if sid in valid and v["active"] and v["connected"]]
+            [sid for sid, v in data["flame_sensors"].items() if sid in valid and v["active"] and (v["connected"] or v.get("latched", False))]
         )
 
     def set_operation_mode(self, mode: str) -> None:
@@ -178,8 +227,32 @@ class SimulationState:
         with self._lock:
             if sensor_id not in self.flame_sensors:
                 raise ValueError(f"알 수 없는 불꽃센서입니다: {sensor_id}")
+            if source == "REAL":
+                now = monotonic()
+                sensor = self.flame_sensors[sensor_id]
+                if not active or not sensor["connected"]:
+                    self._flame_confirmation.pop(sensor_id, None)
+                    active = sensor_id in self._real_latched_ids
+                else:
+                    started, last = self._flame_confirmation.get(sensor_id, (now, now))
+                    if now - last > self.REAL_FLAME_MAX_SAMPLE_GAP:
+                        started = now
+                    self._flame_confirmation[sensor_id] = (started, now)
+                    active = sensor["active"] or now - started >= self.REAL_FLAME_CONFIRM_SECONDS
+                if active and sensor_id not in self._real_latched_ids:
+                    self._real_latched_ids.add(sensor_id)
+                    self._real_latches_dirty = True
+                sensor["latched"] = sensor_id in self._real_latched_ids
+                sensor["updatedAt"] = self._now()
+                # Pending readings are not fire events; repeated confirmed values
+                # also must not fill the event log on every sample.
+                if sensor["active"] == active:
+                    self._persist_real_fire()
+                    return
             self.flame_sensors[sensor_id].update({"active": bool(active), "updatedAt": self._now()})
             self._recompute()
+            if source == "REAL":
+                self._persist_real_fire()
             node = self._sensor_config(sensor_id)["node"]
             self._add_event(
                 "FIRE" if active else "CLEAR",
@@ -275,6 +348,9 @@ class SimulationState:
             else:
                 raise ValueError(f"알 수 없는 센서입니다: {sensor_id}")
             target["connected"] = bool(connected)
+            self._flame_confirmation.pop(sensor_id, None)
+            if not connected and not target.get("latched", False):
+                target["active"] = False
             target["updatedAt"] = self._now()
             self._recompute()
             self._add_event(
@@ -288,6 +364,8 @@ class SimulationState:
         with self._lock:
             if target == "pi":
                 self.pi_connected = bool(connected)
+                if not connected:
+                    self._flame_confirmation.clear()
                 location = "Raspberry Pi"
             elif target == "server":
                 self.server_link_connected = bool(connected)
@@ -310,6 +388,8 @@ class SimulationState:
 
     def reset(self, clear_events: bool = False) -> None:
         with self._lock:
+            if self.operation_mode == "real":
+                raise ValueError("실제 화재는 실제 화재 수동 해제 버튼으로 해제하세요.")
             mode = self.operation_mode
             self._reset_state(clear_events=clear_events)
             self.operation_mode = mode
@@ -414,7 +494,7 @@ class SimulationState:
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
-            fire_ids = [sid for sid, value in self.flame_sensors.items() if value["active"] and value["connected"]]
+            fire_ids = [sid for sid, value in self.flame_sensors.items() if value["active"] and (value["connected"] or value.get("latched", False))]
             sensor_offline_ids = [
                 sid for sid, value in self.flame_sensors.items()
                 if not value["connected"]

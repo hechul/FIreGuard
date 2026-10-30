@@ -15,7 +15,7 @@ from uuid import UUID
 from route_service import FloorGraph
 from state_manager import SimulationState
 
-CONFIG = json.loads((Path(__file__).parent / 'config/cloud_sensors.json').read_text())
+CONFIG = json.loads((Path(__file__).parent / 'config/cloud_sensors.json').read_text(encoding='utf-8'))
 MAPPING_VERSION = CONFIG['mappingVersion']
 
 
