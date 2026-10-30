@@ -58,6 +58,7 @@
           </div>
 
           <button id="realFireSwitchBtn" type="button" class="real-fire-switch" disabled aria-live="polite">실제 화재 감지 없음</button>
+          <button id="realFireClearBtn" type="button" class="btn secondary hidden">실제 화재 수동 해제</button>
           </div>
 
           <div class="clock-block">
@@ -538,6 +539,6 @@
   </div>
 
   <script src="{{ url_for('static', filename='js/map_geometry.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/dashboard.js', v='flame-only-20261028') }}"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js', v='route-direction-20261030') }}"></script>
 </body>
 </html>

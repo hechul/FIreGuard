@@ -15,8 +15,10 @@ if __name__ == "__main__":
     post("/api/hardware/heartbeat", {})
     print("동측 비상구 불꽃 감지")
     try:
-        post("/api/hardware/flame", {"sensorId": "FLM-15", "active": True})
-        time.sleep(3)
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            post("/api/hardware/flame", {"sensorId": "FLM-15", "active": True})
+            time.sleep(0.2)
     finally:
         post("/api/hardware/flame", {"sensorId": "FLM-15", "active": False})
-    print("정상 복귀 완료. 선택한 운영 모드는 유지됩니다.")
+    print("정상값 전송 완료. 확정된 화재는 대시보드에서 수동 해제하세요.")

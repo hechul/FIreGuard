@@ -872,6 +872,8 @@
     });
 
     if (state.route && state.route.nodes?.length > 1) {
+      const flowTime = performance.now() / 1000;
+      let routeDistance = 0;
       for (let i = 0; i < state.route.nodes.length - 1; i += 1) {
         const edge = edgesById[state.route.edges[i]];
         if (!edge) continue;
@@ -879,8 +881,24 @@
         const to = points[edge.to];
         if (!from || !to) continue;
         const path = buildEdgePath(from, to, 'route-edge');
+        // Preserve the canonical corridor shape, but animate along traversal.
+        const forward = edge.from === state.route.nodes[i] && edge.to === state.route.nodes[i + 1];
+        const backward = edge.to === state.route.nodes[i] && edge.from === state.route.nodes[i + 1];
+        if (!forward && !backward) continue;
+        const vertices = path.getAttribute('points').trim().split(/\s+/).filter(Boolean);
+        if (!vertices.length) continue;
+        if (backward) vertices.reverse();
+        path.setAttribute('points', vertices.join(' '));
+        // routeFlow moves 21 SVG units per second. Offset each edge by the
+        // preceding path length, and preserve the phase across state redraws.
+        const phase = ((flowTime - routeDistance / 21) % 1 + 1) % 1;
+        path.style.animationDelay = `${-phase}s`;
         path.dataset.edgeId = edge.id;
+        path.dataset.fromNode = state.route.nodes[i];
+        path.dataset.toNode = state.route.nodes[i + 1];
         routeLayer.appendChild(path);
+        const coords = vertices.map(p => p.split(',').map(Number));
+        routeDistance += coords.slice(1).reduce((length, p, j) => length + Math.hypot(p[0] - coords[j][0], p[1] - coords[j][1]), 0);
       }
     }
 
@@ -971,6 +989,8 @@
     fireSwitch.classList.toggle('fire-detected', Boolean(pendingRealFire));
     fireSwitch.textContent = pendingRealFire ? '실제 화재 발생 · REAL 전환' : state.realFireDetected ? '실제 화재 관제 중' : '실제 화재 감지 없음';
     fireSwitch.title = (state.realFireSensorIds || []).join(', ');
+    byId('realFireClearBtn').classList.toggle('hidden', !state.realFireDetected);
+    byId('realFireClearBtn').disabled = !state.realFireDetected;
     const realBtn = byId('realModeBtn');
     const simBtn = byId('simModeBtn');
     realBtn.classList.toggle('active', state.operationMode === 'real');
@@ -1218,6 +1238,13 @@
       if (window.confirm('실제 센서에서 화재가 감지되었습니다. REAL 모드로 전환하시겠습니까?')) setMode('real');
     });
     byId('realModeBtn').addEventListener('click', () => setMode('real'));
+    byId('realFireClearBtn').addEventListener('click', () => {
+      const sensorIds = [...(currentState?.realFireSensorIds || [])];
+      if (!sensorIds.length) return;
+      if (window.confirm(`실제 화재 상태를 수동 해제하시겠습니까?\n대상: ${sensorIds.join(', ')}\n센서 감지가 계속되면 1초 이상 확인 후 다시 화재로 판단합니다.`)) {
+        safeApi('/api/real/fire/clear', { sensorIds });
+      }
+    });
     byId('simModeBtn').addEventListener('click', () => setMode('simulation'));
     byId('autoDemoBtn').addEventListener('click', runAutoDemo);
     byId('stopDemoBtn').addEventListener('click', stopAutoDemo);
