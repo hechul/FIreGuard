@@ -1,6 +1,18 @@
 # Pi → 배포 UI 연동 규격
 
-이 문서는 첨부된 최신 `hardware/config.py`, `flame_multi_reader.py`를 기준으로 한 **새 클라우드 API 규격**입니다. 구버전 하드웨어 README의 주소·센서 ID는 사용하지 않습니다. 기존 센서 수집 코드를 이 규격에 맞춰 수정하는 작업은 Pi 담당자가 수행합니다.
+이 문서는 첨부된 최신 `hardware/config.py`, `flame_multi_reader.py`를 기준으로 한 **새 클라우드 API 규격**입니다. 구버전 하드웨어 README의 주소·센서 ID는 사용하지 않습니다.
+
+## 센서 연결 빠른 실행
+
+`hardware/cloud_flame_reader.py`는 11개 GPIO를 읽어 이 규격으로 전송하는 센서 전용 프로그램입니다. 11개 센서의 배선과 GPIO 매핑을 확인하고, 기존에 동일 GPIO를 사용하는 센서 프로그램은 종료한 뒤 같은 토큰이 설정된 터미널에서 실행합니다.
+
+```bash
+python3 hardware/cloud_flame_reader.py
+```
+
+Pi에 `gpiozero`와 `lgpio`가 필요합니다. HIGH=정상/LOW=감지이며, 3회 연속 샘플 후 상태를 확정합니다. 11개 값이 모두 확정된 뒤 전송하고, 변경 시 즉시 및 약 5초마다 전체 상태를 보고합니다. HTTP는 별도 스레드에서 수행합니다. `Ctrl+C`로 종료합니다.
+
+이 프로그램은 **LED 제어를 수행하지 않습니다.** LED 상태는 `unknown`으로 보고되며, Pi 담당자가 기존 LED 로직과 경로를 결합하고 적용 결과를 추가해야 합니다. 서버 또는 DB가 단절되면 센서 읽기를 계속하며 최신 상태를 다시 전송합니다.
 
 ## 주소와 인증
 
