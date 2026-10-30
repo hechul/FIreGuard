@@ -3,27 +3,33 @@ from __future__ import annotations
 import json
 import math
 import re
+import os
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
 
 from flask import Flask, jsonify, render_template, request
 from flask_socketio import SocketIO, emit
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from state_manager import SimulationState
 from route_service import FloorGraph
+from cloud_api import install_cloud, enabled as cloud_enabled
 
 BASE_DIR = Path(__file__).resolve().parent
 FLOORPLAN_PATH = BASE_DIR / "static" / "data" / "floorplan.json"
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "fireguard-capstone-2026"
+app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", "fireguard-local-demo")
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 with FLOORPLAN_PATH.open("r", encoding="utf-8") as file:
     floorplan = json.load(file)
 
 state = SimulationState(floorplan)
+cloud_plan = install_cloud(app, floorplan)
 
 
 def broadcast_state() -> dict[str, Any]:
@@ -52,7 +58,7 @@ def payload() -> dict[str, Any]:
 
 @app.get("/")
 def dashboard():
-    return render_template("dashboard.html", floorplan=floorplan)
+    return render_template("dashboard.html", floorplan=cloud_plan if cloud_enabled(app) else floorplan)
 
 
 @app.get("/mobile/<node_id>")
@@ -62,7 +68,7 @@ def mobile(node_id: str):
 
 @app.get("/3d")
 def preview_3d():
-    return render_template("3d_preview.html", floorplan=floorplan)
+    return render_template("3d_preview.html", floorplan=cloud_plan if cloud_enabled(app) else floorplan)
 
 
 @app.get("/api/floorplan")
@@ -196,7 +202,23 @@ def update_floorplan_layout():
 
 @app.get("/api/state")
 def get_state():
-    return jsonify(state.snapshot())
+    snapshot = state.snapshot()
+    start = request.args.get('startNode')
+    if start is not None:
+        if start not in state.graph.nodes:
+            return jsonify(ok=False, error='알 수 없는 startNode입니다.'), 400
+        route = state.graph.shortest_route(start, set(snapshot['blockedNodes']), set(snapshot['blockedEdges']), snapshot['edgeWeightOverrides'])
+        if route is None:
+            route = state.graph.shortest_fallback_route(start, set(snapshot['blockedNodes']), set(snapshot['blockedEdges']), snapshot['edgeWeightOverrides'])
+        snapshot['startNode'] = start
+        snapshot['route'] = route.as_dict() if route else None
+        snapshot['fallbackActive'] = bool(route and route.route_mode == 'fallback')
+        snapshot['routeMode'] = route.route_mode if route else 'none'
+        snapshot['selectedDestinationName'] = state.graph.destination_name(route.destination_id) if route else None
+        snapshot['selectedExitName'] = snapshot['selectedDestinationName']
+        if route is None:
+            snapshot['overallStatus'] = 'no_route'
+    return jsonify(snapshot)
 
 
 @app.post("/api/mode")

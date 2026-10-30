@@ -4,8 +4,11 @@ __pycache__/
 .pytest_cache/
 .vscode/
 .idea/
+.DS_Store
 tmp/
 output/
 .env
 .env.*
 !.env.example
+public/
+.vercel/

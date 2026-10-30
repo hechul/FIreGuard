@@ -1,0 +1,93 @@
+{
+  "mappingVersion": "flame-20261030-v1",
+  "sensors": [
+    {
+      "id": "FLM-01",
+      "type": "flame",
+      "name": "추가 노드 N20 불꽃센서",
+      "node": "N20",
+      "bcm": 23,
+      "physical": 16
+    },
+    {
+      "id": "FLM-02",
+      "type": "flame",
+      "name": "5관 앞 공통 복도 분기점 불꽃센서",
+      "node": "N2",
+      "bcm": 27,
+      "physical": 13
+    },
+    {
+      "id": "FLM-03",
+      "type": "flame",
+      "name": "4관 좌측 완강기 불꽃센서",
+      "node": "N3",
+      "bcm": 22,
+      "physical": 15
+    },
+    {
+      "id": "FLM-04",
+      "type": "flame",
+      "name": "4관 출입구 복도 분기점 불꽃센서",
+      "node": "N4",
+      "bcm": 5,
+      "physical": 29
+    },
+    {
+      "id": "FLM-05",
+      "type": "flame",
+      "name": "화장실 1 임시 대피지점 불꽃센서",
+      "node": "N5",
+      "bcm": 6,
+      "physical": 31
+    },
+    {
+      "id": "FLM-06",
+      "type": "flame",
+      "name": "화장실 2 임시 대피지점 불꽃센서",
+      "node": "N6",
+      "bcm": 13,
+      "physical": 33
+    },
+    {
+      "id": "FLM-07",
+      "type": "flame",
+      "name": "서측 비상구 앞 불꽃센서",
+      "node": "N7",
+      "bcm": 19,
+      "physical": 35
+    },
+    {
+      "id": "FLM-08",
+      "type": "flame",
+      "name": "중앙복도 서측 불꽃센서",
+      "node": "N8",
+      "bcm": 12,
+      "physical": 32
+    },
+    {
+      "id": "FLM-09",
+      "type": "flame",
+      "name": "중앙복도 동측 불꽃센서",
+      "node": "N9",
+      "bcm": 16,
+      "physical": 36
+    },
+    {
+      "id": "FLM-10",
+      "type": "flame",
+      "name": "동측 비상구 앞 불꽃센서",
+      "node": "N10",
+      "bcm": 20,
+      "physical": 38
+    },
+    {
+      "id": "FLM-11",
+      "type": "flame",
+      "name": "추가 노드 N11 불꽃센서",
+      "node": "N11",
+      "bcm": 21,
+      "physical": 40
+    }
+  ]
+}

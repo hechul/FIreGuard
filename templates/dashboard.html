@@ -72,6 +72,20 @@
         <span>현재 화면은 마지막 수신 상태를 유지합니다. Raspberry Pi의 로컬 경로 계산과 LED 유도는 독립적으로 계속 동작합니다.</span>
       </div>
 
+      <section id="cloudLiveCard" class="panel cloud-live-card hidden" aria-label="실제 장비 수신 상태">
+        <div class="cloud-live-heading"><div><span class="panel-kicker">CLOUD · REAL</span><h2>실제 장비 관제</h2></div><strong id="cloudDeviceStatus" role="status">장비 데이터 대기</strong></div>
+        <p>실제 장비 데이터 조회 전용입니다. 시뮬레이션과 지도 편집은 로컬 실행에서 사용할 수 있습니다.</p>
+        <dl class="cloud-live-metrics">
+          <div><dt>장치</dt><dd id="cloudDeviceId">-</dd></div>
+          <div><dt>마지막 서버 수신</dt><dd id="cloudReceivedAt">미수신</dd></div>
+          <div><dt>센서 관측 시각</dt><dd id="cloudObservedAt">미수신</dd></div>
+          <div><dt>LED 출력</dt><dd id="cloudLedStatus">미확인</dd></div>
+        </dl>
+        <p id="cloudRouteSource">장비 경로 보고 대기</p>
+        <p id="cloudLedSegments">LED 구간 보고 대기 · 실물 LED 구간의 위치 대응은 확인 중입니다.</p>
+        <p id="cloudTransport" class="cloud-transport">실시간 연결 준비 중</p>
+      </section>
+
       <!-- OVERVIEW -->
       <section id="overview" class="page active">
         <div id="systemBanner" class="system-banner normal">
@@ -538,6 +552,7 @@
   </div>
 
   <script src="{{ url_for('static', filename='js/map_geometry.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/dashboard.js', v='flame-only-20261028') }}"></script>
+  <script src="{{ url_for('static', filename='js/cloud_live.js', v='cloud-20261030') }}"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js', v='cloud-20261030') }}"></script>
 </body>
 </html>

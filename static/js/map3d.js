@@ -399,7 +399,9 @@ const Map3D = (() => {
     const routeEdgeIds = new Set(state.route?.edges || []);
 
     // 1. Route lines (clear old, draw new)
-    pool.route.forEach(l => _dynamicGroup.remove(l));
+    const oldMaterials = new Set();
+    pool.route.forEach(l => { _dynamicGroup.remove(l); l.geometry.dispose(); oldMaterials.add(l.material); });
+    oldMaterials.forEach(material => material.dispose());
     pool.route.length = 0;
     if (state.route?.edges?.length) {
       const routeMat = new THREE.LineBasicMaterial({ color: COLORS.route, linewidth: 4 });
@@ -458,14 +460,17 @@ const Map3D = (() => {
     // 5. Sensor colours
     Object.entries(pool.sensors).forEach(([sid, { mesh }]) => {
       const active = Boolean(state.flameSensors?.[sid]?.active);
-      const c = active ? COLORS.flameFire : COLORS.flameSafe;
+      const unconfirmed = state.cloud?.enabled && (!state.cloud.hasTelemetry || state.cloud.stale || !state.flameSensors?.[sid]?.connected);
+      const c = active ? COLORS.flameFire : unconfirmed ? 0x64748B : COLORS.flameSafe;
       mesh.material.color.set(c);
       mesh.material.emissive.set(c);
     });
 
     // 6. LED strip colour: route-active → blue glow, else green
     pool.leds.forEach(led => {
-      const c = state.overallStatus === 'fire' ? COLORS.ledDanger
+      // Physical S1..S15 IDs have no verified correspondence to these 16
+      // visual strips. Cloud view stays neutral instead of claiming output.
+      const c = state.cloud?.enabled ? 0x64748B : state.overallStatus === 'fire' ? COLORS.ledDanger
               : state.overallStatus === 'warning' ? COLORS.ledSafe
               : COLORS.ledSafe;
       led.material.color.set(c);
@@ -507,7 +512,11 @@ const Map3D = (() => {
     const map = {};
     (_floorplan.nodes || []).forEach(n => { map[n.id] = n; });
     (_floorplan.exits || []).forEach(n => { map[n.id] = n; });
-    (_floorplan.fallbackDestinations || []).forEach(n => { map[n.id] = n; });
+    // Fallback entries are destination metadata; their coordinates live on nodes.
+    // Do not replace a positioned node with metadata lacking x/y (NaN geometry).
+    (_floorplan.fallbackDestinations || []).forEach(n => {
+      if (!map[n.id] && Number.isFinite(n.x) && Number.isFinite(n.y)) map[n.id] = n;
+    });
     return map;
   }
 

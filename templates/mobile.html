@@ -26,20 +26,25 @@
     const nodeId={{ node_id|tojson }};
     async function refresh(){
       try{
-        const [state,floor]=await Promise.all([fetch('/api/state').then(r=>r.json()),fetch('/api/floorplan').then(r=>r.json())]);
+        const read=async url=>{const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw new Error('상태 조회 실패');return r.json();};
+        const [state,floor]=await Promise.all([read('/api/state?startNode='+encodeURIComponent(nodeId)),read('/api/floorplan')]);
         const names={}; [...floor.nodes,...floor.exits].forEach(n=>names[n.id]=n.name||n.id);
         const status=document.getElementById('status');
         status.classList.toggle('danger',state.overallStatus==='fire'||state.overallStatus==='no_route');
         status.querySelector('strong').textContent=state.overallStatus==='normal'?'SAFE':state.overallStatus==='warning'?'WARNING':state.overallStatus==='fire'?'FIRE DETECTED':'NO SAFE ROUTE';
         status.querySelector('span').textContent=state.failSafeActive?'서버 단절 상태입니다. 현장 로컬 유도는 계속 동작합니다.':'관제 시스템과 연결되어 있습니다.';
+        if(state.cloud?.enabled){
+          status.querySelector('strong').textContent=!state.cloud.hasTelemetry?'장비 수신 대기':state.cloud.stale?'장비 통신 지연':state.overallStatus==='normal'?'SAFE':state.overallStatus==='fire'?'FIRE DETECTED':state.overallStatus==='warning'?'WARNING':'NO SAFE ROUTE';
+          status.querySelector('span').textContent=state.cloud.stale?'마지막 수신 상태입니다. 현재 현장 상태를 확인하세요.':'QR 위치를 출발점으로 계산한 서버 경로 미리보기입니다.';
+        }
         document.getElementById('exit').textContent=state.selectedDestinationName||state.selectedExitName||'안전 경로 없음';
-        if(state.fallbackActive){
+        if(state.fallbackActive && !state.cloud?.stale){
           document.getElementById('exit').textContent='보조 대피지점 · '+(state.selectedDestinationName||'확인 필요');
           status.querySelector('strong').textContent='EMERGENCY ROUTE';
           status.querySelector('span').textContent='정규 비상구가 차단되어 지정된 보조 대피지점으로 안내 중입니다.';
         }
         document.getElementById('route').textContent=state.route?state.route.nodes.map(id=>names[id]||id).join(' → '):'현재 안전한 대피 경로를 찾을 수 없습니다.';
-      }catch(e){document.getElementById('status').querySelector('strong').textContent='CONNECTION LOST';}
+      }catch(e){const status=document.getElementById('status');status.classList.add('danger');status.querySelector('strong').textContent='CONNECTION LOST';status.querySelector('span').textContent='마지막 표시값입니다. 최신 대피 정보를 확인할 수 없습니다.';}
     }
     refresh(); setInterval(refresh,1500);
   </script>
