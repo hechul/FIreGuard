@@ -7,6 +7,7 @@
   let floorplan = null;
   let currentState = null;
   let socket = null;
+  let cloudConfig = { enabled: false };
   let selectedNodeId = null;
   let browserConnected = true;
   let pollTimer = null;
@@ -31,10 +32,12 @@
   let geometrySignature = '';
 
   const copy = (value) => JSON.parse(JSON.stringify(value));
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const editorActive = () => byId('mapEditor').classList.contains('active') && !editorSaving;
   const editorDirty = () => editorDraft && (JSON.stringify(editorDraft) !== JSON.stringify(editorBase) || !editorPositionsEqual(editorPositions, editorSavedPositions));
 
   const STATUS_COPY = {
+    unknown: { icon: '?', title: '장비 상태 확인 대기', description: 'Pi에서 센서와 LED 상태를 아직 받지 못했습니다.' },
     normal: { icon: '✓', title: 'SAFE', description: '현재 화재 상황이 없습니다. 모든 경로를 정상 감시 중입니다.' },
     warning: { icon: '!', title: 'WARNING', description: '일부 센서에서 주의 수준이 감지되었습니다. 상태를 확인하세요.' },
     fire: { icon: '🔥', title: 'FIRE DETECTED', description: '불꽃 센서에서 화재가 감지되었습니다. 안전 경로를 재계산합니다.' },
@@ -67,7 +70,8 @@
   }
 
   async function api(path, body = undefined, options = {}) {
-    const init = { headers: {} };
+    if (cloudConfig.enabled && body !== undefined) throw new Error('클라우드 화면은 실제 장비 조회 전용입니다.');
+    const init = { headers: {}, cache: 'no-store' };
     if (body !== undefined) {
       init.method = options.method || 'POST';
       init.headers['Content-Type'] = 'application/json';
@@ -926,7 +930,8 @@
       dot.setAttribute('cx', p.x + 10 + offset); dot.setAttribute('cy', p.y - 10);
       dot.setAttribute('r', 3.4); dot.setAttribute('class', `sensor-dot flame ${active ? 'danger' : ''}`);
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-      title.textContent = `${sensor.id} · ${sensor.name} · ${active ? '화재 감지' : '정상'}`;
+      const unconfirmed = state.cloud?.enabled && (!state.cloud.hasTelemetry || state.cloud.stale);
+      title.textContent = `${sensor.id} · ${sensor.name} · ${active ? '화재 감지' : unconfirmed ? '현재 상태 미확인' : '정상'}${unconfirmed && state.cloud.hasTelemetry ? ' · 마지막 수신값' : ''}`;
       dot.appendChild(title); sensorLayer.appendChild(dot);
     });
 
@@ -998,6 +1003,13 @@
     document.querySelectorAll('.simulation-only').forEach((el) => { el.disabled = state.operationMode !== 'simulation'; });
     byId('realModeNotice').classList.toggle('hidden', state.operationMode !== 'real');
     byId('operationModeLabel').textContent = state.operationMode.toUpperCase();
+    if (state.cloud?.enabled) {
+      // Cloud monitoring remains read-only; manual alarm clear is local only.
+      byId('realFireClearBtn').classList.add('hidden');
+      byId('realFireClearBtn').disabled = true;
+      ['realModeBtn', 'simModeBtn', 'realFireSwitchBtn'].forEach(id => { byId(id).disabled = true; });
+      fireSwitch.textContent = !state.cloud.hasTelemetry ? '실제 센서 수신 대기' : state.cloud.stale ? '마지막 수신 상태 표시 중' : state.realFireDetected ? '실제 화재 관제 중' : '실제 화재 감지 없음';
+    }
   }
 
   function renderSystemBanner(state) {
@@ -1034,6 +1046,15 @@
       icon = '↗';
       description = '인파 혼잡 구간의 Edge 가중치를 높여 덜 혼잡한 대피 경로로 우회했습니다.';
     }
+    if (state.cloud?.enabled && (!state.cloud.hasTelemetry || state.cloud.stale)) {
+      className = 'device-offline';
+      title = state.cloud.hasTelemetry ? '장비 통신 지연' : '장비 상태 확인 대기';
+      icon = state.cloud.hasTelemetry ? '!' : '?';
+      description = state.cloud.hasTelemetry
+        ? '마지막 수신 상태를 표시합니다. 현재 센서와 LED 상태는 새 보고가 도착해야 확인할 수 있습니다.'
+        : 'Pi의 첫 상태 보고를 기다립니다. 센서 정상 여부와 LED 출력은 아직 미확인입니다.';
+    }
+    banner.className = `system-banner ${className}`;
     byId('systemIcon').textContent = icon;
     byId('systemTitle').textContent = title;
     byId('systemDescription').textContent = description;
@@ -1052,13 +1073,16 @@
       const typeLabel = state.selectedDestinationType === 'descender' ? '완강기' : '화장실';
       byId('fallbackNoticeText').textContent = `정규 비상구가 모두 차단되어 ${typeLabel} 보조 대피지점인 ${state.selectedDestinationName}으로 경로를 전환했습니다.`;
     }
-    byId('noRouteNotice').classList.toggle('hidden', Boolean(state.route));
+    byId('noRouteNotice').classList.toggle('hidden', Boolean(state.route) || Boolean(state.cloud?.enabled && !state.cloud.hasTelemetry));
+    if (state.cloud?.enabled && !state.cloud.hasTelemetry) byId('routeStatusText').textContent = '장비 데이터 대기';
   }
 
   function renderSensors(state) {
     const counts = state.sensorCounts;
     byId('flameCount').textContent = `${counts.flameActive} / ${counts.flameTotal}`;
-    byId('flameStateText').textContent = counts.flameActive ? '화재 감지' : '정상 (화재 감지 없음)';
+    byId('flameStateText').textContent = state.cloud?.enabled && (!state.cloud.hasTelemetry || state.cloud.stale)
+      ? (state.cloud.hasTelemetry ? '마지막 수신값 · 현재 상태 미확인' : '센서 수신 대기')
+      : counts.flameActive ? '화재 감지' : '정상 (화재 감지 없음)';
 
     const flameBox = byId('flameCount').closest('.sensor-metric');
     flameBox.classList.toggle('has-danger', counts.flameActive > 0);
@@ -1066,10 +1090,16 @@
     const normalFlame = Object.values(state.flameSensors).filter((v) => v.connected && !v.active).length;
     const disconnected = state.equipment.filter((e) => e.status === 'offline').length;
     const sensorOffline = counts.offline || 0;
+    const awaiting = state.cloud?.enabled && !state.cloud.hasTelemetry;
+    const stale = state.cloud?.enabled && state.cloud.stale;
+    const normalLabel = awaiting || stale ? '현재 정상 여부' : '불꽃 센서 정상';
+    const normalValue = awaiting || stale ? '미확인' : `${normalFlame}/${counts.flameTotal}`;
+    const offlineLabel = awaiting ? '센서 미수신' : stale ? '현재 확인 불가 센서' : '센서 통신 장애';
+    const deviceLabel = awaiting ? '장비 수신 대기' : '연결 끊김 장비';
     byId('sensorSummary').innerHTML = `
-      <div class="sensor-row"><span>불꽃 센서 정상</span><strong class="${counts.flameActive ? 'state-danger' : 'state-normal'}">${normalFlame}/${counts.flameTotal}</strong></div>
-      <div class="sensor-row"><span>센서 통신 장애</span><strong class="${sensorOffline ? 'state-warning' : 'state-normal'}">${sensorOffline}</strong></div>
-      <div class="sensor-row"><span>연결 끊김 장비</span><strong class="${disconnected ? 'state-warning' : 'state-normal'}">${disconnected}</strong></div>`;
+      <div class="sensor-row"><span>${normalLabel}</span><strong class="${awaiting || stale ? 'state-warning' : counts.flameActive ? 'state-danger' : 'state-normal'}">${normalValue}</strong></div>
+      <div class="sensor-row"><span>${offlineLabel}</span><strong class="${sensorOffline ? 'state-warning' : 'state-normal'}">${sensorOffline}</strong></div>
+      <div class="sensor-row"><span>${deviceLabel}</span><strong class="${disconnected ? 'state-warning' : 'state-normal'}">${disconnected}</strong></div>`;
   }
 
   function renderEquipment(state) {
@@ -1077,27 +1107,27 @@
     const filter = byId('equipmentFilter').value;
     const rows = state.equipment.filter((e) => {
       const matchesFilter = filter === 'all' || e.status === filter;
-      const haystack = `${e.id} ${e.category} ${e.name} ${e.location}`.toLowerCase();
+      const haystack = `${escapeHtml(e.id)} ${escapeHtml(e.category)} ${escapeHtml(e.name)} ${escapeHtml(e.location)}`.toLowerCase();
       return matchesFilter && haystack.includes(q);
     });
     byId('equipmentRows').innerHTML = rows.map((e) => `
-      <tr><td>${e.id}</td><td>${e.category}</td><td>${e.name}</td><td>${e.location}</td><td>${e.value ?? '-'}</td><td><span class="status-chip ${stateClass(e.status)}">${e.stateLabel}</span></td><td>${fmtTime(e.lastSeen)}</td></tr>`).join('') || '<tr><td colspan="7">조건에 맞는 장비가 없습니다.</td></tr>';
+      <tr><td>${escapeHtml(e.id)}</td><td>${escapeHtml(e.category)}</td><td>${escapeHtml(e.name)}</td><td>${escapeHtml(e.location)}</td><td>${escapeHtml(e.value ?? '-')}</td><td><span class="status-chip ${stateClass(e.status)}">${escapeHtml(e.stateLabel)}</span></td><td>${fmtTime(e.lastSeen)}</td></tr>`).join('') || '<tr><td colspan="7">조건에 맞는 장비가 없습니다.</td></tr>';
   }
 
   function renderEvents(state) {
     byId('eventCount').textContent = `${state.events.length} EVENTS`;
     byId('eventList').innerHTML = state.events.map((e) => `
       <div class="event-row">
-        <div class="event-time">${e.timestamp.replace('T', ' ').slice(0, 19)}</div>
-        <div class="event-type ${eventTone(e.type)}">${e.type}</div>
-        <div class="event-location">${e.location}</div>
-        <div class="event-detail"><strong>${e.change}</strong><br><span>${e.result}</span></div>
+        <div class="event-time">${escapeHtml(String(e.timestamp).replace('T', ' ').slice(0, 19))}</div>
+        <div class="event-type ${eventTone(e.type)}">${escapeHtml(e.type)}</div>
+        <div class="event-location">${escapeHtml(e.location)}</div>
+        <div class="event-detail"><strong>${escapeHtml(e.change)}</strong><br><span>${escapeHtml(e.result)}</span></div>
       </div>`).join('') || '<div class="event-row"><div class="event-detail">이벤트 기록 없음</div></div>';
 
     const recent = state.events.slice(0, 5);
     byId('miniEventList').innerHTML = recent.map((e) => {
       const tone = ['FIRE', 'CLEAR'].includes(e.type) ? 'danger' : ['SHUTTER', 'CONNECTION'].includes(e.type) ? 'warning' : '';
-      return `<div class="mini-event ${tone}"><i></i><span><strong>${fmtTime(e.timestamp)} · ${e.type}</strong><br>${e.change}</span></div>`;
+      return `<div class="mini-event ${tone}"><i></i><span><strong>${fmtTime(e.timestamp)} · ${escapeHtml(e.type)}</strong><br>${escapeHtml(e.change)}</span></div>`;
     }).join('') || '<div class="mini-event"><i></i><span>이벤트 기록 없음</span></div>';
   }
 
@@ -1124,14 +1154,45 @@
     renderEvents(state);
     renderRouting(state);
     renderQr(state);
+    renderCloudState(state);
     refreshNodeActionCard();
+  }
+
+  function renderCloudState(state) {
+    const cloud = state.cloud;
+    document.querySelectorAll('.scenario-card').forEach(card => card.classList.toggle('hidden', Boolean(cloud?.enabled)));
+    byId('cloudLiveCard').classList.toggle('hidden', !cloud?.enabled);
+    if (!cloud?.enabled) return;
+    const card = byId('cloudLiveCard');
+    const stale = !cloud.hasTelemetry || cloud.stale;
+    card.classList.toggle('is-stale', stale);
+    byId('cloudDeviceStatus').textContent = !cloud.hasTelemetry ? '장비 데이터 대기' : cloud.stale ? '통신 지연 · 마지막 수신값' : '장비 데이터 수신 중';
+    byId('cloudDeviceId').textContent = cloud.deviceId || '-';
+    const stamp = iso => iso ? new Date(iso).toLocaleString('ko-KR', { hour12: false }) : '미수신';
+    byId('cloudReceivedAt').textContent = stamp(cloud.receivedAt);
+    byId('cloudObservedAt').textContent = stamp(cloud.observedAt);
+    const led = cloud.led || {};
+    const labels = { applied: 'Pi 출력 적용 보고', error: 'Pi 출력 오류', unknown: '미확인 · 적용 보고 없음' };
+    byId('cloudLedStatus').textContent = `${labels[led.status] || labels.unknown}${stale && cloud.hasTelemetry ? ' · 마지막 보고' : ''}`;
+    if (led.error) byId('cloudLedStatus').textContent += ` · ${led.error}`;
+    const routeLabels = {
+      server_preview: '서버 계산 경로 미리보기 · Pi의 실제 경로 및 LED 적용을 보장하지 않습니다.',
+      pi: 'Pi가 보고한 경로 · LED 출력 결과는 적용 보고에서 별도로 확인합니다.',
+      none: '장비 경로 보고 대기',
+    };
+    byId('cloudRouteSource').textContent = routeLabels[cloud.routeSource] || routeLabels.none;
+    const segments = Array.isArray(led.segments) ? led.segments : [];
+    byId('cloudLedSegments').textContent = (segments.length
+      ? `Pi LED 구간 보고: ${segments.map(s => `${s.id} ${s.on ? 'ON' : 'OFF'}${s.color ? ` ${s.color}` : ''}`).join(' · ')}`
+      : 'LED 구간 보고 대기') + ' · 실물 LED 구간의 위치 대응은 확인 중입니다.';
+    document.querySelectorAll('.simulation-only, .scenario-card button, #routing button, #routing input, #routing select, #mapEditor button, #mapEditor input, #mapEditor select, [data-page="mapEditor"], [data-target-page="mapEditor"]').forEach(el => { el.disabled = true; });
   }
 
   function buildControls() {
     renderFloorplanBase();
     byId('startNodeSelect').innerHTML = floorplan.nodes.map((n) => `<option value="${n.id}">${n.id} · ${n.name}</option>`).join('');
     byId('flameSelect').innerHTML = floorplan.sensors.filter((s) => s.type === 'flame').map((s) => `<option value="${s.id}">${s.id} · ${s.name}</option>`).join('');
-    byId('manualEdgeSelect').innerHTML = floorplan.edges.map((e) => `<option value="${e.id}">${e.id} · ${e.from} ↔ ${e.to} · W=${e.weight}</option>`).join('');
+    byId('manualEdgeSelect').innerHTML = floorplan.edges.map((e) => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.id)} · ${e.from} ↔ ${e.to} · W=${e.weight}</option>`).join('');
     byId('shutterControls').innerHTML = floorplan.shutters.map((s) => `
       <div class="shutter-item"><strong>${s.name}</strong><p>${s.id} · ${s.edge}</p><div class="inline-control"><button type="button" class="btn warning simulation-only" data-shutter="${s.id}" data-closed="true">닫기</button><button type="button" class="btn secondary simulation-only" data-shutter="${s.id}" data-closed="false">열기</button></div></div>`).join('');
     byId('shutterControls').querySelectorAll('[data-shutter]').forEach((button) => {
@@ -1210,6 +1271,7 @@
   }
 
   function showPage(pageId) {
+    if (cloudConfig.enabled && pageId === 'mapEditor') { showToast('클라우드에서는 지도 편집을 사용할 수 없습니다.'); return; }
     editorDrag = null;
     editorConnectFrom = null;
     document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.page === pageId));
@@ -1293,6 +1355,11 @@
   function setBrowserConnection(connected) {
     browserConnected = connected;
     byId('browserOfflineBanner').classList.toggle('hidden', connected);
+    if (cloudConfig.enabled) {
+      const banner = byId('browserOfflineBanner');
+      banner.querySelector('strong').textContent = '클라우드 상태 API 연결 실패';
+      banner.querySelector('span').textContent = '마지막 수신 상태를 표시합니다. 현장 출력은 확인이 필요하며 서버 상태 조회를 재시도하고 있습니다.';
+    }
     if (currentState) renderHeader(currentState);
   }
 
@@ -1337,16 +1404,37 @@
   }
 
   async function init() {
-    updateClock(); window.setInterval(updateClock, 1000);
-    window.addEventListener('resize', updateRouteVisualScale);
+    updateClock();
     try {
+      cloudConfig = await window.FireGuardCloud.config();
+      if (cloudConfig.enabled) {
+        renderCloudState({ cloud: { enabled: true, deviceId: cloudConfig.deviceId, hasTelemetry: false } });
+        byId('systemBanner').className = 'system-banner device-offline';
+        byId('systemIcon').textContent = '?';
+        byId('systemTitle').textContent = '장비 상태 확인 중';
+        byId('systemDescription').textContent = '서버에서 실제 장비의 마지막 상태를 조회합니다.';
+        setChip('piChip', false, '미확인');
+        setChip('cloudChip', false, '조회 중');
+        setChip('flaskChip', false, '조회 중');
+        byId('realModeBtn').classList.add('active');
+        byId('simModeBtn').classList.remove('active');
+        ['realModeBtn', 'simModeBtn', 'realFireSwitchBtn'].forEach(id => { byId(id).disabled = true; });
+        byId('realFireSwitchBtn').textContent = '실제 센서 수신 대기';
+        byId('operationModeLabel').textContent = 'REAL';
+      }
       [floorplan, currentState] = await Promise.all([api('/api/floorplan'), api('/api/state')]);
       initEditorPositions();
-      buildControls(); bindActions(); updateState(currentState); updateRouteVisualScale(); connectSocket();
+      buildControls(); bindActions(); updateState(currentState); updateRouteVisualScale();
+      if (cloudConfig.enabled) {
+        await window.FireGuardCloud.start(updateState, setBrowserConnection, cloudConfig);
+      } else { connectSocket(); }
     } catch (error) {
-      showToast(`초기화 실패: ${error.message}`, true); setBrowserConnection(false); startPollingFallback();
+      showToast(`초기화 실패: ${error.message}`, true); setBrowserConnection(false);
+      window.setTimeout(init, 5000);
     }
   }
 
+  window.setInterval(updateClock, 1000);
+  window.addEventListener('resize', updateRouteVisualScale);
   init();
 })();

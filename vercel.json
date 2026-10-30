@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "mkdir -p public/static && cp -R static/. public/static/",
+  "functions": {
+    "app.py": {
+      "includeFiles": "{templates/**,static/data/**,config/**,hardware/led_segments.json}",
+      "excludeFiles": "cloudflared.exe"
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [{"key": "Cache-Control", "value": "no-store"}]
+    }
+  ]
+}

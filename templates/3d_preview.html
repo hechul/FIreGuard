@@ -150,7 +150,11 @@
     🖱️ 마우스 좌클릭: 360도 회전 | 우클릭: 이동 | 휠: 줌 | <b>[💥 2단 분해도] 클릭 시 상판이 분리됩니다!</b>
   </div>
 
+  <div id="previewLiveStatus" style="position:absolute;left:20px;top:100px;max-width:320px;padding:12px;background:#16202c;border-radius:12px;font-size:12px;z-index:10;display:none" role="status"></div>
+
   <div id="canvas-container"></div>
+
+  <script src="{{ url_for('static', filename='js/cloud_live.js', v='cloud-20261030') }}"></script>
 
   <script>
     // --- 3D Scene Initialization ---
@@ -460,6 +464,7 @@
       });
 
     const sensorHolePositions = [];
+    const sensorModels = new Map();
 
 
     flameList.forEach(s => {
@@ -467,8 +472,33 @@
       const x = to3DX(s.x), z = to3DZ(s.y);
       m.position.set(x, 4, z);
       topGroup.add(m);
+      sensorModels.set(s.id, m);
       sensorHolePositions.push({ x: x, z: z, type: 'FLAME', id: s.id });
     });
+
+    const isCloudView = Boolean(dashboardFloorplan.mappingVersion);
+    if (isCloudView) {
+      const status = document.getElementById('previewLiveStatus');
+      status.style.display = 'block';
+      status.textContent = '센서 보고 대기 · LED 위치 대응은 확인 중입니다. 실제 경로는 대시보드 3D에서 확인하세요.';
+      ledMat.color.set(0x64748b);
+      sensorModels.forEach(m => m.children[0].material.color.set(0x64748b));
+      window.FireGuardCloud.start(snapshot => {
+        const cloud = snapshot.cloud;
+        const fresh = cloud?.hasTelemetry && !cloud.stale;
+        const ledLabels = {applied:'Pi 출력 적용 보고',error:'Pi 출력 오류',unknown:'미확인'};
+        status.textContent = `${fresh ? '장비 보고 수신 중' : cloud?.hasTelemetry ? '통신 지연 · 마지막 수신값' : '장비 보고 대기'} · LED: ${ledLabels[cloud?.led?.status] || '미확인'}. 경로는 대시보드 3D에서 확인하세요.`;
+        sensorModels.forEach((m, id) => {
+          const active = snapshot.flameSensors?.[id]?.active;
+          const color = active ? 0xef4444 : fresh ? 0x10b981 : 0x64748b;
+          m.children[0].material.color.set(color);
+          m.children[0].material.emissive.set(color);
+          m.children[0].material.emissiveIntensity = active ? 0.5 : 0.1;
+        });
+      }, connected => {
+        if (!connected) status.textContent = '관제 서버 연결 끊김 · 마지막 수신값입니다. 현재 현장 상태는 확인이 필요합니다.';
+      }).catch(() => { status.textContent = '관제 상태를 불러오지 못했습니다.'; });
+    }
 
     // ==========================================
     // 5. WIRING HARNESSES (하부 배선 공간)
@@ -623,7 +653,7 @@
       // Pulse LED strips
       const t = Date.now() * 0.003;
       const intensity = 0.7 + Math.sin(t) * 0.3;
-      ledMat.color.setRGB(0, intensity, intensity * 0.5);
+      if (!isCloudView) ledMat.color.setRGB(0, intensity, intensity * 0.5);
 
       controls.update();
       renderer.render(scene, camera);
