@@ -75,7 +75,7 @@
 
       <section id="cloudLiveCard" class="panel cloud-live-card hidden" aria-label="실제 장비 수신 상태">
         <div class="cloud-live-heading"><div><span class="panel-kicker">CLOUD · REAL</span><h2>실제 장비 관제</h2></div><strong id="cloudDeviceStatus" role="status">장비 데이터 대기</strong></div>
-        <p>실제 장비 데이터 조회 전용입니다. 시뮬레이션과 지도 편집은 로컬 실행에서 사용할 수 있습니다.</p>
+        <p id="cloudViewNotice">실제 장비 상태입니다. 지도 편집은 로컬 실행에서 사용할 수 있습니다.</p>
         <dl class="cloud-live-metrics">
           <div><dt>장치</dt><dd id="cloudDeviceId">-</dd></div>
           <div><dt>마지막 서버 수신</dt><dd id="cloudReceivedAt">미수신</dd></div>
@@ -554,6 +554,6 @@
 
   <script src="{{ url_for('static', filename='js/map_geometry.js') }}"></script>
   <script src="{{ url_for('static', filename='js/cloud_live.js', v='cloud-20261030') }}"></script>
-  <script src="{{ url_for('static', filename='js/dashboard.js', v='route-direction-cloud-20261030') }}"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js', v='cloud-simulation-20261104') }}"></script>
 </body>
 </html>

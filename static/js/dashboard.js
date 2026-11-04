@@ -9,6 +9,17 @@
   let socket = null;
   const serverCloudMode = document.documentElement.dataset.cloud === 'true';
   let cloudConfig = { enabled: serverCloudMode };
+  // Actual Pi telemetry is independent of this browser's simulation.
+  let realState = null;
+  let realFloorplan = null;
+  let cloudView = 'real';
+  let simulationGeneration = 0;
+  let simulationQueue = Promise.resolve();
+  let simulationHistory = [];
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('fireguard-simulation-history') || '[]');
+    if (Array.isArray(saved) && saved.length <= 100) simulationHistory = saved;
+  } catch (_) { /* Private browsing may disallow storage. */ }
   let selectedNodeId = null;
   let browserConnected = true;
   let pollTimer = null;
@@ -86,6 +97,13 @@
 
   async function safeApi(path, body) {
     try {
+      if (cloudConfig.enabled && path.startsWith('/api/simulation/')) {
+        if (cloudView !== 'simulation') throw new Error('시뮬레이션 모드에서만 사용할 수 있습니다.');
+        const generation = simulationGeneration;
+        const task = simulationQueue.then(() => cloudSimulation({ path, body }, generation));
+        simulationQueue = task.catch(() => {});
+        return await task;
+      }
       const result = await api(path, body);
       if (result.state) updateState(result.state);
       return result;
@@ -985,8 +1003,9 @@
   }
 
   function renderHeader(state) {
-    setChip('piChip', state.connections.pi);
-    setChip('cloudChip', state.connections.server);
+    const actual = cloudConfig.enabled ? (realState || state) : state;
+    setChip('piChip', actual.connections.pi);
+    setChip('cloudChip', actual.connections.server);
     setChip('flaskChip', browserConnected);
 
     const fireSwitch = byId('realFireSwitchBtn');
@@ -1004,12 +1023,16 @@
     document.querySelectorAll('.simulation-only').forEach((el) => { el.disabled = state.operationMode !== 'simulation'; });
     byId('realModeNotice').classList.toggle('hidden', state.operationMode !== 'real');
     byId('operationModeLabel').textContent = state.operationMode.toUpperCase();
-    if (state.cloud?.enabled) {
+    if (cloudConfig.enabled) {
       // Cloud monitoring remains read-only; manual alarm clear is local only.
       byId('realFireClearBtn').classList.add('hidden');
       byId('realFireClearBtn').disabled = true;
-      ['realModeBtn', 'simModeBtn', 'realFireSwitchBtn'].forEach(id => { byId(id).disabled = true; });
-      fireSwitch.textContent = !state.cloud.hasTelemetry ? '실제 센서 수신 대기' : state.cloud.stale ? '마지막 수신 상태 표시 중' : state.realFireDetected ? '실제 화재 관제 중' : '실제 화재 감지 없음';
+      realBtn.disabled = false;
+      simBtn.disabled = !browserConnected || !realState || Boolean(realState.connections.pi && realState.realFireDetected);
+      fireSwitch.disabled = true;
+      const cloud = actual.cloud || {};
+      fireSwitch.textContent = !cloud.hasTelemetry ? '실제 센서 수신 대기' : cloud.stale && actual.realFireDetected ? '마지막 실제 화재 보고 · 현재 확인 불가' : cloud.stale ? '마지막 수신 상태 표시 중' : actual.realFireDetected ? '실제 화재 관제 중' : '실제 화재 감지 없음';
+      fireSwitch.title = (actual.realFireSensorIds || []).join(', ');
     }
   }
 
@@ -1155,19 +1178,23 @@
     renderEvents(state);
     renderRouting(state);
     renderQr(state);
-    renderCloudState(state);
+    renderCloudState(cloudConfig.enabled ? (realState || state) : state);
     refreshNodeActionCard();
   }
 
   function renderCloudState(state) {
     const cloud = state.cloud;
-    document.querySelectorAll('.scenario-card').forEach(card => card.classList.toggle('hidden', Boolean(cloud?.enabled)));
+    document.querySelectorAll('.scenario-card').forEach(card => card.classList.toggle('hidden', Boolean(cloud?.enabled) && cloudView !== 'simulation'));
     byId('cloudLiveCard').classList.toggle('hidden', !cloud?.enabled);
     if (!cloud?.enabled) return;
     const card = byId('cloudLiveCard');
     const stale = !cloud.hasTelemetry || cloud.stale;
+    byId('cloudViewNotice').textContent = cloudView === 'simulation'
+      ? '시뮬레이션 화면입니다. 가상 시나리오는 실제 장비를 제어하지 않습니다. 아래 장비 상태는 실제 수신값입니다.'
+      : '실제 장비 상태입니다. 지도 편집은 로컬 실행에서 사용할 수 있습니다.';
     card.classList.toggle('is-stale', stale);
     byId('cloudDeviceStatus').textContent = !cloud.hasTelemetry ? '장비 데이터 대기' : cloud.stale ? '통신 지연 · 마지막 수신값' : '장비 데이터 수신 중';
+    if (cloud.stale && state.realFireDetected) byId('cloudDeviceStatus').textContent = '마지막 실제 화재 보고 · 현재 확인 불가';
     byId('cloudDeviceId').textContent = cloud.deviceId || '-';
     const stamp = iso => iso ? new Date(iso).toLocaleString('ko-KR', { hour12: false }) : '미수신';
     byId('cloudReceivedAt').textContent = stamp(cloud.receivedAt);
@@ -1186,7 +1213,7 @@
     byId('cloudLedSegments').textContent = (segments.length
       ? `Pi LED 구간 보고: ${segments.map(s => `${s.id} ${s.on ? 'ON' : 'OFF'}${s.color ? ` ${s.color}` : ''}`).join(' · ')}`
       : 'LED 구간 보고 대기') + ' · 실물 LED 구간의 위치 대응은 확인 중입니다.';
-    document.querySelectorAll('.simulation-only, .scenario-card button, #routing button, #routing input, #routing select, #mapEditor button, #mapEditor input, #mapEditor select, [data-page="mapEditor"], [data-target-page="mapEditor"]').forEach(el => { el.disabled = true; });
+    document.querySelectorAll('#mapEditor button, #mapEditor input, #mapEditor select, [data-page="mapEditor"], [data-target-page="mapEditor"]').forEach(el => { el.disabled = true; });
   }
 
   function buildControls() {
@@ -1230,7 +1257,98 @@
     if (currentState) renderMap(currentState);
   }
 
+  function setCloudFloorplan(plan, snapshot) {
+    floorplan = plan;
+    geometryRouter = null;
+    geometrySignature = '';
+    selectedNodeId = null;
+    byId('nodeActionCard').classList.add('hidden');
+    buildControls();
+    if (map3dReady && typeof Map3D !== 'undefined') Map3D.rebuild(floorplan, snapshot);
+  }
+
+  function switchToReal(reason = '') {
+    if (!cloudConfig.enabled) return;
+    cloudView = 'real';
+    simulationGeneration += 1;
+    demoRunId += 1;
+    byId('demoStep').textContent = 'STOPPED';
+    byId('stopDemoBtn').disabled = true;
+    if (realFloorplan && realState) {
+      setCloudFloorplan(realFloorplan, realState);
+      updateState(realState);
+    }
+    if (reason) showToast(reason, true);
+  }
+
+  function receiveRealState(state) {
+    // An older request may finish after a newer realtime update.
+    const incoming = Date.parse(state.cloud?.receivedAt || '');
+    const previous = Date.parse(realState?.cloud?.receivedAt || '');
+    if (Number.isFinite(previous) && (!Number.isFinite(incoming) || incoming < previous)) return;
+    realState = state;
+    const connectedFire = Boolean(state.connections.pi && state.realFireDetected);
+    if (cloudView === 'simulation' && connectedFire) {
+      switchToReal('실제 화재가 감지되어 REAL 모드로 전환했습니다.');
+      return;
+    }
+    if (cloudView === 'real') updateState(state);
+    else if (currentState) {
+      // Keep real telemetry visible while the isolated scenario continues.
+      renderHeader(currentState);
+      renderCloudState(realState);
+    }
+  }
+
+  async function cloudSimulation(action, generation) {
+    if (generation !== simulationGeneration || cloudView !== 'simulation') return null;
+    let response;
+    try {
+      response = await fetch('/api/cloud/simulation', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, cache: 'no-store',
+        body: JSON.stringify({ history: simulationHistory, action }),
+      });
+    } catch (error) {
+      if (generation === simulationGeneration && cloudView === 'simulation') setBrowserConnection(false);
+      throw error;
+    }
+    const result = await response.json().catch(() => ({}));
+    // Never apply telemetry from a request belonging to an abandoned view.
+    if (generation !== simulationGeneration || cloudView !== 'simulation') return null;
+    if (result.realState) receiveRealState(result.realState);
+    if (!response.ok || result.ok === false) {
+      if (response.status === 503 && cloudView === 'simulation') setBrowserConnection(false);
+      throw new Error(result.error || `HTTP ${response.status}`);
+    }
+    // An actual fire or mode change may have happened while this request ran.
+    if (generation !== simulationGeneration || cloudView !== 'simulation') return null;
+    simulationHistory = result.history;
+    try { sessionStorage.setItem('fireguard-simulation-history', JSON.stringify(simulationHistory)); } catch (_) {}
+    if (!floorplan || floorplan === realFloorplan) {
+      setCloudFloorplan(result.floorplan, result.state);
+    }
+    updateState(result.state);
+    return result;
+  }
+
   async function setMode(mode) {
+    if (cloudConfig.enabled) {
+      if (mode === 'real') { switchToReal(); return; }
+      if (!browserConnected || !realState) { showToast('실제 장비 상태를 먼저 확인하세요.', true); return; }
+      if (realState.connections.pi && realState.realFireDetected) {
+        showToast('실제 화재가 감지되어 시뮬레이션을 사용할 수 없습니다.', true); return;
+      }
+      if (cloudView === 'simulation') return;
+      cloudView = 'simulation';
+      const generation = ++simulationGeneration;
+      try {
+        await cloudSimulation(null, generation);
+      } catch (error) {
+        if (generation === simulationGeneration) switchToReal();
+        showToast(error.message || '시뮬레이션을 시작하지 못했습니다.', true);
+      }
+      return;
+    }
     const result = await safeApi('/api/mode', { mode });
     if (result?.state && mode === 'real') closeNodeActionCard();
   }
@@ -1355,6 +1473,9 @@
 
   function setBrowserConnection(connected) {
     browserConnected = connected;
+    if (!connected && cloudConfig.enabled && cloudView === 'simulation') {
+      switchToReal('실제 장비 상태를 확인할 수 없어 REAL 화면으로 전환했습니다.');
+    }
     byId('browserOfflineBanner').classList.toggle('hidden', connected);
     if (cloudConfig.enabled) {
       const banner = byId('browserOfflineBanner');
@@ -1428,10 +1549,11 @@
         byId('operationModeLabel').textContent = 'REAL';
       }
       [floorplan, currentState] = await Promise.all([api('/api/floorplan'), api('/api/state')]);
+      if (cloudConfig.enabled) { realFloorplan = floorplan; realState = currentState; }
       initEditorPositions();
       buildControls(); bindActions(); updateState(currentState); updateRouteVisualScale();
       if (cloudConfig.enabled) {
-        await window.FireGuardCloud.start(updateState, setBrowserConnection, cloudConfig);
+        await window.FireGuardCloud.start(receiveRealState, setBrowserConnection, cloudConfig);
       } else { connectSocket(); }
     } catch (error) {
       showToast(`초기화 실패: ${error.message}`, true); setBrowserConnection(false);

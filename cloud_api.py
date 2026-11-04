@@ -11,6 +11,7 @@ from flask import jsonify, request
 
 from cloud_model import MAPPING_VERSION, cloud_floorplan, project_state, validate_telemetry
 from cloud_store import StoreUnavailable, SupabaseStore
+from cloud_simulation import simulate
 
 
 def enabled(app):
@@ -99,6 +100,21 @@ def install_cloud(app, original_floorplan):
                 return jsonify(snapshot())
             if request.method == 'GET' and request.path == '/api/floorplan':
                 return jsonify(plan)
+            if request.method == 'POST' and request.path == '/api/cloud/simulation':
+                # Never trust a client-provided real status: read the shared DB.
+                # A disconnected Pi's old alarm remains visible in realState, but
+                # does not block the user-requested isolated presentation mode.
+                real = snapshot()
+                if real['connections']['pi'] and real['realFireDetected']:
+                    return jsonify(ok=False, error='실제 화재가 감지되어 REAL 모드로 전환합니다.', realState=real), 409
+                result = simulate(original_floorplan, request.get_json(silent=True))
+                # Recheck just before returning so a concurrent Pi report takes
+                # priority over a calculation initiated before it arrived.
+                real = snapshot()
+                if real['connections']['pi'] and real['realFireDetected']:
+                    return jsonify(ok=False, error='실제 화재가 감지되어 REAL 모드로 전환합니다.', realState=real), 409
+                result['realState'] = real
+                return jsonify(result)
             if request.method == 'POST' and request.path in ('/api/hardware/telemetry', '/api/hardware/batch'):
                 token = os.environ.get('FIREGUARD_DEVICE_TOKEN', '')
                 if len(token) < 32:
