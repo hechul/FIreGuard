@@ -16,9 +16,9 @@ const Map3D = (() => {
   const VW = 584;
   const VH = 858;
 
-  // Y is UP in Three.js; blueprint X → 3D X, blueprint Y → 3D -Z
+  // Y is UP in Three.js; map the 2D top to the far side of the 3D view.
   function bx(x) { return x - VW / 2; }
-  function bz(y) { return -(y - VH / 2); }
+  function bz(y) { return y - VH / 2; }
 
   const FLOOR_Y   = 0;
   const WALL_H    = 48;

@@ -10,7 +10,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="{{ url_for('static', filename='js/led_plan.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/map3d.js', v='flame-only-20261028') }}"></script>
+  <script src="{{ url_for('static', filename='js/map3d.js', v='orientation-20261104') }}"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -30,7 +30,7 @@
         <button class="nav-item" data-page="events"><span class="nav-icon">▤</span><div>이벤트 로그<small>Events</small></div></button>
         <button class="nav-item" data-page="qr"><span class="nav-icon">▦</span><div>QR / 모바일<small>QR / Mobile</small></div></button>
         <button class="nav-item hidden" data-page="mapEditor"><span class="nav-icon">✥</span><div>수정 모드<small>Map Editor</small></div></button>
-        <a href="/3d" target="_blank" class="nav-item" style="text-decoration:none;"><span class="nav-icon">🧊</span><div>3D 모형/배선<small>3D Digital Twin</small></div></a>
+        <a href="/3d" target="_blank" class="nav-item hidden" style="text-decoration:none;"><span class="nav-icon">🧊</span><div>3D 모형/배선<small>3D Digital Twin</small></div></a>
       </nav>
 
       <div class="sidebar-footer">
