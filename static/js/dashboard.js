@@ -167,9 +167,10 @@
     return geometryRouter;
   }
 
-  function buildEdgePath(a, b, className) {
+  function buildEdgePath(a, b, className, mapRouter = router()) {
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-    const points = router().route(a, b);
+    // Two distinct graph nodes can map to the same physical junction.
+    const points = a.x === b.x && a.y === b.y ? [a, b] : mapRouter.route(a, b);
     path.setAttribute('points', points ? points.map(p => `${p.x},${p.y}`).join(' ') : '');
     path.setAttribute('class', className);
     path.setAttribute('fill', 'none');
@@ -185,9 +186,11 @@
       return el;
     };
     document.querySelectorAll('.schematic-base').forEach(svg => {
+      const plan = svg.closest('#mapStage') && window.FireGuardPrototypeProjection
+        ? window.FireGuardPrototypeProjection.project(floorplan) : floorplan;
       svg.replaceChildren(element('rect', {class: 'plan-bg', x: 8, y: 8, width: 568, height: 842, rx: 10}));
-      for (const guide of floorplan.corridorGuides || []) svg.appendChild(buildSvgLine(guide[0], guide[1], 'corridor-guide'));
-      for (const room of floorplan.rooms || []) {
+      for (const guide of plan.corridorGuides || []) svg.appendChild(buildSvgLine(guide[0], guide[1], 'corridor-guide'));
+      for (const room of plan.rooms || []) {
         svg.appendChild(element('rect', {class: `room ${room.kind} door-room`, x: room.x, y: room.y, width: room.width, height: room.height}));
         for (const wall of MapGeometry.wallRects(room)) svg.appendChild(element('rect', {...wall, class: 'room-wall'}));
         const cx = room.x + room.width/2, cy = room.y + room.height/2;
@@ -204,7 +207,7 @@
           svg.appendChild(element('text', {class: 'door-label', x: horizontal ? x+door.width/2 : x+7, y: horizontal ? y-7 : y+door.width/2-5, 'text-anchor': horizontal ? 'middle' : 'start'}, '문'));
         }
       }
-      const descender = floorplan.nodes.find(n => n.id === 'N3');
+      const descender = plan.nodes.find(n => n.id === 'N3');
       if (descender) svg.appendChild(element('text', {class: 'descender-label', x: descender.x, y: descender.y-18}, '완강기'));
       // Keep physical LEDs separate from editable nodes and evacuation edges.
       if (svg.closest('#mapStage')) {
@@ -865,7 +868,9 @@
 
   function renderMap(state) {
     if (!floorplan) return;
-    const points = nodeMap();
+    const displayPlan = window.FireGuardPrototypeProjection ? window.FireGuardPrototypeProjection.project(floorplan) : floorplan;
+    const points = Object.fromEntries([...displayPlan.nodes, ...displayPlan.exits].map(item => [item.id, item]));
+    const displayRouter = MapGeometry.createRouter(displayPlan);
     const edgesById = edgeMap();
     const edgeLayer = byId('edgeLayer');
     const routeLayer = byId('routeLayer');
@@ -888,7 +893,7 @@
         title.textContent = `${section.id} · ${section.count}개 · 위치 미검증`;
         line.appendChild(title); prototypeLayer.appendChild(line);
       });
-      const anchor = window.FireGuardPrototypeMap.sharedAnchor(floorplan.nodes);
+      const anchor = window.FireGuardPrototypeMap.sharedAnchor(displayPlan.nodes);
       if (anchor) {
         const label = document.createElementNS(svg, 'text');
         label.setAttribute('x', anchor.x); label.setAttribute('y', anchor.y - 22);
@@ -909,7 +914,7 @@
       const classes = ['map-edge'];
       if (blocked) classes.push('blocked');
       else if (congested) classes.push('congested');
-      const line = buildEdgePath(a, b, classes.join(' '));
+      const line = buildEdgePath(a, b, classes.join(' '), displayRouter);
       line.dataset.edgeId = edge.id;
       if (congested) {
         const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
@@ -928,7 +933,7 @@
         const from = points[edge.from];
         const to = points[edge.to];
         if (!from || !to) continue;
-        const path = buildEdgePath(from, to, 'route-edge');
+        const path = buildEdgePath(from, to, 'route-edge', displayRouter);
         // Preserve the canonical corridor shape, but animate along traversal.
         const forward = edge.from === state.route.nodes[i] && edge.to === state.route.nodes[i + 1];
         const backward = edge.to === state.route.nodes[i] && edge.from === state.route.nodes[i + 1];
@@ -954,7 +959,7 @@
       const edge = edgesById[shutter.edge];
       if (!edge) return;
       const a = points[edge.from]; const b = points[edge.to];
-      const middle = MapGeometry.midpoint(router().route(a, b));
+      const middle = MapGeometry.midpoint(displayRouter.route(a, b));
       if (!middle) return;
       const {x, y} = middle;
       const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -980,7 +985,7 @@
     });
 
 
-    floorplan.nodes.forEach((node) => {
+    displayPlan.nodes.forEach((node) => {
       const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       group.setAttribute('role', 'button'); group.setAttribute('tabindex', '0');
       const blocked = state.blockedNodes.includes(node.id);
@@ -994,10 +999,12 @@
         if (state.route?.destinationId === node.id) classes.push('active-destination');
       }
       const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      circle.setAttribute('cx', node.x); circle.setAttribute('cy', node.y); circle.setAttribute('r', fallback ? 8.5 : 6.4);
+      // Keep separate graph-node buttons selectable at their shared LED junction.
+      const sharedOffset = node.id === 'N35' ? -7 : node.id === 'N28' ? 7 : 0;
+      circle.setAttribute('cx', node.x + sharedOffset); circle.setAttribute('cy', node.y); circle.setAttribute('r', fallback ? 8.5 : 6.4);
       circle.setAttribute('class', classes.join(' '));
       const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      label.setAttribute('x', node.x); label.setAttribute('y', node.y - 11); label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('x', node.x + sharedOffset); label.setAttribute('y', node.y + (node.id === 'N28' ? 18 : -11)); label.setAttribute('text-anchor', 'middle');
       label.setAttribute('class', fallback ? 'fallback-node-label' : 'node-label');
       label.textContent = fallback ? `${node.id} · ${fallback.label}` : node.id;
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title'); title.textContent = `${node.id} · ${node.name}`;

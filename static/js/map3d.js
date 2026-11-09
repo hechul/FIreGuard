@@ -69,7 +69,10 @@ const Map3D = (() => {
   /* Initialise Scene                                                     */
   /* ------------------------------------------------------------------ */
   function init(floorplan, container) {
-    _floorplan = floorplan;
+    // A visual-only projection aligns the two branches at the prototype's
+    // shared junction. Never mutate the routing or telemetry floorplan.
+    _floorplan = window.FireGuardPrototypeProjection
+      ? window.FireGuardPrototypeProjection.project(floorplan) : floorplan;
     _container = container;
 
     // Renderer
@@ -334,14 +337,17 @@ const Map3D = (() => {
         emissive: COLORS.node, emissiveIntensity: 0.25,
       });
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(bx(node.x), NODE_R, bz(node.y));
+      // N28 and N35 remain independently selectable although the physical
+      // LED junction is shared. The small visual offsets are not route data.
+      const pickOffset = node.id === 'N28' ? 6 : node.id === 'N35' ? -6 : 0;
+      mesh.position.set(bx(node.x) + pickOffset, NODE_R, bz(node.y));
       mesh.castShadow = true;
       _dynamicGroup.add(mesh);
       pool.nodes[node.id] = mesh;
 
       // ID label
       const sp = _makeTextSprite(node.id, '#3182F6', 60);
-      sp.position.set(bx(node.x), NODE_R * 2 + 8, bz(node.y));
+      sp.position.set(bx(node.x) + pickOffset, NODE_R * 2 + 8, bz(node.y));
       _dynamicGroup.add(sp);
     });
   }
@@ -372,7 +378,14 @@ const Map3D = (() => {
 
   function _buildLedStrips() {
     const mat = new THREE.MeshBasicMaterial({ color: COLORS.ledSafe });
-    LED_SEGMENTS_BLUEPRINT.forEach(([p1, p2]) => {
+    LED_SEGMENTS_BLUEPRINT.forEach(([original1, original2]) => {
+      let p1 = original1, p2 = original2;
+      // The toilet-1 strip shares the 4DX junction in the prototype. This is
+      // only a view projection; the Pi's LED indices remain unchanged.
+      if (p1[0] === 214 && p1[1] === 567 && p2[0] === 214 && p2[1] === 510) {
+        const junction = (_floorplan.nodes || []).find(node => node.id === 'N35');
+        if (junction) { p1 = [junction.x, p1[1]]; p2 = [junction.x, p2[1]]; }
+      }
       const x1 = bx(p1[0]), z1 = bz(p1[1]);
       const x2 = bx(p2[0]), z2 = bz(p2[1]);
       const dx = x2 - x1, dz = z2 - z1;
@@ -581,7 +594,8 @@ const Map3D = (() => {
   /* ------------------------------------------------------------------ */
   function rebuild(newFloorplan, state) {
     if (!_scene || !_dynamicGroup) return;
-    _floorplan = newFloorplan;
+    _floorplan = window.FireGuardPrototypeProjection
+      ? window.FireGuardPrototypeProjection.project(newFloorplan) : newFloorplan;
 
     // Remove all dynamic objects from _dynamicGroup
     while (_dynamicGroup.children.length > 0) {
