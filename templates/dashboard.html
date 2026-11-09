@@ -84,6 +84,9 @@
         </dl>
         <p id="cloudRouteSource">장비 경로 보고 대기</p>
         <p id="cloudLedSegments">LED 구간 보고 대기 · 실물 LED 구간의 위치 대응은 확인 중입니다.</p>
+        <p id="cloudLedPlan" class="hidden"></p>
+        <p id="cloudLedApplied" class="hidden"></p>
+        <p id="cloudLedMapping" class="hidden"></p>
         <p id="cloudTransport" class="cloud-transport">실시간 연결 준비 중</p>
       </section>
 
@@ -554,6 +557,7 @@
 
   <script src="{{ url_for('static', filename='js/map_geometry.js') }}"></script>
   <script src="{{ url_for('static', filename='js/cloud_live.js', v='cloud-20261030') }}"></script>
-  <script src="{{ url_for('static', filename='js/dashboard.js', v='cloud-simulation-20261104') }}"></script>
+  <script src="{{ url_for('static', filename='js/cloud_hardware.js', v='cloud-hardware-20261109') }}"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js', v='cloud-hardware-20261109') }}"></script>
 </body>
 </html>

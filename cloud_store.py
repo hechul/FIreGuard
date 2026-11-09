@@ -55,7 +55,11 @@ class SupabaseStore:
         return device_id
 
     def ingest(self, telemetry: dict[str, Any]) -> dict[str, Any]:
-        result = self._request("rpc/ingest_telemetry", {"p_telemetry": telemetry})
+        # The newer format needs transactional per-sensor disconnect handling.
+        # A separate RPC makes missing migrations fail closed instead of silently
+        # interpreting an unknown sensor as cleared by the old boolean contract.
+        rpc = "ingest_telemetry_v2" if "hardware" in telemetry else "ingest_telemetry"
+        result = self._request("rpc/" + rpc, {"p_telemetry": telemetry})
         if not isinstance(result, dict) or type(result.get("accepted")) is not bool:
             raise StoreUnavailable("Database returned an invalid ingestion result.")
         return result

@@ -9,7 +9,7 @@ import json
 
 from flask import jsonify, request
 
-from cloud_model import MAPPING_VERSION, cloud_floorplan, project_state, validate_telemetry
+from cloud_model import MAPPING_VERSION, cloud_floorplan, project_state, validate_telemetry, validate_hardware_telemetry
 from cloud_store import StoreUnavailable, SupabaseStore
 from cloud_simulation import simulate
 
@@ -122,7 +122,10 @@ def install_cloud(app, original_floorplan):
                 supplied = request.headers.get('Authorization', '')
                 if not hmac.compare_digest(supplied.encode(), ('Bearer ' + token).encode()):
                     return jsonify(ok=False, error='장치 인증이 필요합니다.'), 401
-                data = validate_telemetry(request.get_json(silent=True), plan, device_id())
+                payload = request.get_json(silent=True)
+                data = (validate_hardware_telemetry(payload, plan, device_id())
+                        if isinstance(payload, dict) and 'operationMode' in payload
+                        else validate_telemetry(payload, plan, device_id()))
                 outcome = store().ingest(data)
                 return jsonify(ok=True, **outcome)
             if request.method not in ('GET', 'HEAD', 'OPTIONS'):

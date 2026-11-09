@@ -35,6 +35,18 @@ class SupabaseStoreTest(unittest.TestCase):
         self.assertEqual(json.loads(request.data), {"p_telemetry": telemetry})
         self.assertEqual(self.urlopen.call_args.kwargs["timeout"], 5)
 
+    def test_extended_report_requires_v2_rpc(self):
+        self.respond({"accepted": True})
+        telemetry = {"hardware": {"flame": {}}}
+        self.assertTrue(self.store.ingest(telemetry)["accepted"])
+        self.assertTrue(self.urlopen.call_args.args[0].full_url.endswith("/rpc/ingest_telemetry_v2"))
+
+    def test_missing_v2_rpc_does_not_fall_back(self):
+        self.urlopen.side_effect = HTTPError("https://example.supabase.co", 404, "missing", {}, None)
+        with self.assertRaises(StoreUnavailable):
+            self.store.ingest({"hardware": {}})
+        self.assertEqual(self.urlopen.call_count, 1)
+
     def test_secret_key_uses_apikey_without_invalid_bearer(self):
         self.respond([])
         SupabaseStore("https://example.supabase.co", "sb_secret_example").latest("pi-01")

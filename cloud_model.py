@@ -17,6 +17,118 @@ from state_manager import SimulationState
 
 CONFIG = json.loads((Path(__file__).parent / 'config/cloud_sensors.json').read_text(encoding='utf-8'))
 MAPPING_VERSION = CONFIG['mappingVersion']
+# Fingerprints from the supplied 2026-11-09 sender and its reference files.
+# Do not silently accept a different sensor/graph calibration.
+HARDWARE_SENSOR_VERSION = 'flame11-5cce6a933e'
+HARDWARE_GRAPH_VERSION = 'graph-7e06ff7ced'
+HARDWARE_LED_VERSION = 'led162-usb163-shift20-dfea4ba7d3'
+
+HARDWARE_FIELDS = {
+    'deviceId', 'bootId', 'sequence', 'observedAt', 'mappingVersion',
+    'graphMappingVersion', 'ledMappingVersion', 'operationMode', 'startNode',
+    'flame', 'blockedNodes', 'blockedEdges', 'routeNodes', 'routeEdges',
+    'exitNode', 'destinationNode', 'destinationType', 'routeCost', 'routeMode',
+    'routeStatus', 'plannedLedLogicalIndices', 'plannedLedIndices',
+    'plannedFireLogicalIndices', 'plannedFireLedIndices', 'ledIndices',
+    'ledLogicalIndices', 'fireLedIndices', 'fireLedLogicalIndices', 'ledStatus',
+    'ledCommandAck', 'ledError', 'ledMappingError', 'physicalLedCount',
+    'arduinoSlotCount', 'arduinoIndexBase', 'source',
+}
+
+
+def validate_hardware_telemetry(data, floorplan, device_id, now=None):
+    """Validate the Pi's USB bridge report before canonicalizing it for the DB.
+
+    The extension is whitelisted: stored telemetry is publicly readable. Planned
+    LED indices and acknowledged commands remain independent of blocked edges.
+    """
+    if set(data) != HARDWARE_FIELDS:
+        raise ValueError('하드웨어 보고 필드가 확정된 규격과 다릅니다.')
+    if data['operationMode'] != 'real':
+        raise ValueError('시뮬레이션 데이터는 실제 장비 관제에 저장할 수 없습니다.')
+    if (data['mappingVersion'] != HARDWARE_SENSOR_VERSION
+            or data['graphMappingVersion'] != HARDWARE_GRAPH_VERSION
+            or data['ledMappingVersion'] != HARDWARE_LED_VERSION):
+        raise ValueError('센서, 지도 또는 LED 매핑 버전이 서버와 다릅니다.')
+    if (data['source'] != 'raspberry-pi' or type(data['physicalLedCount']) is not int
+            or data['physicalLedCount'] != 162 or type(data['arduinoSlotCount']) is not int
+            or data['arduinoSlotCount'] != 163 or type(data['arduinoIndexBase']) is not int
+            or data['arduinoIndexBase'] != 0):
+        raise ValueError('장비 또는 LED 설정이 서버와 다릅니다.')
+    sensors = {s['id']: s for s in floorplan['sensors']}
+    flame = data['flame']
+    if not isinstance(flame, dict) or set(flame) != set(sensors):
+        raise ValueError('센서 11개 전체가 필요합니다.')
+    for sid, value in flame.items():
+        if (not isinstance(value, dict) or set(value) != {'node', 'active', 'connected', 'updatedAt'}
+                or value['node'] != sensors[sid]['node'] or type(value['active']) is not bool
+                or type(value['connected']) is not bool):
+            raise ValueError(f'{sid} 센서 상태 또는 위치가 잘못되었습니다.')
+        if value['updatedAt'] is not None:
+            timestamp(value['updatedAt'])
+    graph = FloorGraph(floorplan)
+    for key, valid in (('blockedNodes', graph.adjacency), ('blockedEdges', graph.edges)):
+        values = data[key]
+        if (not isinstance(values, list) or not all(isinstance(v, str) and v in valid for v in values)
+                or len(set(values)) != len(values)):
+            raise ValueError(f'{key} 형식이 잘못되었습니다.')
+    if any(v['active'] and v['connected'] and v['node'] not in data['blockedNodes'] for v in flame.values()):
+        raise ValueError('화재 센서의 노드가 차단 목록에 없습니다.')
+    status = data['ledStatus']
+    if status not in ('not_running', 'preview', 'off', 'active', 'disconnected', 'error') or type(data['ledCommandAck']) is not bool:
+        raise ValueError('LED 상태 또는 ACK가 잘못되었습니다.')
+    if status == 'active' and not data['ledCommandAck']:
+        raise ValueError('LED active는 Arduino 응답 확인이 필요합니다.')
+    for key in ('ledError', 'ledMappingError'):
+        if data[key] is not None and (not isinstance(data[key], str) or len(data[key]) > 256):
+            raise ValueError(f'{key} 형식이 잘못되었습니다.')
+    pairs = (('plannedLedLogicalIndices','plannedLedIndices'),
+             ('plannedFireLogicalIndices','plannedFireLedIndices'),
+             ('ledLogicalIndices','ledIndices'), ('fireLedLogicalIndices','fireLedIndices'))
+    for logical, wire in pairs:
+        values, slots = data[logical], data[wire]
+        if (not isinstance(values, list) or len(values) > 162
+                or any(type(i) is not int or not 0 <= i < 162 for i in values)
+                or not isinstance(slots, list) or any(type(i) is not int for i in slots)
+                or slots != [i if i < 20 else i + 1 for i in values]):
+            raise ValueError(f'{logical}와 {wire}의 LED 번호 변환이 잘못되었습니다.')
+    if (status != 'active' or not data['ledCommandAck']) and any(data[k] for k in ('ledIndices', 'ledLogicalIndices', 'fireLedIndices', 'fireLedLogicalIndices')):
+        raise ValueError('확인되지 않은 LED 출력을 적용 완료로 보고할 수 없습니다.')
+    route = None
+    if data['routeStatus'] == 'ok':
+        nodes, edges = data['routeNodes'], data['routeEdges']
+        if not isinstance(nodes, list) or len(nodes) < 2 or not isinstance(edges, list):
+            raise ValueError('경로 노드 또는 간선이 잘못되었습니다.')
+        dest = data['destinationNode']
+        if data['routeMode'] not in ('exit', 'fallback') or (data['routeMode'] == 'exit' and data['exitNode'] != dest) or (data['routeMode'] == 'fallback' and data['exitNode'] is not None):
+            raise ValueError('경로 목적지 유형이 잘못되었습니다.')
+        if any(e in data['blockedEdges'] for e in edges) or any(n in data['blockedNodes'] for n in nodes):
+            raise ValueError('경로가 차단된 노드 또는 간선을 통과합니다.')
+        route = {'id': f"pi:{data['sequence']}", 'nodes': nodes, 'edges': edges,
+                 'destinationId': dest}
+        if data['routeCost'] is not None:
+            route['cost'] = data['routeCost']
+    elif (data['routeStatus'] != 'no_route' or data['routeNodes'] != [] or data['routeEdges'] != []
+          or data['exitNode'] is not None or data['destinationNode'] is not None
+          or data['routeCost'] is not None or data['routeMode'] != 'none'):
+        raise ValueError('경로 없음 상태와 경로 정보가 일치하지 않습니다.')
+    start = data['startNode']
+    if start is not None and (not isinstance(start, str) or start not in graph.nodes):
+        raise ValueError('알 수 없는 출발 노드입니다.')
+    if route and start is None:
+        raise ValueError('경로에 출발 노드가 필요합니다.')
+    canonical = {'deviceId': data['deviceId'], 'bootId': data['bootId'],
+                 'sequence': data['sequence'], 'observedAt': data['observedAt'],
+                 'mappingVersion': MAPPING_VERSION,
+                 'flame': {sid: value['active'] for sid, value in flame.items()},
+                 'startNode': start or 'N33', 'route': route,
+                 'led': {'status': 'unknown'}}
+    normalized = validate_telemetry(canonical, floorplan, device_id, now)
+    if route and (normalized['route']['routeMode'] != data['routeMode']
+                  or normalized['route']['destinationType'] != data['destinationType']):
+        raise ValueError('경로 목적지의 유형이 지도와 다릅니다.')
+    normalized['hardware'] = deepcopy(data)
+    return normalized
 
 
 def cloud_floorplan(floorplan):
@@ -141,16 +253,43 @@ def project_state(floorplan, row, events, device_id, stale_seconds=15, now=None,
                            (now - timestamp(row['observed_at'])).total_seconds()) > stale_seconds
     model = SimulationState(floorplan)
     model.set_operation_mode('real')
+    hardware = telemetry.get('hardware') if telemetry else None
     model.start_node = preview_start or (telemetry.get('startNode', 'N33') if telemetry else 'N33')
     for sid, value in model.flame_sensors.items():
-        value.update(active=bool(telemetry and telemetry['flame'].get(sid)), connected=bool(telemetry),
-                     updatedAt=row['observed_at'] if row else None)
+        report = (hardware.get('flame', {}).get(sid, {}) if hardware else {})
+        connected = bool(telemetry) and report.get('connected', True) and not stale
+        active = bool(telemetry and telemetry['flame'].get(sid))
+        value.update(active=active, connected=connected,
+                     latched=active and not connected,
+                     updatedAt=report.get('updatedAt') or (row['observed_at'] if row else None))
+    if hardware:
+        model.manual_blocked_edges = set(hardware.get('blockedEdges', []))
     model._recompute()
     source = 'server_preview' if telemetry else 'none'
-    if telemetry and telemetry.get('route') and preview_start is None:
-        model.route = telemetry['route']
+    if telemetry and preview_start is None and (telemetry.get('route') or hardware):
+        model.route = telemetry.get('route')
         source = 'pi'
     result = model.snapshot()
+    if hardware and preview_start is None:
+        # N33 is only an internal fallback needed to initialize the model. A Pi
+        # that reports no start must not be presented as having selected it.
+        result['startNode'] = hardware['startNode']
+        # The Pi's current graph blocks and last-known danger from an offline
+        # sensor are different facts. Keep both visible; do not let a sensor
+        # disconnect erase its last known fire from the map.
+        reported = set(hardware['blockedNodes'])
+        last_danger = {s['node'] for s in floorplan['sensors']
+                       if result['flameSensors'][s['id']]['active']
+                       and not result['flameSensors'][s['id']]['connected']}
+        result['blockedNodes'] = sorted(reported | last_danger)
+        result['blockedEdges'] = hardware['blockedEdges']
+        if result['route'] and last_danger.intersection(result['route']['nodes']):
+            result['route'] = None
+            result['routeMode'] = 'none'
+            result['fallbackActive'] = False
+            result['selectedExitName'] = result['selectedDestinationName'] = result['selectedDestinationType'] = None
+            result['overallStatus'] = 'no_route'
+            source = 'pi_unverified'
     result['updatedAt'] = received
     result['connections'] = {'pi': bool(row) and not stale, 'server': True}
     result['failSafeActive'] = False  # Do not infer physical fail-safe operation from cloud silence.
@@ -159,17 +298,17 @@ def project_state(floorplan, row, events, device_id, stale_seconds=15, now=None,
         result['route'] = None
         result['routeMode'] = 'none'
         result['selectedExitName'] = result['selectedDestinationName'] = None
-    for value in result['flameSensors'].values():
-        value['connected'] = bool(row) and not stale
-    result['sensorCounts']['offline'] = len(model.flame_sensors) if stale else 0
+    result['sensorCounts']['offline'] = sum(not value['connected'] for value in result['flameSensors'].values())
     result['shutters'] = {sid: {'closed': False, 'connected': False, 'updatedAt': None} for sid in model.shutters}
     equipment = []
     for sensor in floorplan['sensors']:
-        active = result['flameSensors'][sensor['id']]['active']
+        sensor_value = result['flameSensors'][sensor['id']]
+        active = sensor_value['active']
+        sensor_offline = not sensor_value['connected']
         equipment.append({'id': sensor['id'], 'category': '센서', 'name': sensor['name'],
                           'location': sensor['node'], 'value': ('1' if active else '0') if row else '-',
-                          'status': 'offline' if stale else 'danger' if active else 'normal',
-                          'stateLabel': '마지막 수신값 · 통신 끊김' if stale and row else '미수신' if not row else '화재 감지' if active else '정상',
+                          'status': 'offline' if sensor_offline else 'danger' if active else 'normal',
+                          'stateLabel': '마지막 수신값 · 통신 끊김' if sensor_offline and row else '미수신' if not row else '화재 감지' if active else '정상',
                           'lastSeen': row['observed_at'] if row else None})
     result['equipment'] = equipment
     result['events'] = [{'timestamp': e['observed_at'], 'type': e['type'],
@@ -179,5 +318,6 @@ def project_state(floorplan, row, events, device_id, stale_seconds=15, now=None,
     result['cloud'] = {'enabled': True, 'deviceId': device_id, 'hasTelemetry': bool(row), 'stale': stale,
                        'receivedAt': received, 'observedAt': row['observed_at'] if row else None,
                        'sequence': row['sequence'] if row else None, 'mappingVersion': MAPPING_VERSION,
-                       'routeSource': source, 'led': deepcopy(telemetry.get('led') or {'status': 'unknown', 'segments': []}) if telemetry else {'status': 'unknown', 'segments': []}}
+                       'routeSource': source, 'led': deepcopy(telemetry.get('led') or {'status': 'unknown', 'segments': []}) if telemetry else {'status': 'unknown', 'segments': []},
+                       'hardware': deepcopy(hardware) if hardware else None}
     return result

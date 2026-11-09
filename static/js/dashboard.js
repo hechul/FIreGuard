@@ -949,8 +949,8 @@
       dot.setAttribute('cx', p.x + 10 + offset); dot.setAttribute('cy', p.y - 10);
       dot.setAttribute('r', 3.4); dot.setAttribute('class', `sensor-dot flame ${active ? 'danger' : ''}`);
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-      const unconfirmed = state.cloud?.enabled && (!state.cloud.hasTelemetry || state.cloud.stale);
-      title.textContent = `${sensor.id} · ${sensor.name} · ${active ? '화재 감지' : unconfirmed ? '현재 상태 미확인' : '정상'}${unconfirmed && state.cloud.hasTelemetry ? ' · 마지막 수신값' : ''}`;
+      const unconfirmed = state.cloud?.enabled && (!state.cloud.hasTelemetry || state.cloud.stale || !state.flameSensors[sensor.id]?.connected);
+      title.textContent = `${sensor.id} · ${sensor.name} · ${unconfirmed ? (active ? '마지막 화재 보고 · 현재 미확인' : '현재 상태 미확인') : active ? '화재 감지' : '정상'}`;
       dot.appendChild(title); sensorLayer.appendChild(dot);
     });
 
@@ -1106,7 +1106,7 @@
     byId('flameCount').textContent = `${counts.flameActive} / ${counts.flameTotal}`;
     byId('flameStateText').textContent = state.cloud?.enabled && (!state.cloud.hasTelemetry || state.cloud.stale)
       ? (state.cloud.hasTelemetry ? '마지막 수신값 · 현재 상태 미확인' : '센서 수신 대기')
-      : counts.flameActive ? '화재 감지' : '정상 (화재 감지 없음)';
+      : counts.flameActive ? '화재 감지' : counts.offline ? '일부 센서 상태 미확인' : '정상 (화재 감지 없음)';
 
     const flameBox = byId('flameCount').closest('.sensor-metric');
     flameBox.classList.toggle('has-danger', counts.flameActive > 0);
@@ -1206,6 +1206,7 @@
     const routeLabels = {
       server_preview: '서버 계산 경로 미리보기 · Pi의 실제 경로 및 LED 적용을 보장하지 않습니다.',
       pi: 'Pi가 보고한 경로 · LED 출력 결과는 적용 보고에서 별도로 확인합니다.',
+      pi_unverified: 'Pi가 보고한 경로가 마지막 화재 보고와 겹쳐 표시를 중단했습니다. 해당 센서 상태를 확인하세요.',
       none: '장비 경로 보고 대기',
     };
     byId('cloudRouteSource').textContent = routeLabels[cloud.routeSource] || routeLabels.none;
@@ -1213,6 +1214,16 @@
     byId('cloudLedSegments').textContent = (segments.length
       ? `Pi LED 구간 보고: ${segments.map(s => `${s.id} ${s.on ? 'ON' : 'OFF'}${s.color ? ` ${s.color}` : ''}`).join(' · ')}`
       : 'LED 구간 보고 대기') + ' · 실물 LED 구간의 위치 대응은 확인 중입니다.';
+    const hardwareDisplay = window.FireGuardHardwareDisplay?.describe(cloud.hardware);
+    ['cloudLedPlan', 'cloudLedApplied', 'cloudLedMapping'].forEach(id => byId(id).classList.toggle('hidden', !hardwareDisplay));
+    if (hardwareDisplay) {
+      byId('cloudLedStatus').textContent = hardwareDisplay.status + (stale && cloud.hasTelemetry ? ' · 마지막 보고' : '');
+      if (cloud.hardware.ledError) byId('cloudLedStatus').textContent += ` · ${cloud.hardware.ledError}`;
+      byId('cloudLedPlan').textContent = hardwareDisplay.planned;
+      byId('cloudLedApplied').textContent = hardwareDisplay.applied;
+      byId('cloudLedMapping').textContent = hardwareDisplay.note;
+      byId('cloudLedSegments').textContent = 'Pi 계산 경로와 Arduino 명령 결과를 구분해 표시합니다.';
+    }
     document.querySelectorAll('#mapEditor button, #mapEditor input, #mapEditor select, [data-page="mapEditor"], [data-target-page="mapEditor"]').forEach(el => { el.disabled = true; });
   }
 

@@ -1,0 +1,107 @@
+{
+  "deviceId": "pi-01",
+  "bootId": "00000000-0000-0000-0000-000000000001",
+  "sequence": 3,
+  "observedAt": "2026-11-09T13:57:00Z",
+  "mappingVersion": "flame11-5cce6a933e",
+  "ledMappingVersion": "led162-usb163-shift20-dfea4ba7d3",
+  "graphMappingVersion": "graph-7e06ff7ced",
+  "operationMode": "real",
+  "startNode": "N4",
+  "flame": {
+    "FLM-01": {
+      "node": "N20",
+      "active": false,
+      "connected": true,
+      "updatedAt": "2026-11-09T13:57:00Z"
+    },
+    "FLM-02": {
+      "node": "N2",
+      "active": false,
+      "connected": true,
+      "updatedAt": "2026-11-09T13:57:00Z"
+    },
+    "FLM-03": {
+      "node": "N3",
+      "active": false,
+      "connected": true,
+      "updatedAt": "2026-11-09T13:57:00Z"
+    },
+    "FLM-04": {
+      "node": "N4",
+      "active": true,
+      "connected": true,
+      "updatedAt": "2026-11-09T13:57:00Z"
+    },
+    "FLM-05": {
+      "node": "N5",
+      "active": false,
+      "connected": true,
+      "updatedAt": "2026-11-09T13:57:00Z"
+    },
+    "FLM-06": {
+      "node": "N6",
+      "active": false,
+      "connected": true,
+      "updatedAt": "2026-11-09T13:57:00Z"
+    },
+    "FLM-07": {
+      "node": "N7",
+      "active": false,
+      "connected": true,
+      "updatedAt": "2026-11-09T13:57:00Z"
+    },
+    "FLM-08": {
+      "node": "N8",
+      "active": false,
+      "connected": true,
+      "updatedAt": "2026-11-09T13:57:00Z"
+    },
+    "FLM-09": {
+      "node": "N9",
+      "active": false,
+      "connected": true,
+      "updatedAt": "2026-11-09T13:57:00Z"
+    },
+    "FLM-10": {
+      "node": "N10",
+      "active": false,
+      "connected": true,
+      "updatedAt": "2026-11-09T13:57:00Z"
+    },
+    "FLM-11": {
+      "node": "N11",
+      "active": false,
+      "connected": true,
+      "updatedAt": "2026-11-09T13:57:00Z"
+    }
+  },
+  "blockedNodes": [
+    "N4"
+  ],
+  "blockedEdges": [],
+  "routeNodes": [],
+  "routeEdges": [],
+  "exitNode": null,
+  "destinationNode": null,
+  "destinationType": null,
+  "routeCost": null,
+  "routeMode": "none",
+  "routeStatus": "no_route",
+  "plannedLedLogicalIndices": [],
+  "plannedLedIndices": [],
+  "plannedFireLogicalIndices": [],
+  "plannedFireLedIndices": [],
+  "ledIndices": [],
+  "ledLogicalIndices": [],
+  "fireLedIndices": [],
+  "fireLedLogicalIndices": [],
+  "ledStatus": "off",
+  "ledCommandAck": true,
+  "ledError": null,
+  "ledMappingError": null,
+  "physicalLedCount": 162,
+  "arduinoSlotCount": 163,
+  "arduinoIndexBase": 0,
+  "source": "raspberry-pi"
+}
