@@ -108,3 +108,9 @@ html, body { background: var(--bg); color: var(--text); }
 .map-panel > .panel-heading { flex-wrap:wrap; }
 .map-panel > .panel-heading > div:last-child { flex-wrap:wrap; }
 .map-panel > .panel-heading h2 { white-space:nowrap; }
+/* Real device summary is shown in the top bar; these elements remain as
+   hidden hooks so Realtime and simulation logic continue to function. */
+.cloud-live-card[hidden], .system-banner[hidden] { display: none !important; }
+.connection-chip.warning { background:#fffaf0; border-color:#f5d692; }
+.connection-chip.warning .status-dot { background:#d18b00; }
+.connection-chip.warning em { color:#9a6500; }

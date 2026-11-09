@@ -1042,6 +1042,17 @@
     setChip('piChip', actual.connections.pi);
     setChip('cloudChip', actual.connections.server);
     setChip('flaskChip', browserConnected);
+    const deviceChip = byId('deviceStatusChip');
+    deviceChip.classList.toggle('hidden', !cloudConfig.enabled);
+    if (cloudConfig.enabled) {
+      const cloud = actual.cloud || {};
+      const online = browserConnected && cloud.hasTelemetry && !cloud.stale && actual.connections.pi;
+      const label = !browserConnected ? '상태 확인 불가'
+        : !cloud.hasTelemetry ? '수신 대기'
+          : cloud.stale || !actual.connections.pi ? '통신 지연' : '정상';
+      deviceChip.classList.toggle('warning', !online);
+      deviceChip.querySelector('em').textContent = label;
+    }
 
     const fireSwitch = byId('realFireSwitchBtn');
     const pendingRealFire = state.operationMode === 'simulation' && state.realFireDetected;
@@ -1077,6 +1088,9 @@
     let className = state.overallStatus === 'no_route' ? 'no-route' : state.overallStatus;
     if (state.failSafeActive && state.overallStatus === 'normal') className = 'failsafe';
     banner.className = `system-banner ${className}`;
+    // Real telemetry latency is summarized in the header. Keep the simulation
+    // and current fire / route banners intact.
+    banner.hidden = Boolean(state.cloud?.enabled && (!state.cloud.hasTelemetry || state.cloud.stale));
 
     let title = copy.title;
     let description = copy.description;
@@ -1624,6 +1638,11 @@
       } else { connectSocket(); }
     } catch (error) {
       showToast(`초기화 실패: ${error.message}`, true); setBrowserConnection(false);
+      if ((serverCloudMode || cloudConfig.enabled) && !currentState) {
+        byId('deviceStatusChip').classList.remove('hidden');
+        byId('deviceStatusChip').classList.add('warning');
+        byId('deviceStatusChip').querySelector('em').textContent = '상태 확인 불가';
+      }
       window.setTimeout(init, 5000);
     }
   }
