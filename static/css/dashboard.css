@@ -126,10 +126,6 @@ a{color:inherit;text-decoration:none}
 .schematic-base,.overlay-svg{position:absolute;inset:0;width:100%;height:100%}
 .schematic-base{z-index:1}
 .overlay-svg{z-index:3}
-/* The prototype photograph is viewed from the opposite end of the plan.
-   Rotate only the dashboard rendering; graph coordinates and editor stay canonical. */
-#mapStage .schematic-base,#mapStage .overlay-svg{transform:rotate(180deg)}
-#mapStage .schematic-base text,#mapStage .overlay-svg text{transform-box:fill-box;transform-origin:center;transform:rotate(180deg)}
 .plan-bg{fill:#fbfaf7;stroke:#cfd5db;stroke-width:3}
 .plan-corridor{fill:#f6f4ef;stroke:#d8d6d0;stroke-width:1.6}
 .room{stroke:#fff;stroke-width:3}
