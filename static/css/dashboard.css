@@ -875,3 +875,9 @@ a{color:inherit;text-decoration:none}
 .system-banner.device-offline .system-banner-copy strong{color:#9a6500;font-size:30px}
 @media(max-width:1080px){.cloud-live-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.cloud-live-card{padding:14px}.cloud-live-metrics{grid-template-columns:1fr}.cloud-live-heading h2{font-size:15px}}
+
+/* Approximate physical LED runs are a reference overlay, not live output. */
+.prototype-led-section{stroke:#a66ad6;stroke-width:5;stroke-dasharray:3 7;opacity:.8;stroke-linecap:round}
+.prototype-led-label{font-size:9px;font-weight:800;fill:#7339a3;paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round}
+.prototype-overlay-note{margin:8px 2px 4px;color:#69458d;font-size:11px;line-height:1.5}
+#prototypeOverlayBtn[aria-pressed="true"]{background:#f2eafd;color:#66358c;border-color:#c5a5e3}

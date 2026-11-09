@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FireGuard · 영화관 화재 대피 통합 관제 시스템</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css', v='flame-only-20261028') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css', v='prototype-20261109') }}">
   {% if not cloud_enabled %}<script src="/socket.io/socket.io.js"></script>{% endif %}
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -128,6 +128,7 @@
                   <button id="mapView2dBtn" class="active" type="button">2D</button>
                   <button id="mapView3dBtn" type="button">3D</button>
                 </div>
+                <button id="prototypeOverlayBtn" type="button" class="btn ghost" aria-pressed="false">실물 LED 배치 참고</button>
               </div>
             </div>
 
@@ -150,12 +151,14 @@
                   </defs>
                   <g id="edgeLayer"></g>
                   <g id="routeLayer"></g>
+                  <g id="prototypeLedLayer" pointer-events="none"></g>
                   <g id="shutterLayer"></g>
                   <g id="sensorLayer"></g>
                   <g id="nodeLayer"></g>
                   <g id="exitLayer"></g>
                 </svg>
               </div>
+              <p id="prototypeOverlayNote" class="prototype-overlay-note hidden">실물 LED 구간 참고도 · 위치와 방향은 미검증이며 점선은 실제 점등 상태가 아닙니다. LED 62 표시는 N28·N35의 공유 관계만 나타내며 LED의 실제 위치가 아닙니다.</p>
 
               <!-- 3D Map Container (hidden by default; shown on 3D toggle) -->
               <div class="map-stage" id="mapStage3d" style="display:none; position:relative; overflow:hidden; background:#111418; border-color:#2A3441;">
@@ -558,6 +561,7 @@
   <script src="{{ url_for('static', filename='js/map_geometry.js') }}"></script>
   <script src="{{ url_for('static', filename='js/cloud_live.js', v='cloud-20261030') }}"></script>
   <script src="{{ url_for('static', filename='js/cloud_hardware.js', v='cloud-hardware-20261109') }}"></script>
-  <script src="{{ url_for('static', filename='js/dashboard.js', v='cloud-hardware-20261109') }}"></script>
+  <script src="{{ url_for('static', filename='js/prototype_map.js', v='prototype-20261109') }}"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js', v='prototype-20261109') }}"></script>
 </body>
 </html>

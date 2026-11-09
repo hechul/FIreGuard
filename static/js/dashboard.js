@@ -28,6 +28,7 @@
   // 2D / 3D map view state
   let mapViewMode = '2d'; // '2d' | '3d'
   let map3dReady   = false;
+  let prototypeOverlayEnabled = false;
 
   // Map Editor state
   let editorMode = 'node';
@@ -834,6 +835,7 @@
   // ------------------------------------------------------------------ //
   function setMapView(mode) {
     mapViewMode = mode;
+    byId('prototypeOverlayNote').classList.toggle('hidden', !prototypeOverlayEnabled || mode !== '2d');
     const stage2d = byId('mapStage');
     const stage3d = byId('mapStage3d');
     const legend  = byId('map2dLegend');
@@ -871,6 +873,29 @@
     const sensorLayer = byId('sensorLayer');
     const nodeLayer = byId('nodeLayer');
     const exitLayer = byId('exitLayer');
+    const prototypeLayer = byId('prototypeLedLayer');
+    prototypeLayer.innerHTML = '';
+    const prototypeNote = byId('prototypeOverlayNote');
+    prototypeNote.classList.toggle('hidden', !prototypeOverlayEnabled || mapViewMode !== '2d');
+    if (prototypeOverlayEnabled && window.FireGuardPrototypeMap) {
+      const svg = 'http://www.w3.org/2000/svg';
+      window.FireGuardPrototypeMap.sections.forEach((section) => {
+        const line = document.createElementNS(svg, 'line');
+        line.setAttribute('x1', section.line[0][0]); line.setAttribute('y1', section.line[0][1]);
+        line.setAttribute('x2', section.line[1][0]); line.setAttribute('y2', section.line[1][1]);
+        line.setAttribute('class', 'prototype-led-section');
+        const title = document.createElementNS(svg, 'title');
+        title.textContent = `${section.id} · ${section.count}개 · 위치 미검증`;
+        line.appendChild(title); prototypeLayer.appendChild(line);
+      });
+      const anchor = window.FireGuardPrototypeMap.sharedAnchor(floorplan.nodes);
+      if (anchor) {
+        const label = document.createElementNS(svg, 'text');
+        label.setAttribute('x', anchor.x); label.setAttribute('y', anchor.y - 22);
+        label.setAttribute('text-anchor', 'middle'); label.setAttribute('class', 'prototype-led-label');
+        label.textContent = 'N28·N35 → LED 62 공유 (관계)'; prototypeLayer.appendChild(label);
+      }
+    }
     [edgeLayer, routeLayer, shutterLayer, sensorLayer, nodeLayer, exitLayer].forEach((g) => { g.innerHTML = ''; });
 
     const fallbackById = {};
@@ -1446,6 +1471,12 @@
     const btn3d = byId('mapView3dBtn');
     if (btn2d) btn2d.addEventListener('click', () => setMapView('2d'));
     if (btn3d) btn3d.addEventListener('click', () => setMapView('3d'));
+    byId('prototypeOverlayBtn').addEventListener('click', () => {
+      if (mapViewMode !== '2d') setMapView('2d');
+      prototypeOverlayEnabled = !prototypeOverlayEnabled;
+      byId('prototypeOverlayBtn').setAttribute('aria-pressed', String(prototypeOverlayEnabled));
+      if (currentState) renderMap(currentState);
+    });
 
     byId('nodeActionClose').addEventListener('click', closeNodeActionCard);
     byId('selectedFireBtn').addEventListener('click', () => selectedNodeId && safeApi('/api/simulation/node-fire', { nodeId: selectedNodeId, active: true }));
