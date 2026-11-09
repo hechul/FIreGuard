@@ -12,11 +12,17 @@ assert.equal(p.N28.y, p.N35.y);
 assert.equal(JSON.stringify(source), before, 'display projection must not mutate canonical data');
 const room = view.rooms.find(r => r.id === 'toilet1');
 assert(p.N5.x > room.x && p.N5.x < room.x + room.width);
+const room2 = view.rooms.find(r => r.id === 'toilet2');
+assert(Math.abs(room2.x - (room.x + room.width + 22)) < 0.001);
+assert(Math.abs(p.N6.x - p.N29.x) < 0.001, 'toilet 2 must stay aligned with its branch');
+assert(p.N6.x > room2.x && p.N6.x < room2.x + room2.width);
+assert(p.N8.x < p.N29.x && p.N29.x < p.N30.x && p.N30.x < p.N34.x, 'graph junction order is preserved');
 const route = geometry.createRouter(view);
 for (const [a,b] of [['N13','N35'], ['N28','N5']]) {
  const points = route.route(p[a],p[b]);
  assert(points && points.length >= 2, `projected ${a}-${b} route should reach its door`);
  assert(points.every(q => Math.abs(q.x - p.N35.x) < 0.01), `${a}-${b} should follow the shared straight corridor`);
 }
+assert(route.route(p.N29, p.N6), 'toilet 2 branch remains connected');
 assert.equal(view.edges.find(e=>e.id==='E30').weight,source.edges.find(e=>e.id==='E30').weight);
 console.log('PASS: prototype projection aligns both branches without changing graph data');

@@ -337,9 +337,9 @@ const Map3D = (() => {
         emissive: COLORS.node, emissiveIntensity: 0.25,
       });
       const mesh = new THREE.Mesh(geo, mat);
-      // N28 and N35 remain independently selectable although the physical
-      // LED junction is shared. The small visual offsets are not route data.
-      const pickOffset = node.id === 'N28' ? 6 : node.id === 'N35' ? -6 : 0;
+      // These are marker-only offsets: the graph and the LED mapping retain
+      // their own coordinates. N28/N35 share LED 62; N30/N34 do not.
+      const pickOffset = ({ N28: 10, N35: -10, N30: -4, N34: 4 })[node.id] || 0;
       mesh.position.set(bx(node.x) + pickOffset, NODE_R, bz(node.y));
       mesh.castShadow = true;
       _dynamicGroup.add(mesh);
@@ -347,7 +347,8 @@ const Map3D = (() => {
 
       // ID label
       const sp = _makeTextSprite(node.id, '#3182F6', 60);
-      sp.position.set(bx(node.x) + pickOffset, NODE_R * 2 + 8, bz(node.y));
+      const labelHeight = NODE_R * 2 + 8 + ((node.id === 'N28' || node.id === 'N34') ? 12 : 0);
+      sp.position.set(bx(node.x) + pickOffset, labelHeight, bz(node.y));
       _dynamicGroup.add(sp);
     });
   }

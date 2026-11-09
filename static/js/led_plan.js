@@ -8,7 +8,7 @@ window.FireGuardLedPlan = [
   [[45, 567], [535, 567]],      // West / east exits
   [[165, 567], [165, 645]],     // 4DX
   [[165.47, 567], [165.47, 510]], // Toilet 1 shares the 4DX junction
-  [[297, 567], [297, 510]],     // Toilet 2
+  [[265.344, 567], [265.344, 510]], // Toilet 2 display alignment
   [[307, 567], [307, 645]],     // Cinema 2
   [[448, 567], [448, 820]],     // South exit
   [[375, 567], [375, 267]],     // Central corridor

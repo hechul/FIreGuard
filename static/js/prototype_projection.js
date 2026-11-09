@@ -19,6 +19,21 @@
         guide.forEach(p => { p.x += dx; });
       }
     }
+    // The photographed prototype places the two toilets next to each other.
+    // Shift the second room and its branch as a single presentation group;
+    // keep all graph IDs, edge weights and device mapping untouched.
+    const room2 = (view.rooms || []).find(r => r.id === 'toilet2');
+    const toilet2 = byId('N6'), branch2 = byId('N29');
+    if (room2 && toilet2 && branch2) {
+      const oldBranchX = branch2.x;
+      const shift = room.x + room.width + 22 - room2.x;
+      room2.x += shift; toilet2.x += shift; branch2.x += shift;
+      for (const guide of view.corridorGuides || []) {
+        if (guide.length === 2 && guide.every(p => Math.abs(p.x - oldBranchX) < .1)) {
+          guide.forEach(p => { p.x += shift; });
+        }
+      }
+    }
     return view;
   }
   return { project };

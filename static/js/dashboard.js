@@ -1000,11 +1000,11 @@
       }
       const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       // Keep separate graph-node buttons selectable at their shared LED junction.
-      const sharedOffset = node.id === 'N35' ? -7 : node.id === 'N28' ? 7 : 0;
+      const sharedOffset = node.id === 'N35' ? -7 : node.id === 'N28' ? 7 : node.id === 'N8' ? -3 : 0;
       circle.setAttribute('cx', node.x + sharedOffset); circle.setAttribute('cy', node.y); circle.setAttribute('r', fallback ? 8.5 : 6.4);
       circle.setAttribute('class', classes.join(' '));
       const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      label.setAttribute('x', node.x + sharedOffset); label.setAttribute('y', node.y + (node.id === 'N28' ? 18 : -11)); label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('x', node.x + sharedOffset); label.setAttribute('y', node.y + (['N28', 'N29', 'N30'].includes(node.id) ? 18 : -11)); label.setAttribute('text-anchor', 'middle');
       label.setAttribute('class', fallback ? 'fallback-node-label' : 'node-label');
       label.textContent = fallback ? `${node.id} · ${fallback.label}` : node.id;
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title'); title.textContent = `${node.id} · ${node.name}`;
