@@ -83,7 +83,9 @@ const Map3D = (() => {
 
     // Camera
     _camera = new THREE.PerspectiveCamera(42, container.clientWidth / container.clientHeight, 1, 4000);
-    _camera.position.set(0, 550, 480);
+    // View from the opposite side so the 1관, 2관, 4DX관 row appears at
+    // the top, matching the confirmed prototype photograph and 2D view.
+    _camera.position.set(0, 550, -480);
 
     // Controls (OrbitControls from CDN)
     _controls = new THREE.OrbitControls(_camera, _renderer.domElement);
@@ -481,9 +483,9 @@ const Map3D = (() => {
   /* Camera View Presets                                                  */
   /* ------------------------------------------------------------------ */
   const VIEWS = {
-    iso:  [0, 550, 480,   0, 30, 0],
-    top:  [0, 800, 0.1,   0, 0, 0],
-    side: [420, 300, 50,  0, 80, 0],
+    iso:  [0, 550, -480,   0, 30, 0],
+    top:  [0, 800, -0.1,   0, 0, 0],
+    side: [-420, 300, -50,  0, 80, 0],
   };
 
   function setView(name) {

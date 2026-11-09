@@ -126,6 +126,10 @@ a{color:inherit;text-decoration:none}
 .schematic-base,.overlay-svg{position:absolute;inset:0;width:100%;height:100%}
 .schematic-base{z-index:1}
 .overlay-svg{z-index:3}
+/* The prototype photograph is viewed from the opposite end of the plan.
+   Rotate only the dashboard rendering; graph coordinates and editor stay canonical. */
+#mapStage .schematic-base,#mapStage .overlay-svg{transform:rotate(180deg)}
+#mapStage .schematic-base text,#mapStage .overlay-svg text{transform-box:fill-box;transform-origin:center;transform:rotate(180deg)}
 .plan-bg{fill:#fbfaf7;stroke:#cfd5db;stroke-width:3}
 .plan-corridor{fill:#f6f4ef;stroke:#d8d6d0;stroke-width:1.6}
 .room{stroke:#fff;stroke-width:3}
@@ -327,6 +331,7 @@ a{color:inherit;text-decoration:none}
 .map-node.fallback-node{fill:#fff7e8;stroke:#f59f00;stroke-width:3}
 .map-node.fallback-node.descender{fill:#fff0e5;stroke:#ff7a21}
 .map-node.fallback-node.active-destination{filter:drop-shadow(0 0 7px rgba(245,159,0,.75));stroke-width:5}
+.map-node.blocked:is(.map-node){fill:var(--danger);stroke:#b22633;stroke-width:3;filter:none}
 .fallback-node-label{fill:#a45b00;font-size:8px;font-weight:900;paint-order:stroke;stroke:#fff7e8;stroke-width:3px}
 .fallback-notice{margin-top:10px;padding:11px 12px;border-radius:14px;display:flex;flex-direction:column;gap:3px;font-size:9px;border:1px solid #ffd39a;background:#fff7e8;color:#9a5b00}
 .fallback-notice strong{font-size:10px}

@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FireGuard · 영화관 화재 대피 통합 관제 시스템</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css', v='prototype-20261109') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css', v='prototype-photo-20261109') }}">
   {% if not cloud_enabled %}<script src="/socket.io/socket.io.js"></script>{% endif %}
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="{{ url_for('static', filename='js/led_plan.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/map3d.js', v='orientation-20261104') }}"></script>
+  <script src="{{ url_for('static', filename='js/map3d.js', v='prototype-photo-20261109') }}"></script>
 </head>
 <body>
   <div class="app-shell">
