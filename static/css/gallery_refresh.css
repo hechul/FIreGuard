@@ -1,0 +1,160 @@
+/* FireGuard · Apple-inspired bento control room. Presentation only; operational states and
+   map geometry are intentionally left to their existing renderers. */
+:root {
+  --bg:#f5f5f7;
+  --surface:#fff;
+  --surface-2:#f5f5f7;
+  --surface-3:#ebebed;
+  --text:#1d1d1f;
+  --text-2:#515154;
+  --muted:#6e6e73;
+  --line:#e8e8ed;
+  --line-strong:#d2d2d7;
+  --blue:#0066ee;
+  --blue-deep:#0050c8;
+  --blue-soft:#eaf3ff;
+  --shadow:0 8px 28px rgba(37,31,64,.045);
+  --shadow-soft:0 2px 10px rgba(37,31,64,.035);
+}
+html,body,.app-shell { background:var(--bg); }
+.sidebar { background:#fff; border-right:1px solid #eae8ef; }
+.brand-row { padding-top:9px; padding-bottom:25px; }
+.brand-mark { border-radius:13px; background:#1d1d1f; box-shadow:none; }
+.brand-copy strong { letter-spacing:-.04em; font-size:16px; }
+.brand-copy span { color:#898592; letter-spacing:.01em; }
+.sidebar-toggle,.sidebar-mobile-toggle { background:#f4f3f8; color:#676174; }
+.sidebar-group-toggle { text-transform:none; color:#85808d; letter-spacing:.025em; }
+.nav-list { gap:5px; }
+.nav-item { min-height:52px; border:1px solid transparent; border-radius:12px; color:#5d5967; }
+.nav-item:hover { background:#f7f6fb; color:#332c47; }
+.nav-item.active { color:#0066cc; border-color:#dce9fc; background:#edf4ff; }
+.nav-item.active small { color:#748cae; }
+.nav-icon svg { stroke-width:1.75; }
+.sidebar-footer { border-color:#eeecf1; }
+.main-area { padding-left:32px; padding-right:32px; }
+.topbar { min-height:96px; gap:22px; border-color:#e9e6ef; }
+.eyebrow,.panel-kicker,.tiny-label { color:#918b9b; font-size:10px; letter-spacing:.09em; font-weight:800; }
+.topbar h1 { color:#191823; font-size:24px; font-weight:800; letter-spacing:-.045em; }
+.topbar-right { gap:8px; }
+.connection-chip { background:#fff; border:1px solid #e9e7ed; border-radius:10px; padding:8px 11px; min-height:35px; }
+.connection-chip b { color:#55505d; }
+.connection-chip.off { background:#fff5f5; border-color:#f4d9dc; }
+.connection-chip.warning { background:#fff9ec; border-color:#f0dfba; }
+.mode-toggle { background:#eeecf3; border:1px solid #e9e7ef; border-radius:11px; }
+.mode-toggle button { color:#777181; border-radius:8px; font-weight:800; }
+.mode-toggle button.active { color:#fff; background:linear-gradient(120deg,#0066ee,#7955e8); box-shadow:0 2px 6px rgba(82,60,174,.2); }
+.real-fire-switch { border-radius:10px; }
+.page { padding-top:24px; }
+.dashboard-grid { gap:18px; }
+.dashboard-side { gap:16px; }
+.panel,.page-header-card { background:#fff; border:1px solid #ebe9ef; border-radius:24px; box-shadow:0 5px 24px rgba(0,0,0,.025); }
+.page-header-card { padding:28px; margin-bottom:18px; }
+.page-header-card h2 { font-weight:800; letter-spacing:-.045em; }
+.page-header-card p { color:#777280; }
+.page-panel,.control-panel { padding:24px; }
+.panel-heading { align-items:flex-start; gap:16px; margin-bottom:18px; }
+.panel-heading h2 { font-weight:800; font-size:19px; letter-spacing:-.04em; }
+.panel-heading.compact h2 { font-size:16px; }
+.map-panel { padding:24px; }
+.map-panel > .panel-heading { flex-wrap:wrap; }
+.map-panel > .panel-heading > div:last-child { flex-wrap:wrap; }
+.map-stage { border-color:#e7e3ec; border-radius:14px; background:#faf9f6; box-shadow:none; }
+.map-summary-row { gap:10px; }
+.map-summary-row div,.response-item { background:#f7f7fa; border:1px solid #f0eff3; border-radius:13px; }
+.map-summary-row div { padding:13px; }
+.map-summary-row span,.response-item span,.sensor-metric span { color:#807a89; font-size:11px; }
+.map-summary-row strong,.response-item strong { color:#262330; }
+.response-item { padding:16px; }
+.status-card,.sensor-card,.scenario-card,.qr-mini-card,.log-mini-card { padding:21px; }
+.system-banner { border-radius:17px; padding:22px 24px; box-shadow:none; }
+.system-banner.normal { background:#f2faf7; border-color:#cfece0; }
+.system-banner.normal .system-banner-icon { background:#dff5ea; }
+/* Alert visibility is deliberate: use solid contrast and keep text red. */
+.system-banner.fire,.system-banner.no-route { background:#fff3f3; border-color:#efafb4; }
+.system-banner.fire .system-banner-icon,.system-banner.no-route .system-banner-icon { background:#ffe2e4; color:#cb303e; }
+.system-banner.fire .system-banner-copy strong,.system-banner.no-route .system-banner-copy strong { color:#c62e3c; }
+.system-banner.warning,.system-banner.device-offline,.system-banner.sensor-fault { background:#fffbf0; border-color:#f1ddb1; }
+.system-banner-message strong { line-height:1.5; }
+.sensor-metric { border-radius:14px; background:#f7f7fa; }
+.sensor-metric.has-danger { background:#fff0f1; }
+.sensor-metric.has-warning { background:#fff7e8; }
+.sensor-row { border-color:#eeecf1; }
+.scenario-btn { border:1px solid #eceaf1; border-radius:13px; background:#f8f8fb; }
+.scenario-btn:hover { background:#edf5ff; color:#0050c8; }
+.scenario-btn.safe { background:#eaf3ff; color:#0066cc; }
+.scenario-lab { border-color:#e9e6ef; background:#fbfafd; border-radius:13px; }
+.scenario-lab summary > strong,.scenario-group-title > span { color:#0066cc; background:#eaf3ff; }
+.scenario-compact { border-color:#e9e7ef; border-radius:10px; }
+.scenario-compact:hover { background:#f3f8ff; border-color:#c5dbf9; }
+.scenario-compact i { color:#0066cc; }
+.scenario-explanation { background:#f2f7ff; border-color:#dce9fc; }
+.scenario-explanation span { color:#0066cc; }
+.btn,.toolbar input,.toolbar select,.control-block select { border-radius:10px; }
+.btn.primary { background:linear-gradient(120deg,#0066ee,#7955e8); color:white; }
+.btn.primary:hover:not(:disabled) { background:#0056c9; }
+.btn.secondary { background:#f1f0f5; color:#514b5b; }
+.btn.ghost { border-color:#e7e5ec; color:#5e5768; }
+.btn.danger { background:#fff0f1; color:#b52938; }
+.btn.warning { background:#fff2df; color:#a05d16; }
+.btn:focus-visible,.nav-item:focus-visible,.mode-toggle button:focus-visible,.text-btn:focus-visible { outline-color:#a9caff; }
+.toolbar input,.toolbar select,.control-block select { background:#faf9fc; border-color:#e6e4ec; }
+.toolbar input:focus,.toolbar select:focus,.control-block select:focus { border-color:#8bbaf4; box-shadow:0 0 0 3px rgba(0,102,238,.12); }
+.equipment-table th { background:#f9f8fb; color:#777180; }
+.equipment-table td { border-color:#f0eef3; }
+.event-row { border-color:#efedf2; }
+.event-count,.text-btn,.qr-mini-body a { color:#0066cc; }
+.qr-mini-body img,.qr-card-large img { border-color:#eae8ef; border-radius:11px; }
+.phone-frame { border-color:#272331; box-shadow:0 16px 36px rgba(33,27,51,.1); }
+.toast { background:#24202d; }
+@media (max-width:1400px) { .main-area { padding-left:24px; padding-right:24px; } }
+@media (max-width:760px) {
+  .main-area { padding-left:14px; padding-right:14px; }
+  .topbar { min-height:0; }
+  .page { padding-top:16px; }
+  .page-header-card { padding:19px; }
+  .map-panel,.page-panel,.control-panel { padding:16px; }
+  .system-banner { padding:17px; }
+  .status-card,.sensor-card,.scenario-card,.qr-mini-card,.log-mini-card { padding:17px; }
+}
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto !important; } }
+
+/* Bento rhythm: a dominant map and supporting cards of different sizes. */
+body { font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Apple SD Gothic Neo","Noto Sans KR",sans-serif; }
+.panel,.page-header-card { border-radius:24px; }
+.page-header-card h2,.topbar h1,.panel-heading h2 { color:#1d1d1f; font-weight:800; }
+.page-header-card h2 { font-size:28px; }
+.map-panel { padding:26px; }
+.status-card,.sensor-card,.scenario-card,.qr-mini-card,.log-mini-card { padding:24px; }
+.map-summary-row div,.response-item,.sensor-metric { border-radius:18px; }
+.nav-item.active { border-color:transparent; background:#1d1d1f; color:#fff; }
+.nav-item.active small { color:#c9c9ce; }
+.mode-toggle button.active { background:linear-gradient(115deg,#0066ee,#7955e8); color:#fff; }
+.system-banner.fire,.system-banner.no-route { border:1px solid #efaeb6; background:#fff1f2; }
+.system-banner.fire .system-banner-copy strong,.system-banner.no-route .system-banner-copy strong { color:#ba2737; }
+.connection-chip.warning { background:#fff9ec; border-color:#f0dfba; }
+@media(max-width:760px) { .map-panel { padding:16px; } .status-card,.sensor-card,.scenario-card,.qr-mini-card,.log-mini-card { padding:18px; } .page-header-card h2 { font-size:22px; } }
+/* Keep the map dominant; at wide desktop sizes, secondary cards form the
+   asymmetrical bento row while scenario and supporting cards span both. */
+@media (min-width:1600px) {
+  .dashboard-grid { grid-template-columns:minmax(700px,1.65fr) minmax(500px,1fr); gap:16px; }
+  .dashboard-side { grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+  .dashboard-side .scenario-card,.dashboard-side .lower-side-grid { grid-column:1 / -1; }
+  .dashboard-side .response-grid { grid-template-columns:1fr; }
+}
+@supports ((-webkit-background-clip:text) or (background-clip:text)) {
+  .topbar h1 {
+    background:linear-gradient(105deg,#0759d0,#7250ce);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  }
+}
+@media (forced-colors:active) {
+  .topbar h1 { background:none; -webkit-text-fill-color:CanvasText; }
+}
+@media (max-width:760px) {
+  .topbar { flex-direction:column; align-items:stretch; gap:14px; }
+  .topbar-title,.topbar-right { min-width:0; width:100%; }
+  .topbar-right { justify-content:flex-start; }
+  .topbar-right .connection-chip b { display:inline; }
+  .mode-controls { flex-wrap:wrap; max-width:100%; }
+  .real-fire-switch { white-space:normal; max-width:100%; }
+}
