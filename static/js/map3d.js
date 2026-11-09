@@ -330,6 +330,7 @@ const Map3D = (() => {
     (_floorplan.fallbackDestinations || []).forEach(f => { fallbackById[f.id] = f; });
 
     (_floorplan.nodes || []).forEach(node => {
+      if (window.FireGuardNodeGroups && window.FireGuardNodeGroups.displayId(node.id) !== node.id) return;
       const isFallback = Boolean(fallbackById[node.id]);
       const geo = new THREE.SphereGeometry(isFallback ? NODE_R * 1.3 : NODE_R, 18, 12);
       const mat = new THREE.MeshStandardMaterial({
@@ -337,18 +338,14 @@ const Map3D = (() => {
         emissive: COLORS.node, emissiveIntensity: 0.25,
       });
       const mesh = new THREE.Mesh(geo, mat);
-      // These are marker-only offsets: the graph and the LED mapping retain
-      // their own coordinates. N28/N35 share LED 62; N30/N34 do not.
-      const pickOffset = ({ N28: 10, N35: -10, N30: -4, N34: 4 })[node.id] || 0;
-      mesh.position.set(bx(node.x) + pickOffset, NODE_R, bz(node.y));
+      mesh.position.set(bx(node.x), NODE_R, bz(node.y));
       mesh.castShadow = true;
       _dynamicGroup.add(mesh);
       pool.nodes[node.id] = mesh;
 
       // ID label
       const sp = _makeTextSprite(node.id, '#3182F6', 60);
-      const labelHeight = NODE_R * 2 + 8 + ((node.id === 'N28' || node.id === 'N34') ? 12 : 0);
-      sp.position.set(bx(node.x) + pickOffset, labelHeight, bz(node.y));
+      sp.position.set(bx(node.x), NODE_R * 2 + 8, bz(node.y));
       _dynamicGroup.add(sp);
     });
   }
@@ -449,8 +446,9 @@ const Map3D = (() => {
     (_floorplan.fallbackDestinations || []).forEach(f => { fallbackById[f.id] = f; });
 
     Object.entries(pool.nodes).forEach(([nid, mesh]) => {
-      const blocked = state.blockedNodes.includes(nid);
-      const isStart = state.startNode === nid;
+      const members = window.FireGuardNodeGroups?.members(nid) || [nid];
+      const blocked = members.some(id => state.blockedNodes.includes(id));
+      const isStart = members.includes(state.startNode);
       const isFallback = Boolean(fallbackById[nid]);
       let c = COLORS.node;
       if (blocked)    c = COLORS.nodeDanger;

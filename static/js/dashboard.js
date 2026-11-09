@@ -986,28 +986,31 @@
 
 
     displayPlan.nodes.forEach((node) => {
+      const groupModel = window.FireGuardNodeGroups;
+      if (groupModel && groupModel.displayId(node.id) !== node.id) return;
+      const groupIds = groupModel ? groupModel.members(node.id) : [node.id];
       const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       group.setAttribute('role', 'button'); group.setAttribute('tabindex', '0');
-      const blocked = state.blockedNodes.includes(node.id);
+      const blocked = groupIds.some(id => state.blockedNodes.includes(id));
       const classes = ['map-node'];
       const fallback = fallbackById[node.id];
       if (blocked) classes.push('blocked');
-      if (state.startNode === node.id) classes.push('start');
-      if (selectedNodeId === node.id) classes.push('selected');
+      if (groupIds.includes(state.startNode)) classes.push('start');
+      if (groupIds.includes(selectedNodeId)) classes.push('selected');
       if (fallback) {
         classes.push('fallback-node', fallback.type === 'descender' ? 'descender' : 'toilet');
         if (state.route?.destinationId === node.id) classes.push('active-destination');
       }
       const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       // Keep separate graph-node buttons selectable at their shared LED junction.
-      const sharedOffset = node.id === 'N35' ? -7 : node.id === 'N28' ? 7 : node.id === 'N8' ? -3 : 0;
+      const sharedOffset = 0;
       circle.setAttribute('cx', node.x + sharedOffset); circle.setAttribute('cy', node.y); circle.setAttribute('r', fallback ? 8.5 : 6.4);
       circle.setAttribute('class', classes.join(' '));
       const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      label.setAttribute('x', node.x + sharedOffset); label.setAttribute('y', node.y + (['N28', 'N29', 'N30'].includes(node.id) ? 18 : -11)); label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('x', node.x + sharedOffset); label.setAttribute('y', node.y + (['N29', 'N30'].includes(node.id) ? 18 : -11)); label.setAttribute('text-anchor', 'middle');
       label.setAttribute('class', fallback ? 'fallback-node-label' : 'node-label');
       label.textContent = fallback ? `${node.id} · ${fallback.label}` : node.id;
-      const title = document.createElementNS('http://www.w3.org/2000/svg', 'title'); title.textContent = `${node.id} · ${node.name}`;
+      const title = document.createElementNS('http://www.w3.org/2000/svg', 'title'); title.textContent = `${node.id} · ${node.name}${groupIds.length > 1 ? ` (포함: ${groupIds.join(', ')})` : ''}`;
       group.append(circle, label, title);
       group.addEventListener('click', () => selectNode(node.id));
       group.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectNode(node.id); } });
@@ -1287,6 +1290,20 @@
       card.classList.add('hidden'); return;
     }
     const sensors = floorplan.sensors.filter((s) => s.node === selectedNodeId);
+    const groupIds = window.FireGuardNodeGroups ? window.FireGuardNodeGroups.members(selectedNodeId) : [selectedNodeId];
+    const groupLabel = byId('selectedNodeGroupLabel');
+    const groupSelect = byId('selectedNodeGroup');
+    groupLabel.classList.toggle('hidden', groupIds.length < 2);
+    groupSelect.replaceChildren();
+    groupIds.forEach((id) => {
+      const member = floorplan.nodes.find((n) => n.id === id);
+      if (!member) return;
+      const option = document.createElement('option');
+      option.value = id;
+      option.textContent = `${id} · ${member.name}`;
+      option.selected = id === selectedNodeId;
+      groupSelect.appendChild(option);
+    });
     byId('selectedFireBtn').disabled = sensors.length === 0;
     byId('selectedClearBtn').disabled = sensors.length === 0;
     byId('selectedNodeTitle').textContent = `${node.id} · ${node.name}`;
@@ -1486,6 +1503,7 @@
     });
 
     byId('nodeActionClose').addEventListener('click', closeNodeActionCard);
+    byId('selectedNodeGroup').addEventListener('change', (event) => selectNode(event.target.value));
     byId('selectedFireBtn').addEventListener('click', () => selectedNodeId && safeApi('/api/simulation/node-fire', { nodeId: selectedNodeId, active: true }));
     byId('selectedClearBtn').addEventListener('click', () => selectedNodeId && safeApi('/api/simulation/node-fire', { nodeId: selectedNodeId, active: false }));
     byId('selectedStartBtn').addEventListener('click', () => selectedNodeId && safeApi('/api/simulation/start-node', { nodeId: selectedNodeId }));

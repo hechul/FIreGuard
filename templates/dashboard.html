@@ -11,7 +11,7 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="{{ url_for('static', filename='js/led_plan.js', v='toilet-layout-20261109') }}"></script>
   <script src="{{ url_for('static', filename='js/prototype_projection.js', v='toilet-layout-20261109') }}"></script>
-  <script src="{{ url_for('static', filename='js/map3d.js', v='toilet-layout-20261109') }}"></script>
+  <script src="{{ url_for('static', filename='js/map3d.js', v='node-groups-20261109') }}"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -177,6 +177,7 @@
                 <button type="button" id="nodeActionClose" class="icon-btn" aria-label="닫기">×</button>
                 <span class="tiny-label">SELECTED NODE</span>
                 <strong id="selectedNodeTitle">-</strong>
+                <label id="selectedNodeGroupLabel" class="hidden">표시된 지점의 노드 선택 <select id="selectedNodeGroup"></select></label>
                 <p id="selectedNodeSensors">-</p>
                 <div class="node-action-buttons">
                   <button id="selectedFireBtn" type="button" class="btn danger simulation-only">🔥 화재 발생</button>
@@ -562,7 +563,8 @@
   <script src="{{ url_for('static', filename='js/map_geometry.js') }}"></script>
   <script src="{{ url_for('static', filename='js/cloud_live.js', v='cloud-20261030') }}"></script>
   <script src="{{ url_for('static', filename='js/cloud_hardware.js', v='cloud-hardware-20261109') }}"></script>
+  <script src="{{ url_for('static', filename='js/node_groups.js', v='node-groups-20261109') }}"></script>
   <script src="{{ url_for('static', filename='js/prototype_map.js', v='toilet-layout-20261109') }}"></script>
-  <script src="{{ url_for('static', filename='js/dashboard.js', v='toilet-layout-20261109') }}"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js', v='node-groups-20261109') }}"></script>
 </body>
 </html>
