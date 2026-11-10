@@ -22,6 +22,7 @@ MAPPING_VERSION = CONFIG['mappingVersion']
 HARDWARE_SENSOR_VERSION = 'flame11-5cce6a933e'
 HARDWARE_GRAPH_VERSION = 'graph-7e06ff7ced'
 HARDWARE_LED_VERSION = 'led162-usb163-shift20-dfea4ba7d3'
+HARDWARE_LED_VERSIONS = {HARDWARE_LED_VERSION, 'led162-usb163-shift20-da2de217fd'}
 
 HARDWARE_FIELDS = {
     'deviceId', 'bootId', 'sequence', 'observedAt', 'mappingVersion',
@@ -48,7 +49,8 @@ def validate_hardware_telemetry(data, floorplan, device_id, now=None):
         raise ValueError('시뮬레이션 데이터는 실제 장비 관제에 저장할 수 없습니다.')
     if (data['mappingVersion'] != HARDWARE_SENSOR_VERSION
             or data['graphMappingVersion'] != HARDWARE_GRAPH_VERSION
-            or data['ledMappingVersion'] != HARDWARE_LED_VERSION):
+            or not isinstance(data['ledMappingVersion'], str)
+            or data['ledMappingVersion'] not in HARDWARE_LED_VERSIONS):
         raise ValueError('센서, 지도 또는 LED 매핑 버전이 서버와 다릅니다.')
     if (data['source'] != 'raspberry-pi' or type(data['physicalLedCount']) is not int
             or data['physicalLedCount'] != 162 or type(data['arduinoSlotCount']) is not int

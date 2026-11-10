@@ -21,6 +21,12 @@ def sample(name):
 
 
 class BridgeContractTest(CloudApiTest):
+    def test_nov10_measured_led_version_is_accepted(self):
+        data = sample('01_REAL_NORMAL.json')
+        data['ledMappingVersion'] = 'led162-usb163-shift20-da2de217fd'
+        response = self.post(data)
+        self.assertEqual(response.status_code, 200, response.json)
+
     def test_sender_examples_and_real_screen(self):
         for index, name in enumerate(('01_REAL_NORMAL.json', '02_REAL_FIRE_ROUTE_ACK.json',
                                       '03_REAL_NO_ROUTE.json', '04_REAL_ARDUINO_DISCONNECTED.json',
