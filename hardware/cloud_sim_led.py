@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Opt-in three-second Pi/Uno lab test; separate from REAL telemetry.
 
-Requires the Pi guard wrapper and exclusive access to the Uno. This is a
-prototype demonstration, not a life-safety controller or optical LED check.
+Requires exclusive access to the Uno. By default also requires the Pi guard
+wrapper; the explicitly opted-in demo-only mode does not monitor real sensors.
+This is a prototype demonstration, not a life-safety controller or optical LED check.
 """
 from __future__ import annotations
 import argparse
@@ -26,6 +27,13 @@ class GuardError(RuntimeError):
     pass
 
 
+def label_demo_result(result, demo_no_sensors):
+    if demo_no_sensors:
+        result['safetyMode'] = 'simulation_only'
+        result['message'] = '모형 시연 · 실제 센서 감시 안 함 · ' + result['message']
+    return result
+
+
 def ensure_safe(local, expires_at):
     if datetime.now(timezone.utc) >= expires_at:
         raise GuardError('시험 요청 만료')
@@ -38,6 +46,20 @@ def ensure_safe(local, expires_at):
     if status.get('ready') is not True:
         reason = status.get('reason')
         raise GuardError(str(reason)[:160] if isinstance(reason, str) and reason else '실제 센서 감시 준비 안 됨')
+
+
+def ensure_demo_safe(local, expires_at):
+    """Check local SIM state only; this does not establish real sensor health."""
+    if datetime.now(timezone.utc) >= expires_at:
+        raise GuardError('시험 요청 만료')
+    try:
+        state = request(local + '/api/state', timeout=0.3)
+    except Exception:
+        raise GuardError('Pi 로컬 시뮬레이션 연결 실패') from None
+    if not isinstance(state, dict) or state.get('operationMode') != 'simulation':
+        raise GuardError('Pi 로컬 서버가 SIMULATION 모드가 아님')
+    if state.get('realFireDetected') is not False:
+        raise GuardError('로컬 서버에 실제 화재가 보고되었거나 상태를 확인할 수 없음')
 
 
 def plan(command):
@@ -129,11 +151,11 @@ class GuardedUno:
             self.lock.close(); self.lock = None
 
 
-def execute(command, local, port, uno_factory=GuardedUno, seconds=3):
+def execute(command, local, port, uno_factory=GuardedUno, seconds=3, *, demo_no_sensors=False):
     expires = validate_command(command)
     if not 0 < seconds <= 3:
         raise ValueError('시험 시간은 최대 3초')
-    check = lambda: ensure_safe(local, expires)
+    check = lambda: (ensure_demo_safe if demo_no_sensors else ensure_safe)(local, expires)
     check()
     route = plan(command)
     nodes, edges, path, red = route['nodes'], route['edges'], route['path'], route['red']
@@ -167,19 +189,20 @@ def execute(command, local, port, uno_factory=GuardedUno, seconds=3):
             finally:
                 uno.close()
     result = {'routeNodes': nodes, 'routeEdges': edges, 'routeStatus': route_status,
-              'ledCommandAck': ack, 'stopCommandAck': stop_ok}
+              'ledCommandAck': ack, 'stopCommandAck': stop_ok,
+              'safetyMode': 'simulation_only' if demo_no_sensors else 'sensor_guarded'}
     if uno is None:
-        return {**result, 'status':'rejected', 'message':'출력 전 중단: ' + (interrupted or 'Arduino 연결 실패')}
+        return label_demo_result({**result, 'status':'rejected', 'message':'출력 전 중단: ' + (interrupted or 'Arduino 연결 실패')}, demo_no_sensors)
     if not stop_ok:
-        return {**result, 'status':'failed', 'message':'STOP 응답 미확인; 물리 전원 확인 필요'}
+        return label_demo_result({**result, 'status':'failed', 'message':'STOP 응답 미확인; 물리 전원 확인 필요'}, demo_no_sensors)
     if interrupted:
-        return {**result, 'status':'failed', 'message':'시험 중단: ' + interrupted}
+        return label_demo_result({**result, 'status':'failed', 'message':'시험 중단: ' + interrupted}, demo_no_sensors)
     if route_status == 'no_route':
-        return {**result, 'status':'completed', 'message':'안전 경로 없음; 화재 빨강 표시 명령과 STOP 응답 확인; 실물 발광 여부 미확인'}
-    return {**result, 'status':'completed', 'message':'Uno FLOW 및 STOP 응답 확인; 실물 발광 여부 미확인'}
+        return label_demo_result({**result, 'status':'completed', 'message':'안전 경로 없음; 화재 빨강 표시 명령과 STOP 응답 확인; 실물 발광 여부 미확인'}, demo_no_sensors)
+    return label_demo_result({**result, 'status':'completed', 'message':'Uno FLOW 및 STOP 응답 확인; 실물 발광 여부 미확인'}, demo_no_sensors)
 
 
-def poll_once(cloud, token, local, port, warming_up):
+def poll_once(cloud, token, local, port, warming_up, *, demo_no_sensors=False):
     command = request(cloud + '/api/hardware/sim-command', token=token).get('command')
     if command:
         if warming_up:
@@ -188,10 +211,12 @@ def poll_once(cloud, token, local, port, warming_up):
                        'ledCommandAck':False, 'stopCommandAck':False}
         else:
             try:
-                outcome = execute(command, local, port)
+                outcome = execute(command, local, port, demo_no_sensors=demo_no_sensors)
             except Exception as exc:
                 outcome = {'status':'rejected', 'message':str(exc)[:240], 'routeNodes':[],
                            'routeEdges':[], 'routeStatus':'unknown', 'ledCommandAck':False, 'stopCommandAck':False}
+        if demo_no_sensors and outcome.get('safetyMode') != 'simulation_only':
+            label_demo_result(outcome, True)
         report_result(cloud, token, command, outcome)
 
 
@@ -201,6 +226,8 @@ def main():
     parser.add_argument('--local-url', default='http://127.0.0.1:5000')
     parser.add_argument('--port', required=True)
     parser.add_argument('--enable-lab-led', action='store_true')
+    parser.add_argument('--demo-no-sensors', action='store_true',
+                        help='감독하에 모형 시연 전용: 실제 센서 수집 확인 없이 LED 시험')
     args = parser.parse_args()
     cloud, local = args.cloud_url.rstrip('/'), args.local_url.rstrip('/')
     cp, lp = urlparse(cloud), urlparse(local)
@@ -211,6 +238,8 @@ def main():
     token = os.environ.get('FIREGUARD_DEVICE_TOKEN','')
     if not args.enable_lab_led or len(token) < 32:
         parser.error('--enable-lab-led 및 장치 토큰이 필요합니다')
+    if args.demo_no_sensors:
+        print('모형 시연 전용: 실제 센서 연결·화재 감시를 보장하지 않습니다.', flush=True)
     print('반드시 dry-run과 다른 LED 프로그램을 종료하세요.', flush=True)
     print('31초 준비 중: 준비 완료 전에는 웹에서 요청하지 마세요.', flush=True)
     warmup_until = time.monotonic() + 31
@@ -223,7 +252,7 @@ def main():
                 ready_announced = True
             # DB commands expire after 30 seconds. Requests already visible
             # during warm-up are discarded; the operator must wait for ready.
-            poll_once(cloud, token, local, args.port, warming_up)
+            poll_once(cloud, token, local, args.port, warming_up, demo_no_sensors=args.demo_no_sensors)
         except KeyboardInterrupt:
             return 0
         except Exception as exc:

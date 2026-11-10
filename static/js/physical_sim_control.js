@@ -77,7 +77,8 @@
       const led = result.ledCommandAck === true
         ? `Uno 점등 명령 응답 확인 · ${result.stopCommandAck === true ? 'STOP 응답 확인' : 'STOP 응답 미확인'} · 실제 발광 미확인`
         : 'LED 점등 명령 응답 없음';
-      status.textContent = `${states[command.status] || command.status || '상태 확인 중'} · ${led} · ${route}` +
+      const mode = result.safetyMode === 'simulation_only' ? '모형 시연 · 실제 센서 감시 아님 · ' : '';
+      status.textContent = `${states[command.status] || command.status || '상태 확인 중'} · ${mode}${led} · ${route}` +
         (result.message ? ` · ${result.message}` : command.error ? ` · ${command.error}` : '');
     }
     send.addEventListener('click', async () => {

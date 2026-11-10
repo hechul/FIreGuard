@@ -96,4 +96,50 @@ class LedBridgeTest(unittest.TestCase):
         with self.assertRaisesRegex(led.GuardError,'센서 미수신'):
             led.ensure_safe('http://localhost:5000',datetime.now(timezone.utc)+timedelta(seconds=30))
 
+    def test_demo_checks_sim_mode_and_reported_real_fire(self):
+        expires = datetime.now(timezone.utc) + timedelta(seconds=30)
+        with patch('hardware.cloud_sim_led.request', return_value={'operationMode':'simulation','realFireDetected':False}) as req:
+            led.ensure_demo_safe('http://localhost:5000', expires)
+            self.assertEqual(req.call_args.args[0], 'http://localhost:5000/api/state')
+        for snapshot in ({'operationMode':'real','realFireDetected':False},
+                         {'operationMode':'simulation','realFireDetected':True},
+                         {'operationMode':'simulation'}, None):
+            with self.subTest(snapshot=snapshot), patch('hardware.cloud_sim_led.request', return_value=snapshot):
+                with self.assertRaises(led.GuardError):
+                    led.ensure_demo_safe('http://localhost:5000', expires)
+        with patch('hardware.cloud_sim_led.request', side_effect=OSError):
+            with self.assertRaises(led.GuardError):
+                led.ensure_demo_safe('http://localhost:5000', expires)
+        with self.assertRaises(led.GuardError):
+            led.ensure_demo_safe('http://localhost:5000', datetime.now(timezone.utc)-timedelta(seconds=1))
+
+    @patch('hardware.cloud_sim_led.plan',return_value={'nodes':['N4','N2'],'edges':['E01'],'path':[1,2,3],'red':[4],'routeStatus':'ok'})
+    @patch('hardware.cloud_sim_led.ensure_safe')
+    @patch('hardware.cloud_sim_led.ensure_demo_safe')
+    def test_demo_opt_in_is_separate_and_tagged(self, demo, guard, plan):
+        out = led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',FakeUno,seconds=.01,demo_no_sensors=True)
+        self.assertEqual(out['safetyMode'],'simulation_only')
+        self.assertIn('실제 센서 감시 안 함',out['message'])
+        self.assertTrue(out['ledCommandAck'])
+        demo.assert_called()
+        guard.assert_not_called()
+        demo.reset_mock()
+        out = led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',FakeUno,seconds=.01)
+        self.assertEqual(out['safetyMode'],'sensor_guarded')
+        guard.assert_called()
+        demo.assert_not_called()
+
+    @patch('hardware.cloud_sim_led.plan',return_value={'nodes':['N4','N2'],'edges':['E01'],'path':[1,2,3],'red':[4],'routeStatus':'ok'})
+    def test_demo_stops_if_local_state_changes_during_output(self, plan):
+        calls = [0]
+        def check(*args):
+            calls[0] += 1
+            if calls[0] >= 5:
+                raise led.GuardError('모드 변경')
+        with patch('hardware.cloud_sim_led.ensure_demo_safe',side_effect=check):
+            out = led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',FakeUno,seconds=.2,demo_no_sensors=True)
+        self.assertEqual(out['status'],'failed')
+        self.assertEqual(out['safetyMode'],'simulation_only')
+        self.assertEqual(instances[0].calls[-2:],['stop','close'])
+
 if __name__=='__main__': unittest.main()
