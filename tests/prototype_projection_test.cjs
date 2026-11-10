@@ -18,6 +18,10 @@ assert(Math.abs(p.N6.x - p.N29.x) < 0.001, 'toilet 2 must stay aligned with its 
 assert(p.N6.x > room2.x && p.N6.x < room2.x + room2.width);
 assert(p.N8.x < p.N29.x && p.N29.x < p.N30.x && p.N30.x < p.N34.x, 'graph junction order is preserved');
 const route = geometry.createRouter(view);
+const shop = view.rooms.find(r => r.id === 'shop');
+assert.equal(p.N25.x, shop.x + shop.width / 2);
+assert.equal(p.N39.x, p.N25.x);
+assert(route.route(p.N25, p.N39), 'shop entrance must stay connected to its interior');
 for (const [a,b] of [['N13','N35'], ['N28','N5']]) {
  const points = route.route(p[a],p[b]);
  assert(points && points.length >= 2, `projected ${a}-${b} route should reach its door`);

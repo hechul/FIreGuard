@@ -7,6 +7,12 @@
   function project(floorplan) {
     const view = JSON.parse(JSON.stringify(floorplan));
     const byId = id => view.nodes.find(n => n.id === id);
+    // Align the shop's interior node and entrance with the room's visual centre.
+    const shop = (view.rooms || []).find(r => r.id === 'shop');
+    const shopEntrance = byId('N25'), shopInterior = byId('N39');
+    if (shop && shopEntrance && shopInterior) {
+      shopEntrance.x = shopInterior.x = shop.x + shop.width / 2;
+    }
     const junction = byId('N35'), branch = byId('N28'), toilet = byId('N5');
     const room = (view.rooms || []).find(r => r.id === 'toilet1');
     if (!junction || !branch || !toilet || !room) return view;
