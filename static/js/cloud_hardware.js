@@ -36,5 +36,20 @@
     };
   }
 
-  return { describe };
+  // REAL status only: the Uno response acknowledges a command, not emitted light.
+  function describeCompact(cloud) {
+    if (!cloud || !cloud.enabled || !cloud.hasTelemetry) return 'LED 상태 확인 대기';
+    const h = cloud.hardware;
+    if (cloud.stale) return 'LED 현재 상태 미확인 · 마지막 보고';
+    if (!h || typeof h !== 'object') return 'LED 상태 미확인';
+    if (h.ledStatus === 'disconnected') return 'Arduino 연결 끊김';
+    if (h.ledStatus === 'error') return 'LED 명령 오류';
+    if (h.ledCommandAck !== true) return 'LED 명령 응답 미확인';
+    if (h.ledStatus === 'off') return '소등 명령 응답 확인 · 발광 미확인';
+    if (h.ledStatus !== 'active') return 'Arduino 응답 확인 · LED 발광 미확인';
+    const count = key => Array.isArray(h[key]) ? `${h[key].length}개` : '미보고';
+    return `LED 명령 응답 확인 · 경로 ${count('ledLogicalIndices')} / 화재 ${count('fireLedLogicalIndices')} · 발광 미확인`;
+  }
+
+  return { describe, describeCompact };
 }));

@@ -16,6 +16,7 @@ from cloud_simulation import simulate
 from cloud_sim_commands_store import SimulationCommandStore
 from cloud_sim_multi_store import MultiFireSimulationCommandStore
 from cloud_sim_cancellation_store import SimulationCancellationStore
+from cloud_real_clear_store import RealClearCommandStore
 
 
 def enabled(app):
@@ -36,6 +37,7 @@ def install_cloud(app, original_floorplan):
     )
     app.config['MAX_CONTENT_LENGTH'] = 64 * 1024
     app.config['SIM_CONTROL_ENABLED'] = os.environ.get('FIREGUARD_SIM_CONTROL_ENABLED') == '1'
+    app.config['REAL_CONTROL_ENABLED'] = os.environ.get('FIREGUARD_REAL_CONTROL_ENABLED') == '1'
     plan = cloud_floorplan(original_floorplan)
 
     def device_id():
@@ -87,6 +89,24 @@ def install_cloud(app, original_floorplan):
     def sim_cancellation_store():
         return app.extensions.get('sim_cancellation_store') or SimulationCancellationStore(store())
 
+    def real_clear_store():
+        return app.extensions.get('real_clear_store') or RealClearCommandStore(store())
+
+    def real_control_auth(kind):
+        # REAL alarm dismissal is independently opt-in and authenticated.
+        # A public SIM credential must never gain authority to dismiss REAL fire.
+        if os.environ.get('FIREGUARD_REAL_CONTROL_ENABLED') != '1':
+            raise StoreUnavailable('실제 화재 해제 기능이 비활성화되어 있습니다.')
+        key = 'FIREGUARD_REAL_OPERATOR_TOKEN' if kind == 'operator' else 'FIREGUARD_DEVICE_TOKEN'
+        token = os.environ.get(key, '')
+        if len(token) < 32:
+            raise StoreUnavailable('실제 화재 해제 인증 설정을 확인하세요.')
+        if kind == 'operator':
+            for other in ('FIREGUARD_DEVICE_TOKEN', 'FIREGUARD_SIM_OPERATOR_TOKEN'):
+                if hmac.compare_digest(token.encode(), os.environ.get(other, '').encode()):
+                    raise StoreUnavailable('실제 화재 해제 키는 다른 키와 구별해야 합니다.')
+        return hmac.compare_digest(request.headers.get('Authorization', '').encode(), ('Bearer ' + token).encode())
+
     @app.get('/api/cloud/config')
     def public_config():
         if not enabled(app):
@@ -121,6 +141,30 @@ def install_cloud(app, original_floorplan):
         if not request.path.startswith('/api/'):
             return None
         try:
+            if request.path in ('/api/real-control/clear', '/api/real-control/latest',
+                                '/api/hardware/real-clear-command', '/api/hardware/real-clear-result'):
+                operator = request.path.startswith('/api/real-control/')
+                if not real_control_auth('operator' if operator else 'device'):
+                    return jsonify(ok=False, error='실제 화재 해제 인증이 필요합니다.'), 401
+                commands = real_clear_store()
+                if request.path == '/api/real-control/clear' and request.method == 'POST':
+                    body = request.get_json(silent=True)
+                    if not isinstance(body, dict) or set(body) != {'sensorIds'}:
+                        raise ValueError('해제할 실제 센서 목록을 선택하세요.')
+                    sensor_ids = RealClearCommandStore._sensors(body['sensorIds'])
+                    # This only queues a request. Pi checks each current input,
+                    # persists the clear, and reports its outcome separately.
+                    return jsonify(ok=True, command=commands.create(device_id(), str(uuid4()), sensor_ids))
+                if request.path == '/api/real-control/latest' and request.method == 'GET':
+                    return jsonify(ok=True, command=commands.latest(device_id()))
+                if request.path == '/api/hardware/real-clear-command' and request.method == 'GET':
+                    return jsonify(ok=True, command=commands.claim(device_id()))
+                if request.path == '/api/hardware/real-clear-result' and request.method == 'POST':
+                    body = request.get_json(silent=True)
+                    if not isinstance(body, dict) or set(body) != {'id', 'claimToken', 'result'} or not isinstance(body['result'], dict):
+                        raise ValueError('실제 화재 해제 결과 형식이 잘못되었습니다.')
+                    return jsonify(ok=True, command=commands.complete(device_id(), body['id'], body['claimToken'], body['result']))
+                return jsonify(ok=False, error='지원하지 않는 요청입니다.'), 405
             if request.path in ('/api/sim-control/commands', '/api/sim-control/latest', '/api/sim-control/cancel',
                                 '/api/hardware/sim-command', '/api/hardware/sim-command/check', '/api/hardware/sim-result'):
                 operator = request.path.startswith('/api/sim-control/')

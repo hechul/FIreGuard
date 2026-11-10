@@ -839,6 +839,8 @@
   function setMapView(mode) {
     mapViewMode = mode;
     byId('prototypeOverlayNote').classList.toggle('hidden', !prototypeOverlayEnabled || mode !== '2d');
+    const realLedNote = byId('realLedReportedNote');
+    realLedNote.classList.toggle('hidden', mode !== '2d' || !realLedNote.textContent);
     const stage2d = byId('mapStage');
     const stage3d = byId('mapStage3d');
     const legend  = byId('map2dLegend');
@@ -878,6 +880,20 @@
     const sensorLayer = byId('sensorLayer');
     const nodeLayer = byId('nodeLayer');
     const exitLayer = byId('exitLayer');
+    const realLedLayer = byId('realLedReportedLayer');
+    const realLedNote = byId('realLedReportedNote');
+    realLedLayer.replaceChildren();
+    const ledProjection = cloudView === 'real' && window.FireGuardRealLedProjection && window.FireGuardPrototypeMap
+      ? window.FireGuardRealLedProjection.project(state.cloud, window.FireGuardPrototypeMap.sections) : null;
+    realLedNote.classList.toggle('hidden', !ledProjection || mapViewMode !== '2d');
+    realLedNote.textContent = ledProjection?.label || '';
+    if (ledProjection) for (const point of ledProjection.points) {
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('cx', point.x); dot.setAttribute('cy', point.y); dot.setAttribute('r', '2.7');
+      dot.setAttribute('fill', point.color === 'fire' ? '#f04452' : '#16b364');
+      dot.setAttribute('stroke', '#fff'); dot.setAttribute('stroke-width', '0.8');
+      realLedLayer.appendChild(dot);
+    }
     const prototypeLayer = byId('prototypeLedLayer');
     prototypeLayer.innerHTML = '';
     const prototypeNote = byId('prototypeOverlayNote');
@@ -1345,6 +1361,7 @@
     window.dispatchEvent(new CustomEvent('fireguard:simulation-ended'));
     if (!cloudConfig.enabled) return;
     cloudView = 'real';
+    publishRealState();
     simulationGeneration += 1;
     demoRunId += 1;
     byId('demoStep').textContent = 'STOPPED';
@@ -1362,6 +1379,7 @@
     const previous = Date.parse(realState?.cloud?.receivedAt || '');
     if (Number.isFinite(previous) && (!Number.isFinite(incoming) || incoming < previous)) return;
     realState = state;
+    publishRealState();
     const connectedFire = Boolean(state.connections.pi && state.realFireDetected);
     if (cloudView === 'simulation' && connectedFire) {
       switchToReal('실제 화재가 감지되어 REAL 모드로 전환했습니다.');
@@ -1416,6 +1434,7 @@
       }
       if (cloudView === 'simulation') return;
       cloudView = 'simulation';
+      publishRealState();
       const generation = ++simulationGeneration;
       try {
         await cloudSimulation(null, generation);
@@ -1635,6 +1654,7 @@
       if (cloudConfig.enabled) { realFloorplan = floorplan; realState = currentState; }
       initEditorPositions();
       buildControls(); bindActions(); updateState(currentState); updateRouteVisualScale();
+      publishRealState();
       if (cloudConfig.enabled) {
         await window.FireGuardCloud.start(receiveRealState, setBrowserConnection, cloudConfig);
       } else { connectSocket(); }
@@ -1650,6 +1670,12 @@
   }
 
   window.setInterval(updateClock, 1000);
+  function publishRealState() {
+    if (cloudConfig.enabled && realState) {
+      window.dispatchEvent(new CustomEvent('fireguard:real-state', {detail: {state: realState, viewMode: cloudView}}));
+    }
+  }
+  window.addEventListener('fireguard:request-real-state', publishRealState);
   window.addEventListener('fireguard:request-simulation-state', () => {
     if (cloudView === 'simulation' && currentState?.operationMode === 'simulation' && floorplan) {
       window.dispatchEvent(new CustomEvent('fireguard:simulation-action', {detail: {state: currentState, floorplan}}));

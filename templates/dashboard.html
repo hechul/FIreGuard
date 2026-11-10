@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko" data-cloud="{{ 'true' if cloud_enabled else 'false' }}" data-build="{{ build_id }}" data-physical-sim="{{ 'enabled' if cloud_enabled and config.SIM_CONTROL_ENABLED else 'disabled' }}">
+<html lang="ko" data-cloud="{{ 'true' if cloud_enabled else 'false' }}" data-build="{{ build_id }}" data-physical-sim="{{ 'enabled' if cloud_enabled and config.SIM_CONTROL_ENABLED else 'disabled' }}" data-real-clear="{{ 'enabled' if cloud_enabled and config.REAL_CONTROL_ENABLED else 'disabled' }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -157,6 +157,7 @@
                   <g id="edgeLayer"></g>
                   <g id="routeLayer"></g>
                   <g id="prototypeLedLayer" pointer-events="none"></g>
+                  <g id="realLedReportedLayer" pointer-events="none" aria-label="Pi가 응답 확인한 LED 명령 위치"></g>
                   <g id="shutterLayer"></g>
                   <g id="sensorLayer"></g>
                   <g id="nodeLayer"></g>
@@ -164,6 +165,7 @@
                 </svg>
               </div>
               <p id="prototypeOverlayNote" class="prototype-overlay-note hidden">실물 LED 구간 참고도 · 위치와 방향은 미검증이며 점선은 실제 점등 상태가 아닙니다. LED 62 표시는 N28·N35의 공유 관계만 나타내며 LED의 실제 위치가 아닙니다.</p>
+              <p id="realLedReportedNote" class="prototype-overlay-note hidden"></p>
 
               <!-- 3D Map Container (hidden by default; shown on 3D toggle) -->
               <div class="map-stage" id="mapStage3d" style="display:none; position:relative; overflow:hidden; background:#111418; border-color:#2A3441;">
@@ -566,11 +568,13 @@
 
   <script src="{{ url_for('static', filename='js/map_geometry.js') }}"></script>
   <script src="{{ url_for('static', filename='js/cloud_live.js', v='cloud-20261030') }}"></script>
-  <script src="{{ url_for('static', filename='js/cloud_hardware.js', v='cloud-hardware-20261109') }}"></script>
+  <script src="{{ url_for('static', filename='js/cloud_hardware.js', v='real-monitor-20261110') }}"></script>
   <script src="{{ url_for('static', filename='js/node_groups.js', v='node-groups-20261109') }}"></script>
   <script src="{{ url_for('static', filename='js/prototype_map.js', v='toilet-layout-20261109') }}"></script>
-  <script src="{{ url_for('static', filename='js/dashboard.js', v='auto-led-auth-20261110') }}"></script>
+  <script src="{{ url_for('static', filename='js/real_led_projection.js', v='real-monitor-20261110') }}"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js', v='real-monitor-20261110') }}"></script>
   <script src="{{ url_for('static', filename='js/physical_sim_control.js', v='multi-fire-20261110') }}"></script>
+  <script src="{{ url_for('static', filename='js/real_fire_control.js', v='real-monitor-20261110') }}"></script>
   <script src="{{ url_for('static', filename='js/sidebar.js', v='ui-20261109') }}"></script>
 </body>
 </html>
