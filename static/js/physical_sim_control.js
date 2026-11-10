@@ -24,9 +24,9 @@
     panel.id = 'physicalSimPanel';
     panel.className = 'scenario-lab';
     panel.style.marginTop = '16px';
-    panel.innerHTML = '<summary><span><b>Pi 연결 점검</b><small>실물 LED 전송 미지원</small></span></summary>' +
+    panel.innerHTML = '<summary><span><b>Pi 연결 및 LED 시험</b><small>Pi 실행 모드 확인</small></span></summary>' +
       '<div style="padding:14px;display:grid;gap:10px">' +
-      '<p>Pi가 요청을 확인하는 연결 점검입니다. 실물 LED를 제어하지 않습니다.</p>' +
+      '<p>Pi에서 실행 중인 프로그램에 따라 경로만 확인하거나 LED를 짧게 시험합니다.</p>' +
       '<label>운영자 키 <input id="physicalSimToken" type="password" autocomplete="off" spellcheck="false" style="display:block;width:100%;margin-top:4px" /></label>' +
       '<label>출발 노드 <select id="physicalSimStart" style="display:block;width:100%;margin-top:4px"></select></label>' +
       '<label>모의 화재 <select id="physicalSimFire" style="display:block;width:100%;margin-top:4px"></select></label>' +
@@ -34,7 +34,7 @@
       '<button type="button" class="btn secondary" id="physicalSimFromScreen">현재 화면 조건으로 점검</button>' +
       '<button type="button" class="btn secondary" id="physicalSimRefresh">결과 확인</button></div>' +
       '<p id="physicalSimStatus" role="status" aria-live="polite">연결 점검 요청 전</p>' +
-      '<p style="font-size:12px">이 점검은 LED를 켜지 않습니다.</p></div>';
+      '<p style="font-size:12px">Uno 응답과 LED의 실제 발광은 별도로 확인하세요.</p></div>';
     card.appendChild(panel);
     const token = panel.querySelector('#physicalSimToken');
     const start = panel.querySelector('#physicalSimStart');
@@ -74,7 +74,10 @@
         completed:'Pi 처리 완료', failed:'시험 실패', rejected:'요청 거부', expired:'요청 만료'};
       const result = command.result || {};
       const route = Array.isArray(result.routeNodes) && result.routeNodes.length ? result.routeNodes.join(' → ') : '경로 보고 없음';
-      status.textContent = `${states[command.status] || command.status || '상태 확인 중'} · LED 미제어 · ${route}` +
+      const led = result.ledCommandAck === true
+        ? `Uno 점등 명령 응답 확인 · ${result.stopCommandAck === true ? 'STOP 응답 확인' : 'STOP 응답 미확인'} · 실제 발광 미확인`
+        : 'LED 점등 명령 응답 없음';
+      status.textContent = `${states[command.status] || command.status || '상태 확인 중'} · ${led} · ${route}` +
         (result.message ? ` · ${result.message}` : command.error ? ` · ${command.error}` : '');
     }
     send.addEventListener('click', async () => {
