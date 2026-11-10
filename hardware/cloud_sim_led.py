@@ -147,26 +147,29 @@ class GuardedUno:
             raise GuardError('Arduino 연결 없음')
         deadline = time.monotonic() + 3
         while time.monotonic() < deadline:
-            if not stop: self.check()
+            if not stop:
+                # The Uno's receive window lasts only 400 ms after GO. Do all
+                # potentially slow HTTP checks before opening that window.
+                if text.startswith('FLOW ') and hasattr(self.check, 'force'):
+                    self.check.force()
+                else:
+                    self.check()
             self.serial.write(b'?'); self.serial.flush()
             reply = self.serial.readline().decode('ascii', errors='replace').strip()
             if reply == 'GO': break
         else:
             raise TimeoutError('Arduino GO 응답 없음')
-        if not stop:
-            # Recheck the server immediately before a command can illuminate LEDs.
-            if text.startswith('FLOW ') and hasattr(self.check, 'force'):
-                self.check.force()
-            else:
-                self.check()
+        # Write immediately after GO: another network check here can exceed the
+        # Uno's 400 ms window and silently discard the command.
         if text.startswith('FLOW '): self.started = time.monotonic()
         self.serial.write((text + '\n').encode('ascii')); self.serial.flush()
+        deadline = time.monotonic() + 3
         while time.monotonic() < deadline:
             if not stop: self.check()
             reply = self.serial.readline().decode('ascii', errors='replace').strip()
             if reply == 'OK': return
             if reply == 'ERR': raise RuntimeError('Arduino 명령 거부')
-        raise TimeoutError('Arduino OK 응답 없음')
+        raise TimeoutError(f'Arduino OK 응답 없음 ({text.split()[0]})')
 
     def flow(self, path, red):
         from pi_led_usb import logical_to_wire

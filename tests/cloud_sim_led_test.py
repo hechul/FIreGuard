@@ -72,7 +72,7 @@ class LedBridgeTest(unittest.TestCase):
         with self.assertRaises(led.GuardError):
             led.ensure_safe('http://localhost:5000',datetime.now(timezone.utc)+timedelta(seconds=30))
         self.assertEqual(instances,[])
-    def test_flow_not_written_when_guard_fails_after_go(self):
+    def test_flow_not_written_when_guard_fails_before_receive_window(self):
         class FakeSerial:
             def __init__(self): self.writes=[]
             def write(self, value): self.writes.append(value)
@@ -84,10 +84,25 @@ class LedBridgeTest(unittest.TestCase):
         calls=[0]
         def check():
             calls[0]+=1
-            if calls[0] == 2: raise led.GuardError('실제 센서 경고')
+            raise led.GuardError('실제 센서 경고')
         uno.check=check
         with self.assertRaises(led.GuardError): uno.command('FLOW 200 0 8 0')
-        self.assertEqual(serial.writes,[b'?'])
+        self.assertEqual(serial.writes,[])
+
+    def test_go_window_has_no_network_check_before_command_write(self):
+        events = []
+        class FakeSerial:
+            def write(self, value): events.append(('write', value))
+            def flush(self): pass
+            def readline(self):
+                return b'GO\n' if events[-1] == ('write', b'?') else b'OK\n'
+        uno=led.GuardedUno.__new__(led.GuardedUno)
+        uno.serial=FakeSerial()
+        uno.check=lambda: events.append(('check',))
+        uno.command('FLOW 200 0 8 0')
+        go = events.index(('write', b'?'))
+        flow = events.index(('write', b'FLOW 200 0 8 0\n'))
+        self.assertEqual(flow, go + 1, events)
     @patch('hardware.cloud_sim_led.execute')
     @patch('hardware.cloud_sim_led.report_result')
     @patch('hardware.cloud_sim_led.request', return_value={'command': CMD})
