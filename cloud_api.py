@@ -14,6 +14,7 @@ from cloud_model import MAPPING_VERSION, cloud_floorplan, project_state, validat
 from cloud_store import StoreUnavailable, SupabaseStore
 from cloud_simulation import simulate
 from cloud_sim_commands_store import SimulationCommandStore
+from cloud_sim_cancellation_store import SimulationCancellationStore
 
 
 def enabled(app):
@@ -79,6 +80,9 @@ def install_cloud(app, original_floorplan):
     def sim_command_store():
         return app.extensions.get('sim_command_store') or SimulationCommandStore(store())
 
+    def sim_cancellation_store():
+        return app.extensions.get('sim_cancellation_store') or SimulationCancellationStore(store())
+
     @app.get('/api/cloud/config')
     def public_config():
         if not enabled(app):
@@ -113,8 +117,8 @@ def install_cloud(app, original_floorplan):
         if not request.path.startswith('/api/'):
             return None
         try:
-            if request.path in ('/api/sim-control/commands', '/api/sim-control/latest',
-                                '/api/hardware/sim-command', '/api/hardware/sim-result'):
+            if request.path in ('/api/sim-control/commands', '/api/sim-control/latest', '/api/sim-control/cancel',
+                                '/api/hardware/sim-command', '/api/hardware/sim-command/check', '/api/hardware/sim-result'):
                 operator = request.path.startswith('/api/sim-control/')
                 if not sim_control_auth('operator' if operator else 'device'):
                     return jsonify(ok=False, error='시험 연결 인증이 필요합니다.'), 401
@@ -133,6 +137,16 @@ def install_cloud(app, original_floorplan):
                     return jsonify(ok=True, command=commands.create(device_id(), str(uuid4()), body['startNode'], body['fireNode']))
                 if request.path == '/api/sim-control/latest' and request.method == 'GET':
                     return jsonify(ok=True, command=commands.latest(device_id()))
+                if request.path == '/api/sim-control/cancel' and request.method == 'POST':
+                    body = request.get_json(silent=True)
+                    if not isinstance(body, dict) or set(body) != {'id'}:
+                        raise ValueError('시험 취소 요청이 올바르지 않습니다.')
+                    return jsonify(ok=True, command=sim_cancellation_store().cancel(device_id(), body['id']))
+                if request.path == '/api/hardware/sim-command/check' and request.method == 'POST':
+                    body = request.get_json(silent=True)
+                    if not isinstance(body, dict) or set(body) != {'id', 'claimToken'}:
+                        raise ValueError('시험 명령 확인 요청이 올바르지 않습니다.')
+                    return jsonify(ok=True, **sim_cancellation_store().check(device_id(), body['id'], body['claimToken']))
                 if request.path == '/api/hardware/sim-command' and request.method == 'GET':
                     return jsonify(ok=True, command=commands.claim(device_id()))
                 if request.path == '/api/hardware/sim-result' and request.method == 'POST':

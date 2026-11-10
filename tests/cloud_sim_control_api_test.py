@@ -19,6 +19,10 @@ class Commands:
     def claim(self, device): return None
     def complete(self, device, command_id, token, result): return {'status': result['status']}
 
+class Cancellations:
+    def cancel(self, device, command_id): return {'id': command_id, 'status': 'rejected', 'cancelRequested': True}
+    def check(self, device, command_id, claim_token): return {'active': False, 'cancelRequested': True}
+
 class ControlTest(unittest.TestCase):
     def setUp(self):
         self.env = patch.dict(os.environ, {'FIREGUARD_CLOUD':'1', 'FIREGUARD_SIM_CONTROL_ENABLED':'1', 'FIREGUARD_DEVICE_TOKEN':DEVICE, 'FIREGUARD_SIM_OPERATOR_TOKEN':OPERATOR}, clear=False)
@@ -27,6 +31,7 @@ class ControlTest(unittest.TestCase):
         install_cloud(app, FLOOR)
         self.commands = Commands()
         app.extensions['sim_command_store'] = self.commands
+        app.extensions['sim_cancellation_store'] = Cancellations()
         self.app = app
         self.client = app.test_client()
         self.real = {'connections': {'pi': True}, 'realFireDetected': False, 'flameSensors': {'FLM-01': {'connected': True}}}
@@ -55,3 +60,14 @@ class ControlTest(unittest.TestCase):
         self.assertEqual(self.client.get('/api/hardware/sim-command', headers={'Authorization':'Bearer '+OPERATOR}).status_code, 401)
         self.assertEqual(self.client.get('/api/hardware/sim-command', headers={'Authorization':'Bearer '+DEVICE}).status_code, 200)
         self.assertEqual(self.client.get('/api/sim-control/latest', headers={'Authorization':'Bearer '+DEVICE}).status_code, 401)
+    def test_cancel_and_check_require_correct_tokens(self):
+        cancel = '/api/sim-control/cancel'
+        check = '/api/hardware/sim-command/check'
+        operator = {'Authorization':'Bearer '+OPERATOR}
+        device = {'Authorization':'Bearer '+DEVICE}
+        self.assertEqual(self.client.post(cancel, json={'id':'one'}, headers=device).status_code, 401)
+        self.assertEqual(self.client.post(cancel, json={'id':'one'}, headers=operator).status_code, 200)
+        self.assertEqual(self.client.post(check, json={'id':'one','claimToken':'two'}, headers=operator).status_code, 401)
+        response = self.client.post(check, json={'id':'one','claimToken':'two'}, headers=device)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json['active'])

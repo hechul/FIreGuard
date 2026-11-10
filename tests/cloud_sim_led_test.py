@@ -20,10 +20,32 @@ class FakeUno:
 instances=[]
 class LedBridgeTest(unittest.TestCase):
     def setUp(self): instances.clear()
+    def test_cancel_check_posts_secret_in_body_and_fails_closed(self):
+        with patch('hardware.cloud_sim_led.request', return_value={'ok':True, 'active':True}) as req:
+            led.ensure_current('https://example.test', 'secret', CMD)
+            self.assertEqual(req.call_args.args[0], 'https://example.test/api/hardware/sim-command/check')
+            self.assertEqual(req.call_args.kwargs['data'], {'id':CMD['id'], 'claimToken':CMD['claimToken']})
+        for response in ({'ok':True,'active':False}, {'ok':False,'active':True}, {}, None):
+            with self.subTest(response=response), patch('hardware.cloud_sim_led.request', return_value=response):
+                with self.assertRaises(led.GuardError): led.ensure_current('https://example.test','secret',CMD)
+        with patch('hardware.cloud_sim_led.request', side_effect=TimeoutError):
+            with self.assertRaises(led.GuardError): led.ensure_current('https://example.test','secret',CMD)
+
+    @patch('hardware.cloud_sim_led.plan',return_value={'nodes':['N4','N2'],'edges':['E01'],'path':[1,2,3],'red':[4],'routeStatus':'ok'})
+    @patch('hardware.cloud_sim_led.ensure_safe')
+    def test_cancel_after_flow_stops_output(self, guard, plan):
+        def cancel():
+            if instances and any(isinstance(call, tuple) and call[0] == 'flow' for call in instances[0].calls):
+                raise led.GuardError('취소')
+        with patch('hardware.cloud_sim_led.time.monotonic', side_effect=(n / 10 for n in range(1000))):
+            out=led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',FakeUno,seconds=1.2,cancel_check=cancel)
+        self.assertEqual(out['status'],'failed')
+        self.assertEqual(instances[0].calls[-2:],['stop','close'])
+
     @patch('hardware.cloud_sim_led.plan',return_value={'nodes':['N4','N2'],'edges':['E01'],'path':[1,2,3],'red':[4],'routeStatus':'ok'})
     @patch('hardware.cloud_sim_led.ensure_safe')
     def test_ack_and_stop(self, guard, plan):
-        out=led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',FakeUno,seconds=0.01)
+        out=led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',FakeUno,seconds=0.01,cancel_check=lambda:None)
         self.assertEqual(out['status'],'completed'); self.assertTrue(out['ledCommandAck'])
         self.assertEqual(instances[0].calls[-2:],['stop','close'])
         self.assertIn('발광 여부 미확인',out['message'])
@@ -34,7 +56,7 @@ class LedBridgeTest(unittest.TestCase):
             count[0]+=1
             if count[0]>=5: raise led.GuardError('sensor lost')
         with patch('hardware.cloud_sim_led.ensure_safe',side_effect=guard):
-            out=led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',FakeUno,seconds=.2)
+            out=led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',FakeUno,seconds=.2,cancel_check=lambda:None)
         self.assertEqual(out['status'],'failed')
         self.assertEqual(instances[0].calls[-2:],['stop','close'])
     @patch('hardware.cloud_sim_led.plan',return_value={'nodes':['N4','N2'],'edges':['E01'],'path':[1,2,3],'red':[4],'routeStatus':'ok'})
@@ -42,7 +64,7 @@ class LedBridgeTest(unittest.TestCase):
     def test_stop_failure_never_reported_success(self, guard, plan):
         class BadStop(FakeUno):
             def stop(self): raise TimeoutError('STOP failed')
-        out=led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',BadStop,seconds=.01)
+        out=led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',BadStop,seconds=.01,cancel_check=lambda:None)
         self.assertEqual(out['status'],'failed'); self.assertIn('STOP 응답 미확인',out['message'])
         self.assertFalse(out['ledCommandAck'])
     @patch('hardware.cloud_sim_led.request',side_effect=OSError('down'))
@@ -77,7 +99,7 @@ class LedBridgeTest(unittest.TestCase):
     @patch('hardware.cloud_sim_led.plan',return_value={'nodes':[],'edges':[],'path':[],'red':[4],'routeStatus':'no_route'})
     @patch('hardware.cloud_sim_led.ensure_safe')
     def test_no_route_red_only_is_explicit(self, guard, plan):
-        out=led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',FakeUno,seconds=.01)
+        out=led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',FakeUno,seconds=.01,cancel_check=lambda:None)
         self.assertEqual(out['routeStatus'],'no_route')
         self.assertTrue(out['stopCommandAck'])
         self.assertIn('안전 경로 없음',out['message'])
@@ -117,14 +139,14 @@ class LedBridgeTest(unittest.TestCase):
     @patch('hardware.cloud_sim_led.ensure_safe')
     @patch('hardware.cloud_sim_led.ensure_demo_safe')
     def test_demo_opt_in_is_separate_and_tagged(self, demo, guard, plan):
-        out = led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',FakeUno,seconds=.01,demo_no_sensors=True)
+        out = led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',FakeUno,seconds=.01,demo_no_sensors=True,cancel_check=lambda:None)
         self.assertEqual(out['safetyMode'],'simulation_only')
         self.assertIn('실제 센서 감시 안 함',out['message'])
         self.assertTrue(out['ledCommandAck'])
         demo.assert_called()
         guard.assert_not_called()
         demo.reset_mock()
-        out = led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',FakeUno,seconds=.01)
+        out = led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',FakeUno,seconds=.01,cancel_check=lambda:None)
         self.assertEqual(out['safetyMode'],'sensor_guarded')
         guard.assert_called()
         demo.assert_not_called()
@@ -137,7 +159,7 @@ class LedBridgeTest(unittest.TestCase):
             if calls[0] >= 5:
                 raise led.GuardError('모드 변경')
         with patch('hardware.cloud_sim_led.ensure_demo_safe',side_effect=check):
-            out = led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',FakeUno,seconds=.2,demo_no_sensors=True)
+            out = led.execute(CMD,'http://localhost:5000','/dev/ttyACM0',FakeUno,seconds=.2,demo_no_sensors=True,cancel_check=lambda:None)
         self.assertEqual(out['status'],'failed')
         self.assertEqual(out['safetyMode'],'simulation_only')
         self.assertEqual(instances[0].calls[-2:],['stop','close'])

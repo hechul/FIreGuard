@@ -5,10 +5,11 @@ class Element {
   constructor() { this.children=[]; this.handlers={}; this.value=''; this.disabled=false; this.textContent=''; this.style={}; }
   appendChild(child) { this.children.push(child); if (!this.value && child.value) this.value=child.value; }
   addEventListener(type, fn) { this.handlers[type]=fn; }
+  setAttribute(name, value) { this[name] = value; }
   querySelector(id) { return elements[id]; }
 }
 const elements = {};
-for (const id of ['#physicalSimToken','#physicalSimStart','#physicalSimFire','#physicalSimSend','#physicalSimFromScreen','#physicalSimRefresh','#physicalSimStatus']) elements[id]=new Element();
+for (const id of ['#physicalSimToken','#physicalSimStart','#physicalSimFire','#physicalSimSend','#physicalSimFromScreen','#physicalSimRefresh','#physicalSimStatus','#physicalSimAuto']) elements[id]=new Element();
 const card = new Element();
 let simActive = true;
 const simButton = {classList:{contains:()=>simActive}};

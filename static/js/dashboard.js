@@ -1342,6 +1342,7 @@
   }
 
   function switchToReal(reason = '') {
+    window.dispatchEvent(new CustomEvent('fireguard:simulation-ended'));
     if (!cloudConfig.enabled) return;
     cloudView = 'real';
     simulationGeneration += 1;
@@ -1402,6 +1403,7 @@
       setCloudFloorplan(result.floorplan, result.state);
     }
     updateState(result.state);
+    window.dispatchEvent(new CustomEvent('fireguard:simulation-action', {detail: {state: result.state, floorplan: result.floorplan, action}}));
     return result;
   }
 

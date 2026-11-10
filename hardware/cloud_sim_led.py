@@ -62,6 +62,35 @@ def ensure_demo_safe(local, expires_at):
         raise GuardError('로컬 서버에 실제 화재가 보고되었거나 상태를 확인할 수 없음')
 
 
+def ensure_current(cloud, token, command):
+    """A claimed command must remain active; fail closed on communication loss."""
+    try:
+        result = request(cloud + '/api/hardware/sim-command/check', token=token,
+                         data={'id': command['id'], 'claimToken': command['claimToken']}, timeout=1)
+    except Exception:
+        raise GuardError('시험 요청 취소 상태를 확인할 수 없음') from None
+    if not isinstance(result, dict) or result.get('ok') is not True or result.get('active') is not True:
+        raise GuardError('시험 요청이 취소되었거나 만료됨')
+
+
+class SafetyCheck:
+    """Frequent local checks; bound network load while checking before FLOW."""
+    def __init__(self, local_check, cancel_check, interval=0.5):
+        self.local_check, self.cancel_check, self.interval = local_check, cancel_check, interval
+        self.last_cancel_check = None
+
+    def force(self):
+        self.local_check()
+        self.cancel_check()
+        self.last_cancel_check = time.monotonic()
+
+    def __call__(self):
+        self.local_check()
+        if self.last_cancel_check is None or time.monotonic() - self.last_cancel_check >= self.interval:
+            self.cancel_check()
+            self.last_cancel_check = time.monotonic()
+
+
 def plan(command):
     from hardware.led_routes import load_files, demo_snapshot, inspect_route, fire_led_indices
     layout, floor = load_files()
@@ -124,7 +153,12 @@ class GuardedUno:
             if reply == 'GO': break
         else:
             raise TimeoutError('Arduino GO 응답 없음')
-        if not stop: self.check()
+        if not stop:
+            # Recheck the server immediately before a command can illuminate LEDs.
+            if text.startswith('FLOW ') and hasattr(self.check, 'force'):
+                self.check.force()
+            else:
+                self.check()
         if text.startswith('FLOW '): self.started = time.monotonic()
         self.serial.write((text + '\n').encode('ascii')); self.serial.flush()
         while time.monotonic() < deadline:
@@ -151,11 +185,14 @@ class GuardedUno:
             self.lock.close(); self.lock = None
 
 
-def execute(command, local, port, uno_factory=GuardedUno, seconds=3, *, demo_no_sensors=False):
+def execute(command, local, port, uno_factory=GuardedUno, seconds=3, *, demo_no_sensors=False, cancel_check=None):
     expires = validate_command(command)
     if not 0 < seconds <= 3:
         raise ValueError('시험 시간은 최대 3초')
-    check = lambda: (ensure_demo_safe if demo_no_sensors else ensure_safe)(local, expires)
+    if not callable(cancel_check):
+        raise GuardError('시험 요청 취소 감시가 설정되지 않았습니다')
+    local_check = lambda: (ensure_demo_safe if demo_no_sensors else ensure_safe)(local, expires)
+    check = SafetyCheck(local_check, cancel_check)
     check()
     route = plan(command)
     nodes, edges, path, red = route['nodes'], route['edges'], route['path'], route['red']
@@ -211,7 +248,8 @@ def poll_once(cloud, token, local, port, warming_up, *, demo_no_sensors=False):
                        'ledCommandAck':False, 'stopCommandAck':False}
         else:
             try:
-                outcome = execute(command, local, port, demo_no_sensors=demo_no_sensors)
+                outcome = execute(command, local, port, demo_no_sensors=demo_no_sensors,
+                                  cancel_check=lambda: ensure_current(cloud, token, command))
             except Exception as exc:
                 outcome = {'status':'rejected', 'message':str(exc)[:240], 'routeNodes':[],
                            'routeEdges':[], 'routeStatus':'unknown', 'ledCommandAck':False, 'stopCommandAck':False}
