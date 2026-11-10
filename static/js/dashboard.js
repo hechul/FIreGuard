@@ -1650,6 +1650,11 @@
   }
 
   window.setInterval(updateClock, 1000);
+  window.addEventListener('fireguard:request-simulation-state', () => {
+    if (cloudView === 'simulation' && currentState?.operationMode === 'simulation' && floorplan) {
+      window.dispatchEvent(new CustomEvent('fireguard:simulation-action', {detail: {state: currentState, floorplan}}));
+    }
+  });
   window.addEventListener('resize', updateRouteVisualScale);
   init();
 })();

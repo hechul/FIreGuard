@@ -53,7 +53,7 @@
     starts.forEach(([id, name]) => option(start, id, `${id} · ${name}`));
     fires.forEach(([node, sensor]) => option(fire, node, `${node} · ${sensor}`));
     let pending = false;
-    let autoArmed = false, autoTimer = null, autoVersion = 0, latestSelection = null, autoInFlight = false;
+    let autoArmed = false, autoAuthenticating = false, autoTimer = null, autoVersion = 0, latestSelection = null, autoInFlight = false;
     let activeCommand = null;
 
     function cancelActive() {
@@ -102,13 +102,28 @@
       autoButton.textContent = armed ? '지도와 LED 자동 연동 끄기' : '지도와 LED 자동 연동 켜기';
       if (message) status.textContent = message;
     }
-    autoButton.addEventListener('click', () => {
+    token.addEventListener('input', () => {
+      if (autoArmed || autoAuthenticating) setAuto(false, '운영자 키가 변경되어 자동 연동을 껐습니다.');
+    });
+    autoButton.addEventListener('click', async () => {
       if (autoArmed) { setAuto(false, '자동 연동 꺼짐 · 이미 전송된 요청은 취소되지 않을 수 있습니다.'); return; }
       if (!token.value) { status.textContent = '운영자 키를 입력하세요.'; return; }
       if (!document.getElementById('simModeBtn')?.classList.contains('active')) {
         status.textContent = 'SIMULATION 화면에서만 자동 연동할 수 있습니다.'; return;
       }
+      if (pending || autoAuthenticating) return;
+      const checkedToken = token.value, checkedVersion = autoVersion;
+      autoAuthenticating = true; autoButton.disabled = true;
+      status.textContent = '운영자 키 확인 중';
+      const verified = await request('/api/sim-control/latest');
+      autoAuthenticating = false; autoButton.disabled = false;
+      if (!verified) return; // Preserve the authentication or network error shown by request().
+      if (token.value !== checkedToken || autoVersion !== checkedVersion ||
+          !document.getElementById('simModeBtn')?.classList.contains('active')) {
+        status.textContent = '화면 또는 운영자 키가 변경됐습니다. 다시 시도하세요.'; return;
+      }
       setAuto(true, '자동 연동 켜짐 · 지도에서 출발점과 화재를 선택하세요. 실제 센서 감시는 하지 않습니다.');
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('fireguard:request-simulation-state'));
     });
 
     async function autoSend(version) {
@@ -155,7 +170,7 @@
     }
     if (typeof window !== 'undefined') {
       window.addEventListener('fireguard:simulation-ended', () => {
-        if (autoArmed) setAuto(false, 'REAL 모드 전환 · 자동 연동 꺼짐');
+        if (autoArmed || autoAuthenticating) setAuto(false, 'REAL 모드 전환 · 자동 연동 꺼짐');
       });
       window.addEventListener('fireguard:simulation-action', event => {
         if (!autoArmed) return;
