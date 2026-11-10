@@ -6,12 +6,14 @@ import os
 import re
 import base64
 import json
+from uuid import uuid4
 
 from flask import jsonify, request
 
 from cloud_model import MAPPING_VERSION, cloud_floorplan, project_state, validate_telemetry, validate_hardware_telemetry
 from cloud_store import StoreUnavailable, SupabaseStore
 from cloud_simulation import simulate
+from cloud_sim_commands_store import SimulationCommandStore
 
 
 def enabled(app):
@@ -31,6 +33,7 @@ def install_cloud(app, original_floorplan):
         or os.environ.get('VERCEL_ENV', '').strip().lower() in ('production', 'preview')
     )
     app.config['MAX_CONTENT_LENGTH'] = 64 * 1024
+    app.config['SIM_CONTROL_ENABLED'] = os.environ.get('FIREGUARD_SIM_CONTROL_ENABLED') == '1'
     plan = cloud_floorplan(original_floorplan)
 
     def device_id():
@@ -61,6 +64,20 @@ def install_cloud(app, original_floorplan):
         if preview is not None and preview not in {n['id'] for n in plan['nodes']}:
             raise ValueError('알 수 없는 startNode입니다.')
         return project_state(plan, backend.latest(did), backend.events(did), did, stale_seconds(), preview_start=preview)
+
+    def sim_control_auth(kind):
+        if os.environ.get('FIREGUARD_SIM_CONTROL_ENABLED') != '1':
+            raise StoreUnavailable('실물 시험 연결 점검이 비활성화되어 있습니다.')
+        key = 'FIREGUARD_SIM_OPERATOR_TOKEN' if kind == 'operator' else 'FIREGUARD_DEVICE_TOKEN'
+        token = os.environ.get(key, '')
+        if len(token) < 32:
+            raise StoreUnavailable('시험 연결 인증 설정을 확인하세요.')
+        if kind == 'operator' and hmac.compare_digest(token.encode(), os.environ.get('FIREGUARD_DEVICE_TOKEN', '').encode()):
+            raise StoreUnavailable('운영자 키는 장치 키와 다르게 설정하세요.')
+        return hmac.compare_digest(request.headers.get('Authorization', '').encode(), ('Bearer ' + token).encode())
+
+    def sim_command_store():
+        return app.extensions.get('sim_command_store') or SimulationCommandStore(store())
 
     @app.get('/api/cloud/config')
     def public_config():
@@ -96,6 +113,34 @@ def install_cloud(app, original_floorplan):
         if not request.path.startswith('/api/'):
             return None
         try:
+            if request.path in ('/api/sim-control/commands', '/api/sim-control/latest',
+                                '/api/hardware/sim-command', '/api/hardware/sim-result'):
+                operator = request.path.startswith('/api/sim-control/')
+                if not sim_control_auth('operator' if operator else 'device'):
+                    return jsonify(ok=False, error='시험 연결 인증이 필요합니다.'), 401
+                commands = sim_command_store()
+                if request.path == '/api/sim-control/commands' and request.method == 'POST':
+                    body = request.get_json(silent=True)
+                    allowed = {'N33','N10','N9','N34','N8','N35','N7','N36','N37','N38','N12','N13','N14','N15','N5','N6','N3','N19','N1','N20','N11','N23','N2','N25','N4','N27','N28','N29','N30','N31'}
+                    fires = {'N20','N2','N3','N4','N5','N6','N7','N8','N9','N10','N11'}
+                    if (not isinstance(body, dict) or set(body) != {'startNode', 'fireNode'}
+                            or not isinstance(body['startNode'], str) or not isinstance(body['fireNode'], str)
+                            or body['startNode'] not in allowed or body['fireNode'] not in fires):
+                        raise ValueError('Pi에 등록된 출발점과 화재 센서 위치를 선택하세요.')
+                    # Preview requests never control the device or write real
+                    # state. Pi may be running SIM without a REAL cloud heartbeat;
+                    # the Pi bridge validates its local mode before calculating.
+                    return jsonify(ok=True, command=commands.create(device_id(), str(uuid4()), body['startNode'], body['fireNode']))
+                if request.path == '/api/sim-control/latest' and request.method == 'GET':
+                    return jsonify(ok=True, command=commands.latest(device_id()))
+                if request.path == '/api/hardware/sim-command' and request.method == 'GET':
+                    return jsonify(ok=True, command=commands.claim(device_id()))
+                if request.path == '/api/hardware/sim-result' and request.method == 'POST':
+                    body = request.get_json(silent=True)
+                    if not isinstance(body, dict) or set(body) != {'id', 'claimToken', 'result'} or not isinstance(body['result'], dict):
+                        raise ValueError('시험 결과 형식이 잘못되었습니다.')
+                    return jsonify(ok=True, command=commands.complete(device_id(), body['id'], body['claimToken'], body['result']))
+                return jsonify(ok=False, error='지원하지 않는 요청입니다.'), 405
             if request.method == 'GET' and request.path == '/api/state':
                 return jsonify(snapshot())
             if request.method == 'GET' and request.path == '/api/floorplan':
