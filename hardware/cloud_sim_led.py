@@ -91,13 +91,63 @@ class SafetyCheck:
             self.last_cancel_check = time.monotonic()
 
 
+def selected_fire_nodes(command):
+    """Parse the versioned wire format without silently discarding fires."""
+    if not isinstance(command, dict):
+        raise ValueError('명령 형식이 올바르지 않습니다')
+    if 'fireNodes' not in command:
+        node = command.get('fireNode')
+        if not isinstance(node, str) or not node or node == '__MULTI__':
+            raise ValueError('화재 노드가 올바르지 않습니다')
+        return [node]
+    nodes = command['fireNodes']
+    if (not isinstance(nodes, list) or not 1 <= len(nodes) <= 11
+            or any(not isinstance(node, str) or not node or len(node) > 200 or node == '__MULTI__' for node in nodes)
+            or len(set(nodes)) != len(nodes)):
+        raise ValueError('화재 노드 목록이 올바르지 않습니다')
+    legacy = command.get('fireNode')
+    if len(nodes) > 1 and legacy != '__MULTI__':
+        raise ValueError('다중 화재 명령 버전이 올바르지 않습니다')
+    if len(nodes) == 1 and legacy not in (None, nodes[0]):
+        raise ValueError('화재 노드가 일치하지 않습니다')
+    return list(nodes)
+
+
+def validate_trial_command(command):
+    nodes = selected_fire_nodes(command)
+    # Existing common validation requires fireNode. This copy is only for
+    # validation; plan still receives and checks the complete original array.
+    normalized = dict(command)
+    normalized['fireNode'] = nodes[0]
+    return validate_command(normalized)
+
+
 def plan(command):
     from hardware.led_routes import load_files, demo_snapshot, inspect_route, fire_led_indices
     layout, floor = load_files()
-    sensors = [s['id'] for s in floor['sensors'] if s.get('type') == 'flame' and s.get('node') == command['fireNode']]
-    if len(sensors) != 1 or command['startNode'] not in {n['id'] for n in floor['nodes']}:
+    nodes = selected_fire_nodes(command)
+    sensor_ids = []
+    for node in nodes:
+        matches = [s['id'] for s in floor['sensors'] if s.get('type') == 'flame' and s.get('node') == node]
+        if len(matches) != 1:
+            raise ValueError('Pi 지도에 없는 화재 센서')
+        sensor_ids.append(matches[0])
+    if command['startNode'] not in {n['id'] for n in floor['nodes']}:
         raise ValueError('Pi 지도에 없는 출발점 또는 센서')
-    snapshot = demo_snapshot(floor, sensors[0], command['startNode'])
+    snapshot = demo_snapshot(floor, sensor_ids[0], command['startNode'])
+    if len(sensor_ids) > 1:
+        # The legacy helper accepts one fire, so recalculate once with the
+        # full set of blocked nodes instead of combining individual routes.
+        from route_service import FloorGraph
+        graph = FloorGraph(floor)
+        route = graph.shortest_route(command['startNode'], blocked_nodes=set(nodes))
+        if route is None:
+            route = graph.shortest_fallback_route(command['startNode'], blocked_nodes=set(nodes))
+        snapshot['route'] = route.as_dict() if route else None
+        snapshot['flameSensors'] = {
+            s['id']: {'active': s['id'] in sensor_ids, 'connected': True}
+            for s in floor['sensors'] if s.get('type') == 'flame'
+        }
     route = snapshot.get('route')
     if route is None:
         red, _ = fire_led_indices(snapshot, floor, layout)
@@ -189,7 +239,7 @@ class GuardedUno:
 
 
 def execute(command, local, port, uno_factory=GuardedUno, seconds=3, *, demo_no_sensors=False, cancel_check=None):
-    expires = validate_command(command)
+    expires = validate_trial_command(command)
     if not 0 < seconds <= 3:
         raise ValueError('시험 시간은 최대 3초')
     if not callable(cancel_check):
@@ -243,7 +293,7 @@ def execute(command, local, port, uno_factory=GuardedUno, seconds=3, *, demo_no_
 
 
 def poll_once(cloud, token, local, port, warming_up, *, demo_no_sensors=False):
-    command = request(cloud + '/api/hardware/sim-command', token=token).get('command')
+    command = request(cloud + '/api/hardware/sim-command?version=2', token=token).get('command')
     if command:
         if warming_up:
             outcome = {'status':'rejected', 'message':'실물 시험 시작 전 대기 중이던 요청은 취소됨. 새로 요청하세요.',

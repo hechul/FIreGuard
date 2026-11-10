@@ -20,6 +20,64 @@ class FakeUno:
 instances=[]
 class LedBridgeTest(unittest.TestCase):
     def setUp(self): instances.clear()
+    def test_fire_nodes_compatibility_and_fail_closed(self):
+        self.assertEqual(led.selected_fire_nodes({'fireNode':'N10'}), ['N10'])
+        self.assertEqual(led.selected_fire_nodes({'fireNode':'__MULTI__','fireNodes':['N10','N7']}), ['N10','N7'])
+        for command in (
+            {'fireNode':'N10','fireNodes':['N10','N7']},
+            {'fireNode':'__MULTI__'},
+            {'fireNode':'__MULTI__','fireNodes':['N10','N10']},
+            {'fireNode':'__MULTI__','fireNodes':[]},
+            {'fireNode':'__MULTI__','fireNodes':['N10', None]},
+        ):
+            with self.subTest(command=command), self.assertRaises(ValueError):
+                led.selected_fire_nodes(command)
+
+    def test_multiple_fires_route_and_red_use_same_full_snapshot(self):
+        floor={'nodes':[{'id':'N4'}], 'sensors':[
+            {'id':'FLM-07','type':'flame','node':'N7'},
+            {'id':'FLM-10','type':'flame','node':'N10'},
+            {'id':'FLM-02','type':'flame','node':'N2'}]}
+        seen = {}
+        class Graph:
+            def __init__(self, loaded): self.floor=loaded
+            def shortest_route(self, start, *, blocked_nodes):
+                seen['blocked'] = blocked_nodes
+                return SimpleNamespace(as_dict=lambda:{'nodes':['N4','EXIT_NW'],'edges':['E01']})
+            def shortest_fallback_route(self,*args,**kwargs):
+                raise AssertionError('normal route should be selected')
+        def inspect(snapshot, *args):
+            seen['active'] = {key for key, value in snapshot['flameSensors'].items() if value['active']}
+            return {'nodes':snapshot['route']['nodes'],'ordered':[1,2], 'red':[4,7]}
+        module=SimpleNamespace(load_files=lambda: ({},floor),
+            demo_snapshot=lambda *a:{'route':None, 'flameSensors':{}},
+            inspect_route=inspect, fire_led_indices=lambda *a: ([],[]))
+        with patch.dict(sys.modules, {'hardware.led_routes':module, 'route_service':SimpleNamespace(FloorGraph=Graph)}):
+            result=led.plan({'startNode':'N4','fireNode':'__MULTI__','fireNodes':['N7','N10']})
+        self.assertEqual(seen['blocked'], {'N7','N10'})
+        self.assertEqual(seen['active'], {'FLM-07','FLM-10'})
+        self.assertEqual(result['red'], [4,7])
+        self.assertEqual(result['nodes'], ['N4','EXIT_NW'])
+
+    def test_multiple_fires_no_route_preserves_all_red(self):
+        floor={'nodes':[{'id':'N4'}], 'sensors':[
+            {'id':'FLM-07','type':'flame','node':'N7'},
+            {'id':'FLM-10','type':'flame','node':'N10'}]}
+        class Graph:
+            def __init__(self, loaded): pass
+            def shortest_route(self, start, *, blocked_nodes): return None
+            def shortest_fallback_route(self, start, *, blocked_nodes): return None
+        def red(snapshot, *args):
+            self.assertTrue(all(value['active'] for value in snapshot['flameSensors'].values()))
+            return [7,4], []
+        module=SimpleNamespace(load_files=lambda: ({},floor),
+            demo_snapshot=lambda *a:{'route':None, 'flameSensors':{}},
+            inspect_route=lambda *a: self.fail('no route must not calculate green'), fire_led_indices=red)
+        with patch.dict(sys.modules, {'hardware.led_routes':module, 'route_service':SimpleNamespace(FloorGraph=Graph)}):
+            result=led.plan({'startNode':'N4','fireNode':'__MULTI__','fireNodes':['N7','N10']})
+        self.assertEqual(result['routeStatus'],'no_route')
+        self.assertEqual(result['path'], [])
+        self.assertEqual(result['red'], [4,7])
     def test_cancel_check_posts_secret_in_body_and_fails_closed(self):
         with patch('hardware.cloud_sim_led.request', return_value={'ok':True, 'active':True}) as req:
             led.ensure_current('https://example.test', 'secret', CMD)
@@ -109,6 +167,7 @@ class LedBridgeTest(unittest.TestCase):
     def test_warmup_rejects_pending_request(self, request, report, execute):
         led.poll_once('https://example.test','token','http://localhost','/dev/ttyACM0',True)
         execute.assert_not_called()
+        self.assertEqual(request.call_args.args[0], 'https://example.test/api/hardware/sim-command?version=2')
         self.assertEqual(report.call_args.args[3]['status'],'rejected')
         self.assertFalse(report.call_args.args[3]['ledCommandAck'])
     @patch('hardware.cloud_sim_led.plan',return_value={'nodes':[],'edges':[],'path':[],'red':[4],'routeStatus':'no_route'})

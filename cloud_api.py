@@ -14,6 +14,7 @@ from cloud_model import MAPPING_VERSION, cloud_floorplan, project_state, validat
 from cloud_store import StoreUnavailable, SupabaseStore
 from cloud_simulation import simulate
 from cloud_sim_commands_store import SimulationCommandStore
+from cloud_sim_multi_store import MultiFireSimulationCommandStore
 from cloud_sim_cancellation_store import SimulationCancellationStore
 
 
@@ -80,6 +81,9 @@ def install_cloud(app, original_floorplan):
     def sim_command_store():
         return app.extensions.get('sim_command_store') or SimulationCommandStore(store())
 
+    def sim_multi_store():
+        return app.extensions.get('sim_command_store') or MultiFireSimulationCommandStore(store())
+
     def sim_cancellation_store():
         return app.extensions.get('sim_cancellation_store') or SimulationCancellationStore(store())
 
@@ -127,14 +131,21 @@ def install_cloud(app, original_floorplan):
                     body = request.get_json(silent=True)
                     allowed = {'N33','N10','N9','N34','N8','N35','N7','N36','N37','N38','N12','N13','N14','N15','N5','N6','N3','N19','N1','N20','N11','N23','N2','N25','N4','N27','N28','N29','N30','N31'}
                     fires = {'N20','N2','N3','N4','N5','N6','N7','N8','N9','N10','N11'}
-                    if (not isinstance(body, dict) or set(body) != {'startNode', 'fireNode'}
-                            or not isinstance(body['startNode'], str) or not isinstance(body['fireNode'], str)
-                            or body['startNode'] not in allowed or body['fireNode'] not in fires):
+                    if not isinstance(body, dict) or set(body) not in ({'startNode', 'fireNode'}, {'startNode', 'fireNodes'}):
                         raise ValueError('Pi에 등록된 출발점과 화재 센서 위치를 선택하세요.')
+                    selected = body.get('fireNodes', [body.get('fireNode')])
+                    if (not isinstance(body['startNode'], str) or body['startNode'] not in allowed
+                            or not isinstance(selected, list) or not 1 <= len(selected) <= len(fires)
+                            or any(not isinstance(node, str) or node not in fires for node in selected)
+                            or len(set(selected)) != len(selected)):
+                        raise ValueError('Pi에 등록된 출발점과 중복 없는 화재 센서 위치를 선택하세요.')
                     # Preview requests never control the device or write real
                     # state. Pi may be running SIM without a REAL cloud heartbeat;
                     # the Pi bridge validates its local mode before calculating.
-                    return jsonify(ok=True, command=commands.create(device_id(), str(uuid4()), body['startNode'], body['fireNode']))
+                    command_id = str(uuid4())
+                    result = (commands.create(device_id(), command_id, body['startNode'], selected[0])
+                              if len(selected) == 1 else sim_multi_store().create_v2(device_id(), command_id, body['startNode'], selected))
+                    return jsonify(ok=True, command=result)
                 if request.path == '/api/sim-control/latest' and request.method == 'GET':
                     return jsonify(ok=True, command=commands.latest(device_id()))
                 if request.path == '/api/sim-control/cancel' and request.method == 'POST':
@@ -148,7 +159,9 @@ def install_cloud(app, original_floorplan):
                         raise ValueError('시험 명령 확인 요청이 올바르지 않습니다.')
                     return jsonify(ok=True, **sim_cancellation_store().check(device_id(), body['id'], body['claimToken']))
                 if request.path == '/api/hardware/sim-command' and request.method == 'GET':
-                    return jsonify(ok=True, command=commands.claim(device_id()))
+                    if request.args.get('version') not in (None, '2'):
+                        raise ValueError('지원하지 않는 시험 프로토콜 버전입니다.')
+                    return jsonify(ok=True, command=(sim_multi_store().claim_v2(device_id()) if request.args.get('version') == '2' else commands.claim(device_id())))
                 if request.path == '/api/hardware/sim-result' and request.method == 'POST':
                     body = request.get_json(silent=True)
                     if not isinstance(body, dict) or set(body) != {'id', 'claimToken', 'result'} or not isinstance(body['result'], dict):

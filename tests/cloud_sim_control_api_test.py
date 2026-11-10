@@ -17,6 +17,10 @@ class Commands:
         return {'id': command_id, 'status': 'pending'}
     def latest(self, device): return None
     def claim(self, device): return None
+    def create_v2(self, device, command_id, start, fires):
+        self.items.append((device, start, fires))
+        return {'id': command_id, 'status': 'pending'}
+    def claim_v2(self, device): return {'fireNodes': ['N7','N10'], 'fireNode': '__MULTI__'}
     def complete(self, device, command_id, token, result): return {'status': result['status']}
 
 class Cancellations:
@@ -53,6 +57,12 @@ class ControlTest(unittest.TestCase):
         self.real['connections']['pi'] = False
         self.assertEqual(self.send({'startNode':'N4','fireNode':'N10'}).status_code, 200)
         self.assertEqual(self.commands.items, [('pi-01','N4','N10')])
+    def test_multiple_fires_validate_without_changing_legacy(self):
+        self.assertEqual(self.send({'startNode':'N4','fireNodes':['N7','N10']}).status_code, 200)
+        self.assertEqual(self.commands.items, [('pi-01','N4',['N7','N10'])])
+        for bad in ([], ['N10','N10'], ['N10','N40'], ['N10', {}]):
+            self.assertEqual(self.send({'startNode':'N4','fireNodes':bad}).status_code, 400)
+        self.assertEqual(self.client.get('/api/hardware/sim-command?version=2', headers={'Authorization':'Bearer '+DEVICE}).json['command']['fireNode'], '__MULTI__')
     def test_disabled_even_with_token(self):
         with patch.dict(os.environ, {'FIREGUARD_SIM_CONTROL_ENABLED':'0'}):
             self.assertEqual(self.send({'startNode':'N4','fireNode':'N10'}).status_code, 503)

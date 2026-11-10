@@ -79,18 +79,21 @@
         throw new Error('시뮬레이션 상태를 확인할 수 없습니다.');
       const active = sensors.filter(s => s.type === 'flame' && state.flameSensors[s.id]?.active);
       if (!active.length) return null;
-      if (active.length !== 1) throw new Error('모의 화재 센서 하나만 지원합니다.');
-      const fireNode = active[0].node, startNode = state.startNode;
-      if (!starts.some(([id]) => id === startNode) || !fires.some(([id]) => id === fireNode))
+      // Graph node IDs are the shared contract: SIM and Pi sensor IDs differ.
+      const fireNodes = [...new Set(active.map(sensor => sensor.node))].sort();
+      const startNode = state.startNode;
+      if (!starts.some(([id]) => id === startNode) ||
+          fireNodes.some(node => !fires.some(([id]) => id === node)))
         throw new Error('Pi에 없는 노드입니다.');
+      const blockedNodes = new Set(state.blockedNodes || []);
       if ((state.blockedEdges || []).length || (state.manualBlockedEdges || []).length ||
           Object.keys(state.edgeWeightOverrides || {}).length ||
           Object.values(state.shutters || {}).some(s => s.closed || !s.connected) ||
           Object.values(state.flameSensors).some(s => !s.connected) ||
-          (state.blockedNodes || []).some(id => id !== fireNode) ||
+          blockedNodes.size !== fireNodes.length || fireNodes.some(id => !blockedNodes.has(id)) ||
           !state.connections?.pi || !state.connections?.server)
-        throw new Error('출발점과 화재 한 건 외의 장애 조건은 지원하지 않습니다.');
-      return {startNode, fireNode};
+        throw new Error('출발점과 모의 화재 외의 장애 조건은 지원하지 않습니다.');
+      return {startNode, fireNodes};
     }
 
     function setAuto(armed, message) {
@@ -236,7 +239,7 @@
       if (!Array.isArray(history)) { status.textContent = '시뮬레이션 상태를 읽을 수 없습니다.'; return; }
       pending = true; send.disabled = true; fromScreen.disabled = true; refresh.disabled = true;
       status.textContent = '현재 화면 조건 확인 중';
-      let response, result;
+      let response, result, chosen;
       try {
         response = await fetch('/api/cloud/simulation', {method:'POST', headers:{'Content-Type':'application/json'},
           cache:'no-store', body:JSON.stringify({history})});
@@ -246,16 +249,17 @@
             sessionStorage.getItem('fireguard-simulation-history') !== saved) {
           throw new Error('화면 조건이 변경됐습니다. 다시 시도하세요.');
         }
-        const chosen = selectionFrom(result.state, result.floorplan);
-        if (!chosen) throw new Error('모의 화재 센서 하나를 선택하세요.');
-        start.value = chosen.startNode; fire.value = chosen.fireNode;
+        chosen = selectionFrom(result.state, result.floorplan);
+        if (!chosen) throw new Error('모의 화재 센서를 하나 이상 선택하세요.');
+        start.value = chosen.startNode;
+        if (chosen.fireNodes.length === 1) fire.value = chosen.fireNodes[0];
       } catch (error) {
         status.textContent = `요청 실패 · ${error.message || '연결을 확인하세요.'}`;
         pending = false; send.disabled = false; fromScreen.disabled = false; refresh.disabled = false;
         return;
       }
       pending = false;
-      const data = await request('/api/sim-control/commands', {startNode:start.value, fireNode:fire.value});
+      const data = await request('/api/sim-control/commands', chosen);
       if (data) show(data);
     });
     refresh.addEventListener('click', async () => {

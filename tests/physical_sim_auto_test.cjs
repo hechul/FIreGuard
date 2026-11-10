@@ -20,8 +20,8 @@ const fetch=async(url,options)=>{requests.push({url,body:JSON.parse(options.body
 const setTimeout=(fn,delay)=>{let id=++timerId;timers.set(id,{fn,delay});return id;};
 const clearTimeout=id=>timers.delete(id);
 vm.runInNewContext(fs.readFileSync('static/js/physical_sim_control.js','utf8'),{document,window,CustomEvent,sessionStorage:{getItem:()=>null},fetch,setTimeout,clearTimeout,JSON,Object,Array,Error});
-const state={operationMode:'simulation',startNode:'N4',blockedNodes:['N10'],blockedEdges:[],manualBlockedEdges:[],edgeWeightOverrides:{},shutters:{},flameSensors:{'FLM-15':{active:true,connected:true}},connections:{pi:true,server:true}};
-const floorplan={sensors:[{id:'FLM-15',type:'flame',node:'N10'}]};
+const state={operationMode:'simulation',startNode:'N4',blockedNodes:['N10','N7'],blockedEdges:[],manualBlockedEdges:[],edgeWeightOverrides:{},shutters:{},flameSensors:{'FLM-15':{active:true,connected:true},'FLM-14':{active:true,connected:true}},connections:{pi:true,server:true}};
+const floorplan={sensors:[{id:'FLM-15',type:'flame',node:'N10'},{id:'FLM-14',type:'flame',node:'N7'}]};
 const send=()=>handlers['fireguard:simulation-action']({detail:{state,floorplan}});
 const tick=async(delay)=>{const t=[...timers].find(([,v])=>v.delay===delay); assert(t,'timer missing');timers.delete(t[0]);t[1].fn();for(let i=0;i<10;i++)await Promise.resolve();};
 (async()=>{
@@ -36,8 +36,8 @@ const tick=async(delay)=>{const t=[...timers].find(([,v])=>v.delay===delay); ass
  assert.equal(requests[0].url,'/api/sim-control/latest','auth must be checked before arming');
  assert.equal(elements['#physicalSimAuto']['aria-pressed'],'true');
  await tick(500);
- assert.equal(requests[1].url,'/api/sim-control/commands');assert.deepEqual(requests[1].body,{startNode:'N4',fireNode:'N10'});
- state.flameSensors['FLM-15'].active=false; state.blockedNodes=[]; send();
+ assert.equal(requests[1].url,'/api/sim-control/commands');assert.deepEqual(requests[1].body,{startNode:'N4',fireNodes:['N10','N7']});
+ state.flameSensors['FLM-14'].active=false; state.blockedNodes=['N10']; send();
  for(let i=0;i<10;i++)await Promise.resolve();
  assert.equal(requests[2].url,'/api/sim-control/cancel');assert.deepEqual(requests[2].body,{id:'cmd1'});
  handlers['fireguard:simulation-ended']();
