@@ -16,7 +16,7 @@
 1. `supabase/migrations/202611100003_real_clear_queue.sql`: Pi가 처리할 REAL 해제 명령 큐와 권한 설정.
 2. `supabase/migrations/202611100005_v2_preserve_restored_latch.sql`: 센서 단절 시 기존 화재 또는 Pi가 복원한 화재를 보존하는 수신 함수.
 
-두 SQL은 격리 PostgreSQL 테스트를 통과했지만 실제 운영 Supabase 적용 여부와 환경은 별도로 확인해야 한다.
+두 SQL은 격리 PostgreSQL 테스트를 통과했으며, 2026-11-12 FireGuard 운영 Supabase에 적용하고 필수 테이블 및 함수가 있는 것을 확인했다. 다른 Supabase 프로젝트에 배포한다면 별도 적용이 필요하다.
 
 Vercel **Production**의 기존 `FIREGUARD_DEVICE_TOKEN`은 Pi 송신·명령 수신용이다. 웹 관리자 해제 기능은 기본 꺼져 있으며, 준비 후에만 `FIREGUARD_REAL_CONTROL_ENABLED=1` 및 **32자 이상의 별도** `FIREGUARD_REAL_OPERATOR_TOKEN`을 설정하고 Production 재배포한다. 이 관리자 키는 장치 토큰 및 `FIREGUARD_SIM_OPERATOR_TOKEN`과 달라야 한다. 서로 다른 키를 채팅, 소스코드, 로그에 넣지 않는다.
 
@@ -27,12 +27,32 @@ Vercel **Production**의 기존 `FIREGUARD_DEVICE_TOKEN`은 Pi 송신·명령 �
 ```bash
 git -C ~/FIreGuard pull --ff-only origin main
 mkdir -p ~/Desktop/node1/hardware
-cp --backup=numbered ~/FIreGuard/hardware/{real_fire_latch.py,real_pi_service.py,real_device_runtime.py,real_allzone_reporter.py,all_zone_routes.py,real_clear_worker.py,real_flame_reader.py,real_sensor_outbox.py,cloud_sim_led.py,cloud_sim_bridge.py} ~/Desktop/node1/hardware/
+cp --backup=numbered ~/FIreGuard/hardware/{real_fire_latch.py,real_pi_service.py,real_device_runtime.py,real_allzone_reporter.py,all_zone_routes.py,real_clear_worker.py,real_flame_reader.py,real_sensor_outbox.py,cloud_sim_led.py,cloud_sim_bridge.py,start_real_monitor.sh} ~/Desktop/node1/hardware/
 ```
 
 `node1`에는 최신 `hardware/cloud_telemetry.py`, `hardware/flame_multi_reader.py`, `hardware/led_routes.py`, `hardware/led_junctions.py`, `hardware/led_layout_162.json`, `pi_led_usb.py`, `route_service.py`와 `.venv`가 이미 있어야 한다. 파일 버전·11센서 매핑이 다르면 먼저 확인하고 중단한다. 기존 SIM 시스템과 호환성은 실물에서 검증되지 않았다.
 
-## Pi 실행 순서 — LED 출력 없이 REAL 수신부터 시험
+## 한 터미널로 시작 — LED 출력 없이 REAL 수신부터 시험
+
+현장에서 기존 센서·LED·클라우드 송신 프로그램이 모두 종료된 것을 확인한 후 실행한다. 토큰을 입력하고 이 터미널을 열어 두면 서버, 11개 센서 리더, 클라우드 송신 및 관리자 해제 워커를 실행하고 프로세스 중단을 감시한다. 실제 장치가 연결되지 않은 컴퓨터에서는 테스트할 수 없다.
+
+```bash
+cd ~/Desktop/node1
+bash hardware/start_real_monitor.sh
+```
+
+화면의 시작 문구만으로 클라우드 전송이나 관리자 해제 연결 성공을 보장하지 않는다. 별도 터미널에서 `tail -n 30 runtime/real-cloud.log runtime/real-clear.log`로 오류 여부를 확인한다. 첫 실행에 기존 REAL 화재 기록이 복원될 수 있다. 종료하려면 실행한 터미널에서 `Ctrl+C`를 누른다.
+
+실물 매핑 및 방향을 검증한 뒤에만 위 실행을 종료하고 다음을 실행한다. Arduino 포트는 직접 확인한다.
+
+```bash
+cd ~/Desktop/node1
+bash hardware/start_real_monitor.sh --verified-led /dev/ttyACM0
+```
+
+검증되지 않은 LED 매핑은 이 옵션으로도 시작할 수 없다. 기존 수집기를 함께 실행하면 안 된다.
+
+## 수동 Pi 실행 순서
 
 아래는 **같은 터미널 세션**에서 수행한다. 이 절차는 준비 전용이며 LED를 켜지 않는다. REAL 서비스에 필요한 로컬 토큰은 매 실행 때 생성해 자식 프로세스에만 공유한다. 실행 중인 Pi 터미널을 닫으면 관련 프로세스가 종료될 수 있다.
 

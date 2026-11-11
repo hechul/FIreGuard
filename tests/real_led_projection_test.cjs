@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('node:assert/strict');
-const {project, coordinates, allZoneSummary} = require('../static/js/real_led_projection.js');
+const {project, projectFor3d, coordinates, allZoneSummary} = require('../static/js/real_led_projection.js');
 const {sections} = require('../static/js/prototype_map.js');
 const coords = coordinates(sections);
 assert.equal(coords.length, 162);
@@ -13,6 +13,9 @@ const h = {operationMode:'real', ledStatus:'active', ledCommandAck:true,
  fireLedLogicalIndices:[61,80], fireLedIndices:[62,81]};
 const cloud = {enabled:true,hasTelemetry:true,stale:false,routeSource:'pi',hardware:h};
 const result = project(cloud,sections);
+assert.deepEqual(projectFor3d({operationMode:'real',cloud},sections),result);
+assert.equal(projectFor3d({operationMode:'simulation',cloud},sections),null);
+assert.equal(projectFor3d({operationMode:'real',cloud:{...cloud,stale:true}},sections),null);
 assert.match(result.label,/추정.*발광 미확인/);
 assert.deepEqual(result.points.map(p=>[p.index,p.color]),[[0,'route'],[20,'route'],[61,'fire'],[80,'fire']]);
 assert.equal(project({...cloud,stale:true},sections),null);

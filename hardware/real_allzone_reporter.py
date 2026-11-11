@@ -4,6 +4,20 @@ import time
 from urllib.request import Request, urlopen
 
 
+def _check_ingest_result(response):
+    """HTTP 200 alone does not mean the database accepted this snapshot."""
+    try:
+        result = json.loads(response.read(16385).decode('utf-8'))
+    except (UnicodeError, ValueError, TypeError) as exc:
+        raise RuntimeError('클라우드 저장 응답 형식 오류') from exc
+    if not isinstance(result, dict) or result.get('ok') is not True or result.get('accepted') is not True:
+        reason = result.get('reason') if isinstance(result, dict) else None
+        if reason not in ('stale', 'duplicate'):
+            reason = 'unknown'
+        print('[CLOUD] DB에서 상태 보고를 거부했습니다:', reason, flush=True)
+        raise RuntimeError('클라우드에서 상태 저장을 확인하지 못했습니다')
+
+
 def make_payload(base, plan):
     """Keep the existing sensor/ACK snapshot while clearing single-route claims."""
     payload = dict(base)
@@ -74,6 +88,7 @@ class AllZoneReporter:
             with urlopen(request, timeout=3.0) as response:
                 if not 200 <= response.status < 300:
                     raise RuntimeError(f'Cloud HTTP {response.status}')
+                _check_ingest_result(response)
             print(f'[CLOUD] 전송 성공 sequence={sender.sequence}', flush=True)
         sender.last_key = key
         sender.last_success = time.monotonic()

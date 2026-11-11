@@ -14,7 +14,7 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="{{ url_for('static', filename='js/led_plan.js', v='toilet-layout-20261109') }}"></script>
   <script src="{{ url_for('static', filename='js/prototype_projection.js', v='shop-center-20261110') }}"></script>
-  <script src="{{ url_for('static', filename='js/map3d.js', v='node-groups-20261109') }}"></script>
+  <script src="{{ url_for('static', filename='js/map3d.js', v='real-led-20261112') }}"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -170,6 +170,7 @@
 
               <!-- 3D Map Container (hidden by default; shown on 3D toggle) -->
               <div class="map-stage" id="mapStage3d" style="display:none; position:relative; overflow:hidden; background:#111418; border-color:#2A3441;">
+                <p id="realLed3dNote" hidden style="position:absolute;top:8px;left:12px;right:12px;z-index:5;color:#fff;font-size:12px;text-align:center;pointer-events:none"></p>
                 <!-- Three.js canvas injected here by Map3D.init() -->
                 <div id="map3dViewControls" style="position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:5;">
                   <button onclick="Map3D.setView('iso')"  class="btn ghost" style="padding:6px 12px;font-size:12px;background:rgba(30,40,55,0.85);color:#E2E8F0;border:1px solid rgba(255,255,255,0.1);border-radius:999px;">📐 아이소메트릭</button>
@@ -572,7 +573,7 @@
   <script src="{{ url_for('static', filename='js/cloud_hardware.js', v='real-monitor-20261110') }}"></script>
   <script src="{{ url_for('static', filename='js/node_groups.js', v='node-groups-20261109') }}"></script>
   <script src="{{ url_for('static', filename='js/prototype_map.js', v='toilet-layout-20261109') }}"></script>
-  <script src="{{ url_for('static', filename='js/real_led_projection.js', v='allzone-20261111') }}"></script>
+  <script src="{{ url_for('static', filename='js/real_led_projection.js', v='real-led-20261112') }}"></script>
   <script src="{{ url_for('static', filename='js/dashboard.js', v='allzone-20261111') }}"></script>
   <script src="{{ url_for('static', filename='js/physical_sim_control.js', v='multi-fire-20261110') }}"></script>
   <script src="{{ url_for('static', filename='js/real_fire_control.js', v='real-clear-20261112') }}"></script>

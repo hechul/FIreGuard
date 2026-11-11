@@ -63,6 +63,7 @@ const Map3D = (() => {
     route:   [],   // Array of Line
     sensors: {},   // sensorId → Mesh
     leds:    [],   // Array of Mesh (LED strips from floorplan.ledSegments)
+    ledReports: [], // Approximate locations for commands acknowledged by the Pi.
   };
 
   /* ------------------------------------------------------------------ */
@@ -487,6 +488,39 @@ const Map3D = (() => {
               : COLORS.ledSafe;
       led.material.color.set(c);
     });
+
+    // The grey strips are a schematic, not an LED-to-strip mapping. Overlay
+    // individually reported logical LEDs only when the same freshness,
+    // mapping and ACK checks as the 2D view pass.
+    const oldLedMaterials = new Set();
+    pool.ledReports.forEach(mesh => {
+      _dynamicGroup.remove(mesh);
+      mesh.geometry.dispose();
+      oldLedMaterials.add(mesh.material);
+    });
+    oldLedMaterials.forEach(material => material.dispose());
+    pool.ledReports.length = 0;
+    const report = window.FireGuardRealLedProjection && window.FireGuardPrototypeMap
+      ? window.FireGuardRealLedProjection.projectFor3d(state, window.FireGuardPrototypeMap.sections) : null;
+    const note = document.getElementById('realLed3dNote');
+    if (note) {
+      note.hidden = !report;
+      note.textContent = report?.label || '';
+    }
+    if (report) {
+      const materials = {
+        fire: new THREE.MeshBasicMaterial({color: COLORS.ledDanger}),
+        route: new THREE.MeshBasicMaterial({color: COLORS.ledSafe}),
+      };
+      for (const point of report.points) {
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(2.7, 8, 6), materials[point.color]);
+        mesh.position.set(bx(point.x), LED_H + 5, bz(point.y));
+        _dynamicGroup.add(mesh);
+        pool.ledReports.push(mesh);
+      }
+      if (!report.points.some(p => p.color === 'fire')) materials.fire.dispose();
+      if (!report.points.some(p => p.color === 'route')) materials.route.dispose();
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -608,6 +642,7 @@ const Map3D = (() => {
     }
 
     pool.route.length = 0;
+    pool.ledReports.length = 0;
     Object.keys(pool.nodes).forEach(k => delete pool.nodes[k]);
     Object.keys(pool.exits).forEach(k => delete pool.exits[k]);
     Object.keys(pool.edges).forEach(k => delete pool.edges[k]);
@@ -632,6 +667,7 @@ const Map3D = (() => {
       if (_renderer.domElement.parentNode) _renderer.domElement.parentNode.removeChild(_renderer.domElement);
     }
     pool.route.length = 0;
+    pool.ledReports.length = 0;
     pool.leds.length  = 0;
     Object.keys(pool.nodes).forEach(k => delete pool.nodes[k]);
     Object.keys(pool.exits).forEach(k => delete pool.exits[k]);

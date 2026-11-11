@@ -1,4 +1,6 @@
 import json
+import os
+import signal
 import tempfile
 import threading
 import time
@@ -6,7 +8,7 @@ import unittest
 from copy import deepcopy
 from pathlib import Path
 from hardware.real_pi_service import RealPiState
-from hardware.real_device_runtime import assess_snapshot, reconcile_cloud_latches, PublisherPump
+from hardware.real_device_runtime import assess_snapshot, reconcile_cloud_latches, PublisherPump, _terminate_as_interrupt
 
 FLOOR = json.loads((Path(__file__).resolve().parents[1] / 'static/data/floorplan.json').read_text())
 
@@ -136,6 +138,21 @@ class RealRuntimeOutputTest(unittest.TestCase):
             self.Controller(self.state.snapshot,FLOOR,{'verified':False,'mapping_status':'needs_verification'},
                 enabled=True,port='/dev/test',uno_factory=self.Uno)
         self.assertEqual(self.instances,[])
+
+    def test_service_termination_runs_led_cleanup(self):
+        self.state.update({self.ids[0]:True})
+        self.assertEqual(self.controller.step(self.state.snapshot())['led_status'], 'active')
+        previous = signal.signal(signal.SIGTERM, _terminate_as_interrupt)
+        try:
+            try:
+                os.kill(os.getpid(), signal.SIGTERM)
+            except KeyboardInterrupt:
+                pass
+            finally:
+                self.controller.close()
+        finally:
+            signal.signal(signal.SIGTERM, previous)
+        self.assertEqual(self.instances[0].calls[-2:], ['stop', 'close'])
 
     def test_publisher_stops_heartbeats_after_local_snapshot_loss(self):
         class Reporter:

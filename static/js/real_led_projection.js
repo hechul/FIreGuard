@@ -81,5 +81,9 @@
       points: [...seen].map(index => ({index, ...coords[index], color: fires.has(index) ? 'fire' : 'route'})),
     };
   }
-  return { coordinates, project, allZoneSummary };
+  // The simulator must never draw physical REAL output as its own state.
+  function projectFor3d(state, sections) {
+    return state?.operationMode === 'real' ? project(state.cloud, sections) : null;
+  }
+  return { coordinates, project, allZoneSummary, projectFor3d };
 }));

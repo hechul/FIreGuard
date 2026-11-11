@@ -12,12 +12,18 @@ import fcntl
 import json
 import os
 import re
+import signal
 import threading
 import time
 from copy import deepcopy
 from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
+
+
+def _terminate_as_interrupt(signum, frame):
+    """Let a normal service stop run the same LED STOP cleanup as Ctrl+C."""
+    raise KeyboardInterrupt
 
 
 def assess_snapshot(snapshot, floorplan, layout):
@@ -348,6 +354,7 @@ def main():
         publisher = PublisherPump(reporter, floor, layout)
         publisher.start()
         last_problem = None
+        previous_sigterm = signal.signal(signal.SIGTERM, _terminate_as_interrupt)
         try:
             while True:
                 try:
@@ -367,8 +374,13 @@ def main():
         except KeyboardInterrupt:
             pass
         finally:
-            publisher.close()
-            controller.close()
+            try:
+                publisher.close()
+            finally:
+                try:
+                    controller.close()
+                finally:
+                    signal.signal(signal.SIGTERM, previous_sigterm)
 
 
 if __name__ == '__main__':

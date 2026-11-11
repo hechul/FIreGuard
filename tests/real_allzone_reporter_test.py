@@ -1,8 +1,16 @@
 import unittest
-from hardware.real_allzone_reporter import make_payload
+from io import BytesIO
+from hardware.real_allzone_reporter import make_payload, _check_ingest_result
 
 
 class RealAllZoneReporterTests(unittest.TestCase):
+    def test_http_success_does_not_imply_database_acceptance(self):
+        _check_ingest_result(BytesIO(b'{"ok":true,"accepted":true}'))
+        for body in (b'{"ok":true,"accepted":false,"reason":"stale"}',
+                     b'{"ok":true}', b'invalid json'):
+            with self.subTest(body=body), self.assertRaises(RuntimeError):
+                _check_ingest_result(BytesIO(body))
+
     def test_partial_preserved_without_invented_single_route(self):
         base = {'startNode':'N4', 'routeNodes':['N4','EXIT'], 'ledIndices':[21],
                 'ledLogicalIndices':[20], 'ledCommandAck':True}
