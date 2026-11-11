@@ -353,6 +353,11 @@ def project_state(floorplan, row, events, device_id, stale_seconds=15, now=None,
         result['blockedNodes'] = sorted(reported | last_danger)
         result['blockedEdges'] = hardware['blockedEdges']
         all_zone = hardware.get('allZone')
+        if all_zone:
+            # A valid all-zone plan intentionally has no legacy single-start
+            # route. Do not mistake that empty field for no safe route.
+            result['overallStatus'] = ('no_route' if all_zone['routeStatus'] == 'no_route'
+                                       else 'fire' if result['realFireDetected'] else 'normal')
         if all_zone and any(edge['from'] in last_danger or edge['to'] in last_danger
                             for edge in all_zone['directedEdges']):
             source = 'pi_unverified'

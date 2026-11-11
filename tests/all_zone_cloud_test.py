@@ -38,6 +38,21 @@ class AllZoneCloudTest(unittest.TestCase):
         self.assertEqual(state['cloud']['routeSource'], 'pi')
         self.assertIsNone(state['startNode'])
         self.assertEqual(state['cloud']['hardware']['allZone'], data['allZone'])
+        self.assertEqual(state['overallStatus'], 'normal')
+
+    def test_fire_with_all_zone_plan_is_not_misreported_as_no_route(self):
+        data = report()
+        data['flame']['FLM-10']['active'] = True
+        data['blockedNodes'] = ['N10']
+        data['allZone']['routeStatus'] = 'partial'
+        data['allZone']['unreachableNodes'] = ['N31']
+        normalized = validate_hardware_telemetry(data, FLOOR, data['deviceId'])
+        now = datetime.now(timezone.utc).isoformat()
+        row = {'telemetry': normalized, 'received_at': now, 'observed_at': now, 'sequence': 1}
+        state = project_state(FLOOR, row, [], data['deviceId'])
+        self.assertTrue(state['realFireDetected'])
+        self.assertEqual(state['overallStatus'], 'fire')
+        self.assertEqual(state['cloud']['hardware']['allZone']['routeStatus'], 'partial')
 
     def test_bad_plans_rejected(self):
         mutations = [

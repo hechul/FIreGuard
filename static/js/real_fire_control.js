@@ -46,11 +46,13 @@
       '<label>관리자 키<input id="realFireOperatorKey" type="password" autocomplete="off" spellcheck="false" style="display:block;width:100%;margin-top:4px"></label>' +
       '<fieldset id="realFireSensorChoices" style="border:0;padding:0;margin:0"><legend>해제할 화재 센서</legend></fieldset>' +
       '<button id="realFireSubmit" class="btn secondary" type="button">선택한 화재 해제 요청</button>' +
+      '<button id="realFireRetry" class="btn secondary" type="button" hidden>요청 결과 다시 확인</button>' +
       '<p id="realFireClearStatus" role="status" aria-live="polite">요청 전</p></div>';
     sensorCard.appendChild(panel);
     const key = panel.querySelector('#realFireOperatorKey');
     const choices = panel.querySelector('#realFireSensorChoices');
     const submit = panel.querySelector('#realFireSubmit');
+    const retry = panel.querySelector('#realFireRetry');
     const status = panel.querySelector('#realFireClearStatus');
     let current = null, visible = false, pending = null, polling = false;
 
@@ -76,6 +78,8 @@
       panel.hidden = !visible || !enabled || (!ids.length && !pending);
       if (!visible) return;
       showChoices(ids);
+      retry.hidden = !pending || !pending.id;
+      retry.disabled = polling;
       submit.disabled = Boolean(pending) || !ids.length || !current.cloud.hasTelemetry || current.cloud.stale;
       if (!pending && current.cloud.stale) status.textContent = '실제 장비 상태를 확인한 뒤 해제할 수 있습니다.';
       if (pending && confirmedByTelemetry(current, pending.baseline, pending.sensorIds, pending.command)) {
@@ -96,12 +100,17 @@
       const response = await win.fetch(path, {method:body ? 'POST' : 'GET', headers, cache:'no-store',
         ...(body ? {body:JSON.stringify(body)} : {})});
       const data = await response.json().catch(() => ({}));
-      if (!response.ok || data.ok === false) throw new Error(data.error || `HTTP ${response.status}`);
+      if (!response.ok || data.ok === false) {
+        const error = new Error(data.error || `HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
       return data;
     }
     async function poll() {
       if (polling || !pending) return;
       polling = true;
+      retry.disabled = true;
       try {
         for (let attempt = 0; attempt < 60 && pending; attempt++) {
           await new Promise(resolve => win.setTimeout(resolve, 2000));
@@ -128,10 +137,13 @@
           status.textContent = code === 'completed' ? 'Pi 응답 확인 · 최신 센서 상태를 기다리는 중' : 'Pi 처리 결과를 기다리는 중';
         }
         if (pending) status.textContent = '결과 확인 대기 중입니다. 실제 센서 상태가 확인될 때까지 화재를 유지합니다.';
-      } catch (_) {
-        status.textContent = '연결이 끊겨 요청 결과를 확인할 수 없습니다. 화재 상태를 확인해 주세요.';
-      } finally { polling = false; }
+      } catch (error) {
+        status.textContent = error.status === 401
+          ? '관리자 키를 확인하고 요청 결과를 다시 확인해 주세요.'
+          : '연결이 끊겨 요청 결과를 확인할 수 없습니다. 화재 상태를 확인해 주세요.';
+      } finally { polling = false; retry.disabled = false; retry.hidden = !pending?.id; }
     }
+    retry.addEventListener('click', () => { if (pending?.id) void poll(); });
     submit.addEventListener('click', async () => {
       if (!visible || pending || !current?.cloud?.hasTelemetry || current.cloud.stale) return;
       if (!key.value) { status.textContent = '관리자 키를 입력해 주세요.'; return; }
@@ -150,9 +162,16 @@
         const result = await api('/api/real-control/clear', {sensorIds:ids});
         if (!pending || !result.command?.id) throw new Error('요청 결과를 확인할 수 없습니다.');
         pending.id = result.command.id;
+        retry.hidden = false;
         status.textContent = 'Pi 처리 결과를 기다리는 중';
         void poll();
-      } catch (_) {
+      } catch (error) {
+        if (error.status === 400 || error.status === 401 || error.status === 405) {
+          pending = null;
+          submit.disabled = false;
+          status.textContent = error.status === 401 ? '관리자 키가 올바르지 않습니다.' : '요청이 거부되었습니다. 센서 선택과 서버 설정을 확인해 주세요.';
+          return;
+        }
         // Network failure can occur after server accepted the request. Do not
         // send again or claim that state was cleared without explicit recovery.
         status.textContent = '요청 결과를 확인할 수 없습니다. 실제 센서 상태를 확인해 주세요.';

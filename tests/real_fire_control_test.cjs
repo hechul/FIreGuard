@@ -18,7 +18,7 @@ assert.match(describeCompact({enabled:true,hasTelemetry:true,stale:false,hardwar
 assert.match(describeCompact({enabled:true,hasTelemetry:true,stale:false,hardware:{ledStatus:'active',ledCommandAck:true,ledLogicalIndices:[1,2],fireLedLogicalIndices:[3]}}),/경로 2개.*화재 1개.*발광 미확인/);
 const events = [], handlers = {};
 const element = () => ({style:{}, append(){}, appendChild(){}, setAttribute(){}, addEventListener(){}, querySelectorAll(){return [];}});
-const fields = Object.fromEntries(['#realFireOperatorKey','#realFireSensorChoices','#realFireSubmit','#realFireClearStatus'].map(id=>[id,element()]));
+const fields = Object.fromEntries(['#realFireOperatorKey','#realFireSensorChoices','#realFireSubmit','#realFireRetry','#realFireClearStatus'].map(id=>[id,element()]));
 const document = {documentElement:{dataset:{cloud:'true'}}, getElementById(){return null;},
   querySelector(){return element();}, createElement(){const e=element();e.querySelector=id=>fields[id];return e;}};
 const win = {addEventListener(name, cb){handlers[name]=cb;}, dispatchEvent(e){events.push(e.type);},

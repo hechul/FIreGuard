@@ -27,7 +27,7 @@ Vercel **Production**의 기존 `FIREGUARD_DEVICE_TOKEN`은 Pi 송신·명령 �
 ```bash
 git -C ~/FIreGuard pull --ff-only origin main
 mkdir -p ~/Desktop/node1/hardware
-cp --backup=numbered ~/FIreGuard/hardware/{real_fire_latch.py,real_pi_service.py,real_device_runtime.py,real_allzone_reporter.py,all_zone_routes.py,real_clear_worker.py,cloud_sim_led.py,cloud_sim_bridge.py} ~/Desktop/node1/hardware/
+cp --backup=numbered ~/FIreGuard/hardware/{real_fire_latch.py,real_pi_service.py,real_device_runtime.py,real_allzone_reporter.py,all_zone_routes.py,real_clear_worker.py,real_flame_reader.py,real_sensor_outbox.py,cloud_sim_led.py,cloud_sim_bridge.py} ~/Desktop/node1/hardware/
 ```
 
 `node1`에는 최신 `hardware/cloud_telemetry.py`, `hardware/flame_multi_reader.py`, `hardware/led_routes.py`, `hardware/led_junctions.py`, `hardware/led_layout_162.json`, `pi_led_usb.py`, `route_service.py`와 `.venv`가 이미 있어야 한다. 파일 버전·11센서 매핑이 다르면 먼저 확인하고 중단한다. 기존 SIM 시스템과 호환성은 실물에서 검증되지 않았다.
@@ -55,7 +55,7 @@ FG_REAL_SERVICE_PID=$!
 ```
 
 ```bash
-.venv/bin/python hardware/flame_multi_reader.py --api http://127.0.0.1:5001 > runtime/real-sensors.log 2>&1 &
+.venv/bin/python hardware/real_flame_reader.py --api http://127.0.0.1:5001 > runtime/real-sensors.log 2>&1 &
 FG_REAL_READER_PID=$!
 ```
 
@@ -95,6 +95,16 @@ tail -n 30 runtime/real-service.log runtime/real-sensors.log runtime/real-cloud.
 웹의 해제 요청은 Pi가 원시 센서가 정상이고 최신인지 확인한 뒤 처리한다. Pi ACK만으로 화면에서 정상으로 확정하지 않고, 그 이후의 최신 REAL 보고도 확인한다. 연결이 끊겼거나 처리 결과가 불명확하면 관리자가 실제 상태를 확인해야 한다. 처리 중 Pi가 중단된 명령은 자동 재실행하지 않는다.
 
 실제 LED를 켜려면 Pi·Arduino 연결과 실물 맵 검증을 별도로 마치고, **GPIO 감지 → 래치 → 복수 화재 경로 → Arduino FLOW/STOP → UI 보고 → 선택 해제**를 현장에서 검증해야 한다. REAL LED 출력 옵션은 검증된 배치 파일이 없는 현재 환경에서 사용하지 않는다. Arduino `OK`는 명령 응답일 뿐 실제 발광 확인이 아니다.
+
+현장 매핑 검증을 완료한 후에만, 앞에서 실행한 LED 없는 런타임을 종료하고 같은 터미널에서 다음을 실행한다. 포트는 Arduino가 실제 연결된 포트로 확인한다.
+
+```bash
+kill "$FG_REAL_RUNTIME_PID"
+.venv/bin/python -m hardware.real_device_runtime --enable-real-cloud --assert-exclusive-publisher --enable-verified-led --port /dev/ttyACM0 > runtime/real-cloud.log 2>&1 &
+FG_REAL_RUNTIME_PID=$!
+```
+
+매핑이 검증되지 않았거나 센서 입력·화재 저장이 확인되지 않으면 LED 출력이 거부된다. 스위치나 메타데이터만 변경하여 검증을 대신하지 않는다.
 
 실제 화재 시 전체 구역에서 출구까지의 계획을 계산한다. 일부 구역이 차단되면 `partial`과 경로 없는 노드가 표시되며, 모든 구역의 대피가 보장되는 것은 아니다. 지도 파란 경로는 계산 계획이고 녹색·빨간 점은 Arduino가 명령을 승인한 LED의 추정 위치다. FLOW의 단일 전역 애니메이션이 갈림길별 방향을 정확히 나타내는지 실물 확인이 필요하다.
 
