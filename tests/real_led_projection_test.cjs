@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('node:assert/strict');
-const {project, projectFor3d, coordinates, allZoneSummary} = require('../static/js/real_led_projection.js');
+const {project, projectFor3d, coordinates, allZoneSummary, markConnectionUnknown} = require('../static/js/real_led_projection.js');
 const {sections} = require('../static/js/prototype_map.js');
 const coords = coordinates(sections);
 assert.equal(coords.length, 162);
@@ -13,6 +13,15 @@ const h = {operationMode:'real', ledStatus:'active', ledCommandAck:true,
  fireLedLogicalIndices:[61,80], fireLedIndices:[62,81]};
 const cloud = {enabled:true,hasTelemetry:true,stale:false,routeSource:'pi',hardware:h};
 const result = project(cloud,sections);
+const liveState = {cloud, connections:{pi:true,server:true}, flameSensors:{'FLM-01':{active:true,connected:true}}, sensorCounts:{offline:0}, equipment:[{id:'FLM-01',status:'danger'}]};
+const unavailable = markConnectionUnknown(liveState);
+assert.equal(unavailable.cloud.stale,true);
+assert.equal(unavailable.connections.pi,false);
+assert.equal(unavailable.flameSensors['FLM-01'].active,true,'disconnect retains reported fire');
+assert.equal(unavailable.flameSensors['FLM-01'].connected,false);
+assert.equal(unavailable.equipment[0].status,'offline');
+assert.equal(project(unavailable.cloud,sections),null,'do not show LED commands as current after browser disconnect');
+assert.equal(liveState.cloud.stale,false,'do not mutate the original report');
 assert.deepEqual(projectFor3d({operationMode:'real',cloud},sections),result);
 assert.equal(projectFor3d({operationMode:'simulation',cloud},sections),null);
 assert.equal(projectFor3d({operationMode:'real',cloud:{...cloud,stale:true}},sections),null);

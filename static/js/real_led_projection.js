@@ -85,5 +85,17 @@
   function projectFor3d(state, sections) {
     return state?.operationMode === 'real' ? project(state.cloud, sections) : null;
   }
-  return { coordinates, project, allZoneSummary, projectFor3d };
+  // A disconnected browser cannot continue to present an old server response
+  // as live, even if the Pi was online when that response was generated.
+  function markConnectionUnknown(state) {
+    if (!state?.cloud?.enabled) return state;
+    const flameSensors = Object.fromEntries(Object.entries(state.flameSensors || {}).map(
+      ([id, sensor]) => [id, {...sensor, connected: false}]));
+    return {...state, cloud: {...state.cloud, stale: true},
+      connections: {...state.connections, pi: false}, flameSensors,
+      sensorCounts: {...state.sensorCounts, offline: Object.keys(flameSensors).length},
+      equipment: (state.equipment || []).map(item => ({...item, status:'offline',
+        stateLabel:'서버 연결 끊김 · 현재 상태 미확인'}))};
+  }
+  return { coordinates, project, allZoneSummary, projectFor3d, markConnectionUnknown };
 }));

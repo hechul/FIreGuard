@@ -1612,6 +1612,12 @@
     if (!connected && cloudConfig.enabled && cloudView === 'simulation') {
       switchToReal('실제 장비 상태를 확인할 수 없어 REAL 화면으로 전환했습니다.');
     }
+    if (!connected && cloudConfig.enabled && realState?.cloud?.enabled &&
+        (!realState.cloud.stale || realState.connections?.pi) && window.FireGuardRealLedProjection) {
+      realState = window.FireGuardRealLedProjection.markConnectionUnknown(realState);
+      if (cloudView === 'real') updateState(realState);
+      publishRealState();
+    }
     byId('browserOfflineBanner').classList.toggle('hidden', connected);
     if (cloudConfig.enabled) {
       const banner = byId('browserOfflineBanner');

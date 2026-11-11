@@ -26,7 +26,7 @@ if [[ ! -x $FG_PYTHON ]]; then echo 'Pi 가상환경 Python을 실행할 수 없
 if ! command -v openssl >/dev/null || ! command -v curl >/dev/null; then
   echo 'openssl 및 curl이 필요합니다.'; exit 1
 fi
-FG_RUNNING=$(ps -eo pid=,args= | grep -E '[p]ython[^ ]* .*hardware[./](flame_multi_reader|real_flame_reader|cloud_flame_reader|led_fireguard_usb|cloud_sim_led|cloud_sim_bridge|real_device_runtime|real_clear_worker|real_pi_service)(\.py| |$)' || true)
+FG_RUNNING=$(ps -eo pid=,args= | grep -E '[p]ython[^ ]* .*hardware[./](flame_multi_reader|real_flame_reader|cloud_flame_reader|led_fireguard_usb|led_all_zones_usb|cloud_sim_led|cloud_sim_bridge|real_device_runtime|real_clear_worker|real_pi_service)(\.py| |$)' || true)
 if [[ -n $FG_RUNNING ]]; then
   echo '기존 센서·LED·클라우드 프로세스가 실행 중입니다. 확인 후 해당 터미널에서 종료하세요:'
   printf '%s\n' "$FG_RUNNING"

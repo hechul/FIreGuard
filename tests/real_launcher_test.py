@@ -13,6 +13,34 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class RealLauncherTest(unittest.TestCase):
+    def test_existing_all_zone_led_process_blocks_startup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'hardware').mkdir()
+            (root / 'static/data').mkdir(parents=True)
+            (root / '.venv/bin').mkdir(parents=True)
+            (root / 'bin').mkdir()
+            script = root / 'hardware/start_real_monitor.sh'
+            script.write_text((ROOT / 'hardware/start_real_monitor.sh').read_text())
+            for name in ('config.py', 'real_pi_service.py', 'real_flame_reader.py',
+                         'real_sensor_outbox.py', 'real_device_runtime.py', 'real_clear_worker.py',
+                         'real_allzone_reporter.py', 'all_zone_routes.py', 'cloud_telemetry.py',
+                         'led_routes.py', 'led_junctions.py', 'led_layout_162.json'):
+                (root / 'hardware' / name).touch()
+            (root / 'pi_led_usb.py').touch()
+            (root / 'static/data/floorplan.json').touch()
+            python = root / '.venv/bin/python'
+            python.write_text('#!/usr/bin/env bash\nexit 0\n'); python.chmod(0o755)
+            fake_ps = root / 'bin/ps'
+            fake_ps.write_text("#!/usr/bin/env bash\nprintf '%s\\n' ' 123 /home/pi/.venv/bin/python hardware/led_all_zones_usb.py --port /dev/ttyACM0'\n")
+            fake_ps.chmod(0o755)
+            env = {**os.environ, 'PATH': f'{root / "bin"}:' + os.environ['PATH']}
+            result = subprocess.run(['bash', str(script)], cwd=root, env=env, input='',
+                                    text=True, capture_output=True, timeout=5)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('기존 센서·LED·클라우드 프로세스', result.stdout)
+            self.assertIn('led_all_zones_usb.py', result.stdout)
+
     def test_runtime_stops_before_local_state_service(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
