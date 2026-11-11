@@ -882,3 +882,11 @@ a{color:inherit;text-decoration:none}
 .prototype-led-label{font-size:9px;font-weight:800;fill:#7339a3;paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round}
 .prototype-overlay-note{margin:8px 2px 4px;color:#69458d;font-size:11px;line-height:1.5}
 #prototypeOverlayBtn[aria-pressed="true"]{background:#f2eafd;color:#66358c;border-color:#c5a5e3}
+.allzone-route-plan {
+  fill: none;
+  stroke: #3182f6;
+  stroke-width: 3;
+  stroke-dasharray: 7 4;
+  opacity: .85;
+  pointer-events: none;
+}

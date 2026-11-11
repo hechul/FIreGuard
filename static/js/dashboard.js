@@ -840,6 +840,8 @@
     mapViewMode = mode;
     byId('prototypeOverlayNote').classList.toggle('hidden', !prototypeOverlayEnabled || mode !== '2d');
     const realLedNote = byId('realLedReportedNote');
+    const allZoneNote = byId('allZoneNote');
+    allZoneNote.classList.toggle('hidden', mode !== '2d' || !allZoneNote.textContent);
     realLedNote.classList.toggle('hidden', mode !== '2d' || !realLedNote.textContent);
     const stage2d = byId('mapStage');
     const stage3d = byId('mapStage3d');
@@ -882,6 +884,11 @@
     const exitLayer = byId('exitLayer');
     const realLedLayer = byId('realLedReportedLayer');
     const realLedNote = byId('realLedReportedNote');
+    const allZone = cloudView === 'real' && window.FireGuardRealLedProjection
+      ? window.FireGuardRealLedProjection.allZoneSummary(state.cloud) : null;
+    const allZoneNote = byId('allZoneNote');
+    allZoneNote.classList.toggle('hidden', !allZone || mapViewMode !== '2d');
+    allZoneNote.textContent = allZone?.label || '';
     realLedLayer.replaceChildren();
     const ledProjection = cloudView === 'real' && window.FireGuardRealLedProjection && window.FireGuardPrototypeMap
       ? window.FireGuardRealLedProjection.project(state.cloud, window.FireGuardPrototypeMap.sections) : null;
@@ -940,7 +947,21 @@
       edgeLayer.appendChild(line);
     });
 
-    if (state.route && state.route.nodes?.length > 1) {
+    if (allZone) {
+      for (const directed of allZone.directedEdges) {
+        const edge = edgesById[directed.edgeId];
+        if (!edge || !points[edge.from] || !points[edge.to]) continue;
+        const forward = edge.from === directed.from && edge.to === directed.to;
+        const backward = edge.to === directed.from && edge.from === directed.to;
+        if (!forward && !backward) continue;
+        const path = buildEdgePath(points[edge.from], points[edge.to], 'allzone-route-plan', displayRouter);
+        const vertices = path.getAttribute('points').trim().split(/\s+/);
+        if (backward) vertices.reverse();
+        path.setAttribute('points', vertices.join(' '));
+        path.setAttribute('marker-end', 'url(#arrowGreen)');
+        routeLayer.appendChild(path);
+      }
+    } else if (state.route && state.route.nodes?.length > 1) {
       const flowTime = performance.now() / 1000;
       let routeDistance = 0;
       for (let i = 0; i < state.route.nodes.length - 1; i += 1) {
@@ -1043,14 +1064,14 @@
       group.append(rect, label, title); exitLayer.appendChild(group);
     });
 
-    byId('startNodeLabel').textContent = state.startNode;
-    byId('exitLabel').textContent = state.selectedExitName || '없음';
-    byId('costLabel').textContent = state.route ? state.route.cost.toFixed(1) : '-';
+    byId('startNodeLabel').textContent = allZone ? '전체 구역' : state.startNode;
+    byId('exitLabel').textContent = allZone ? (allZone.stale || allZone.unverified ? '확인 필요' : `${allZone.availableExits.length}개`) : state.selectedExitName || '없음';
+    byId('costLabel').textContent = allZone ? '-' : state.route ? state.route.cost.toFixed(1) : '-';
     byId('blockedLabel').textContent = `${state.blockedNodes.length + state.blockedEdges.length} 구간`;
     updateRouteVisualScale();
 
     // Sync 3D scene whenever state changes (if 3D is ready)
-    if (map3dReady && typeof Map3D !== 'undefined') Map3D.update(state);
+    if (map3dReady && typeof Map3D !== 'undefined') Map3D.update(allZone ? {...state, route: null} : state);
   }
 
   function renderHeader(state) {
@@ -1151,6 +1172,8 @@
   }
 
   function renderResponse(state) {
+    const allZone = cloudView === 'real' && window.FireGuardRealLedProjection
+      ? window.FireGuardRealLedProjection.allZoneSummary(state.cloud) : null;
     byId('selectedExitName').textContent = state.selectedDestinationName || state.selectedExitName || '경로 없음';
     byId('routeStatusText').textContent = state.route ? (state.fallbackActive ? '보조 대피 경로' : '경로 확보') : '대피 불가';
     byId('routeCostText').textContent = state.route ? `${state.fallbackActive ? 'FALLBACK · ' : ''}비용 ${state.route.cost.toFixed(1)}` : '경로를 확인하세요';
@@ -1164,6 +1187,17 @@
     }
     byId('noRouteNotice').classList.toggle('hidden', Boolean(state.route) || Boolean(state.cloud?.enabled && !state.cloud.hasTelemetry));
     if (state.cloud?.enabled && !state.cloud.hasTelemetry) byId('routeStatusText').textContent = '장비 데이터 대기';
+    if (allZone) {
+      const uncertain = allZone.stale || allZone.unverified;
+      byId('selectedExitName').textContent = uncertain ? '확인 필요' : `사용 가능 출구 ${allZone.availableExits.length}개`;
+      byId('routeStatusText').textContent = allZone.status;
+      byId('routeCostText').textContent = allZone.label;
+      const missing = state.cloud.hardware.allZone.unreachableNodes;
+      byId('routeNodeText').textContent = uncertain ? '현재 경로를 확인할 수 없습니다.' : `안내 가능 ${allZone.guidedCount}개 · 경로 없음 ${allZone.unreachableCount}개${missing.length ? ` (${missing.join(', ')})` : ''}`;
+      byId('failSafeNotice').classList.add('hidden');
+      byId('fallbackNotice').classList.add('hidden');
+      byId('noRouteNotice').classList.add('hidden');
+    }
   }
 
   function renderSensors(state) {

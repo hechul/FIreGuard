@@ -145,6 +145,8 @@ class RealLedController:
         self.expected = None
         self.output = self._result('not_running')
         self.last_ping = 0.0
+        self.last_all_zone = None
+        self.plan_key = None
 
     @staticmethod
     def _result(status, *, ack=False, path=(), red=(), error=None):
@@ -174,17 +176,30 @@ class RealLedController:
 
     def step(self, snapshot):
         assess_snapshot(snapshot, self.floor, self.layout)
-        if not self.enabled:
-            self.output = self._result('not_running')
-            return deepcopy(self.output)
         if snapshot.get('ledSafetyReady') is not True or snapshot.get('persistencePending') is not False:
+            self.last_all_zone = None
+            self.plan_key = None
             self.output = self._stop('센서 입력 또는 화재 저장 미확인')
             return deepcopy(self.output)
         if not snapshot['realFireDetected']:
+            self.last_all_zone = None
+            self.plan_key = None
             if self.output['led_status'] != 'off': self.output = self._stop()
             return deepcopy(self.output)
         key = _state_key(snapshot)
         try:
+            if key != self.plan_key:
+                self.last_all_zone = None
+                self.plan_key = None
+                if self.planner is None:
+                    from hardware.all_zone_routes import calculate_all_zones
+                    self.last_all_zone = calculate_all_zones(snapshot, self.floor, self.layout)
+                else:
+                    self.last_all_zone = self.planner(snapshot, self.floor, self.layout)
+                self.plan_key = key
+            if not self.enabled:
+                self.output = self._result('not_running')
+                return deepcopy(self.output)
             if self.uno is None:
                 if self.uno_factory is None:
                     from hardware.cloud_sim_led import GuardedUno
@@ -197,16 +212,11 @@ class RealLedController:
                 self.uno.stop()
                 self.expected = key
                 self._check_current()
-                if self.planner is None:
-                    from hardware.led_routes import inspect_route, fire_led_indices
-                    def planner(snap, floor, layout):
-                        if snap['route'] is None:
-                            red, _ = fire_led_indices(snap, floor, layout)
-                            return [], sorted(red)
-                        result = inspect_route(snap, floor, layout)
-                        return result['ordered'], result['red']
-                    self.planner = planner
-                path, red = self.planner(snapshot, self.floor, self.layout)
+                plan = self.last_all_zone
+                if isinstance(plan, tuple):  # Legacy injected test planner.
+                    path, red = plan
+                else:
+                    path, red = plan['ledLogicalIndices'], plan['fireLedLogicalIndices']
                 if not path and not red:
                     raise ValueError('화재 위치 또는 대피 LED 매핑을 확인할 수 없습니다')
                 if self.translate is None:
@@ -226,6 +236,8 @@ class RealLedController:
         return deepcopy(self.output)
 
     def unavailable(self):
+        self.last_all_zone = None
+        self.plan_key = None
         self.output = self._stop('Pi 실제 상태 수신 실패') if self.enabled else self._result('not_running')
 
     def close(self):
@@ -245,8 +257,8 @@ class PublisherPump:
 
     def start(self): self.thread.start()
 
-    def update(self, snapshot, output):
-        with self._lock: self._latest = (deepcopy(snapshot), deepcopy(output), time.monotonic())
+    def update(self, snapshot, output, all_zone_plan=None):
+        with self._lock: self._latest = (deepcopy(snapshot), deepcopy(output), time.monotonic(), deepcopy(all_zone_plan))
         self._wake.set()
 
     def invalidate(self):
@@ -260,7 +272,7 @@ class PublisherPump:
             # A request already in flight can finish after local failure; it is
             # bounded by CloudReporter's timeout and is never retried as fresh.
             if data is None or time.monotonic() - data[2] > 1.0: continue
-            try: self.reporter.maybe_report(data[0], self.floor, self.layout, **data[1])
+            try: self.reporter.maybe_report(data[0], self.floor, self.layout, all_zone_plan=data[3], **data[1])
             except Exception as error: print('[REAL CLOUD] 전송 실패:', type(error).__name__, flush=True)
 
     def close(self):
@@ -315,7 +327,8 @@ def main():
         try: fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError: raise SystemExit('REAL runtime이 이미 실행 중입니다')
         from hardware.cloud_telemetry import CloudReporter
-        reporter = CloudReporter(mode='send', interval=5.0, allow_sim=False)
+        from hardware.real_allzone_reporter import AllZoneReporter
+        reporter = AllZoneReporter(CloudReporter(mode='send', interval=5.0, allow_sim=False))
         # Never publish all-false or enable LEDs until the last cloud alarms
         # have been merged into durable local latches. Unknown/no history or
         # any network/authentication/restore failure stops startup.
@@ -341,7 +354,7 @@ def main():
                     snapshot = source()
                     assess_snapshot(snapshot, floor, layout)
                     output = controller.step(snapshot)
-                    publisher.update(snapshot, output)
+                    publisher.update(snapshot, output, controller.last_all_zone)
                     if last_problem:
                         print('[REAL] 로컬 상태 복구', flush=True); last_problem = None
                 except Exception as error:

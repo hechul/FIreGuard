@@ -41,6 +41,31 @@
     return Array.isArray(slots) && slots.length === logical.length &&
       logical.every((value, i) => slots[i] === value + (value >= 20 ? 1 : 0));
   }
+  // Pi's directed forest is a calculation, independent of the Uno ACK.
+  // Keep stale reports identifiable but never draw their edges as current.
+  function allZoneSummary(cloud) {
+    const h = cloud?.hardware, plan = h?.allZone;
+    if (!cloud?.enabled || !cloud.hasTelemetry || !['pi', 'pi_unverified'].includes(cloud.routeSource) ||
+        h?.operationMode !== 'real' || !plan || plan.routingMode !== 'all_zones_to_exits' ||
+        !['ok', 'partial', 'no_route'].includes(plan.routeStatus)) return null;
+    const identifiers = values => Array.isArray(values) && values.every(x => typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x)) && new Set(values).size === values.length;
+    if (!identifiers(plan.availableExits) || !identifiers(plan.guidedNodes) ||
+        !identifiers(plan.unreachableNodes) || !identifiers(plan.ledExcludedEdges) ||
+        !Array.isArray(plan.directedEdges) || plan.directedEdges.some(e => !e ||
+          ![e.edgeId, e.from, e.to, e.exitNode].every(x => typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x)) || e.from === e.to)) return null;
+    const stale = cloud.stale !== false;
+    const unverified = cloud.routeSource === 'pi_unverified';
+    const statuses = {ok:'전체 구역 경로 계산', partial:'일부 구역 경로 없음', no_route:'전체 구역 경로 없음'};
+    return {
+      stale, unverified, status: stale ? '전체 구역 마지막 보고 · 현재 미확인' : unverified ? 'Pi 전체 경로 확인 필요' : statuses[plan.routeStatus],
+      label: stale ? '마지막 Pi 보고 · 현재 상태 미확인' : unverified ? 'Pi 경로와 센서 상태를 확인해 주세요' : 'Pi 계산 경로 · LED 적용 및 실제 발광은 별도 확인',
+      routeStatus: plan.routeStatus,
+      guidedCount: plan.guidedNodes.length, unreachableCount: plan.unreachableNodes.length,
+      availableExits: [...plan.availableExits],
+      directedEdges: stale || unverified ? [] : plan.directedEdges.map(({edgeId,from,to,exitNode}) => ({edgeId,from,to,exitNode})),
+      ledAcknowledged: !stale && !unverified && h.ledStatus === 'active' && h.ledCommandAck === true,
+    };
+  }
   function project(cloud, sections) {
     const h = cloud?.hardware;
     if (!cloud?.enabled || !cloud.hasTelemetry || cloud.stale !== false || cloud.routeSource !== 'pi' ||
@@ -52,9 +77,9 @@
     if (!coords) return null;
     const fires = new Set(h.fireLedLogicalIndices), seen = new Set([...h.ledLogicalIndices, ...fires]);
     return {
-      label: 'Pi 명령 위치 · 도면 기준 추정 · 실제 발광 미확인',
+      label: allZoneSummary(cloud) ? 'Pi 전체 구역 LED 명령 위치 · 도면 기준 추정 · 실제 발광 미확인' : 'Pi 명령 위치 · 도면 기준 추정 · 실제 발광 미확인',
       points: [...seen].map(index => ({index, ...coords[index], color: fires.has(index) ? 'fire' : 'route'})),
     };
   }
-  return { coordinates, project };
+  return { coordinates, project, allZoneSummary };
 }));

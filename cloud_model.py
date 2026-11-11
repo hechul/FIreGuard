@@ -36,6 +36,67 @@ HARDWARE_FIELDS = {
     'arduinoSlotCount', 'arduinoIndexBase', 'source',
 }
 
+ALL_ZONE_FIELDS = {'routingMode', 'routeStatus', 'availableExits', 'guidedNodes',
+                   'unreachableNodes', 'directedEdges', 'ledExcludedEdges'}
+
+
+def validate_all_zone(value, graph, blocked_nodes, blocked_edges):
+    """Validate a Pi-calculated directed evacuation forest, not LED output."""
+    if not isinstance(value, dict) or set(value) != ALL_ZONE_FIELDS:
+        raise ValueError('전체 구역 경로 보고 형식이 잘못되었습니다.')
+    if value['routingMode'] != 'all_zones_to_exits':
+        raise ValueError('전체 구역 경로 모드가 잘못되었습니다.')
+
+    def unique_ids(key, allowed):
+        entries = value[key]
+        if (not isinstance(entries, list) or len(entries) > len(allowed)
+                or any(not isinstance(item, str) or item not in allowed for item in entries)
+                or len(set(entries)) != len(entries)):
+            raise ValueError(f'전체 구역 {key} 형식이 잘못되었습니다.')
+        return set(entries)
+
+    exits = unique_ids('availableExits', graph.exits)
+    guided = unique_ids('guidedNodes', graph.nodes)
+    unreachable = unique_ids('unreachableNodes', graph.nodes)
+    excluded = unique_ids('ledExcludedEdges', graph.edges)
+    blocked_nodes, blocked_edges = set(blocked_nodes), set(blocked_edges)
+    if (guided & unreachable or (guided | exits) & blocked_nodes
+            or any(graph.exits[e].get('available', True) is not True for e in exits)):
+        raise ValueError('차단된 노드 또는 출구가 전체 구역 경로에 포함되었습니다.')
+    expected = 'no_route' if not guided else 'partial' if unreachable else 'ok'
+    if value['routeStatus'] != expected:
+        raise ValueError('전체 구역 경로 상태가 노드 목록과 일치하지 않습니다.')
+    directed = value['directedEdges']
+    if not isinstance(directed, list) or len(directed) != len(guided):
+        raise ValueError('전체 구역 간선 수가 잘못되었습니다.')
+    successor, used_edges = {}, set()
+    for item in directed:
+        if not isinstance(item, dict) or set(item) != {'edgeId', 'from', 'to', 'exitNode'}:
+            raise ValueError('전체 구역 간선 형식이 잘못되었습니다.')
+        edge_id, src, dst, dest = (item[k] for k in ('edgeId', 'from', 'to', 'exitNode'))
+        if not all(isinstance(x, str) for x in (edge_id, src, dst, dest)):
+            raise ValueError('전체 구역 간선 식별자가 잘못되었습니다.')
+        edge = graph.edges.get(edge_id)
+        if (not edge or src not in guided or src in successor or edge_id in used_edges
+                or dst not in graph.adjacency or dst in blocked_nodes or dest not in exits
+                or edge_id in blocked_edges or edge_id in excluded
+                or {edge['from'], edge['to']} != {src, dst}):
+            raise ValueError('전체 구역 간선 연결이 잘못되었습니다.')
+        successor[src] = (dst, dest)
+        used_edges.add(edge_id)
+    if set(successor) != guided:
+        raise ValueError('전체 구역 출발점과 간선이 일치하지 않습니다.')
+    for start in guided:
+        current, visited, exit_id = start, set(), successor[start][1]
+        while current not in exits:
+            if current in visited or current not in successor or successor[current][1] != exit_id:
+                raise ValueError('전체 구역 경로가 출구에 도달하지 못합니다.')
+            visited.add(current)
+            current = successor[current][0]
+        if current != exit_id:
+            raise ValueError('전체 구역 목적지가 일치하지 않습니다.')
+    return deepcopy(value)
+
 
 def validate_hardware_telemetry(data, floorplan, device_id, now=None):
     """Validate the Pi's USB bridge report before canonicalizing it for the DB.
@@ -43,7 +104,7 @@ def validate_hardware_telemetry(data, floorplan, device_id, now=None):
     The extension is whitelisted: stored telemetry is publicly readable. Planned
     LED indices and acknowledged commands remain independent of blocked edges.
     """
-    if set(data) != HARDWARE_FIELDS:
+    if not isinstance(data, dict) or set(data) not in (HARDWARE_FIELDS, HARDWARE_FIELDS | {'allZone'}):
         raise ValueError('하드웨어 보고 필드가 확정된 규격과 다릅니다.')
     if data['operationMode'] != 'real':
         raise ValueError('시뮬레이션 데이터는 실제 장비 관제에 저장할 수 없습니다.')
@@ -76,6 +137,12 @@ def validate_hardware_telemetry(data, floorplan, device_id, now=None):
             raise ValueError(f'{key} 형식이 잘못되었습니다.')
     if any(v['active'] and v['connected'] and v['node'] not in data['blockedNodes'] for v in flame.values()):
         raise ValueError('화재 센서의 노드가 차단 목록에 없습니다.')
+    if 'allZone' in data:
+        if any(v['active'] and v['node'] not in data['blockedNodes'] for v in flame.values()):
+            raise ValueError('마지막 화재 센서 노드가 차단 목록에 없습니다.')
+        validate_all_zone(data['allZone'], graph, data['blockedNodes'], data['blockedEdges'])
+        if data['startNode'] is not None or data['routeStatus'] != 'no_route':
+            raise ValueError('전체 구역 보고에는 단일 출발 경로를 포함할 수 없습니다.')
     status = data['ledStatus']
     if status not in ('not_running', 'preview', 'off', 'active', 'disconnected', 'error') or type(data['ledCommandAck']) is not bool:
         raise ValueError('LED 상태 또는 ACK가 잘못되었습니다.')
@@ -285,6 +352,10 @@ def project_state(floorplan, row, events, device_id, stale_seconds=15, now=None,
                        and not result['flameSensors'][s['id']]['connected']}
         result['blockedNodes'] = sorted(reported | last_danger)
         result['blockedEdges'] = hardware['blockedEdges']
+        all_zone = hardware.get('allZone')
+        if all_zone and any(edge['from'] in last_danger or edge['to'] in last_danger
+                            for edge in all_zone['directedEdges']):
+            source = 'pi_unverified'
         if result['route'] and last_danger.intersection(result['route']['nodes']):
             result['route'] = None
             result['routeMode'] = 'none'
