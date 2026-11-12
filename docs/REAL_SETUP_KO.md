@@ -27,7 +27,7 @@ Vercel **Production**의 기존 `FIREGUARD_DEVICE_TOKEN`은 Pi 송신·명령 �
 ```bash
 git -C ~/FIreGuard pull --ff-only origin main
 mkdir -p ~/Desktop/node1/hardware
-cp --backup=numbered ~/FIreGuard/hardware/{real_fire_latch.py,real_pi_service.py,real_device_runtime.py,real_allzone_reporter.py,all_zone_routes.py,real_clear_worker.py,real_flame_reader.py,real_sensor_outbox.py,cloud_sim_led.py,cloud_sim_bridge.py,start_real_monitor.sh} ~/Desktop/node1/hardware/
+cp --backup=numbered ~/FIreGuard/hardware/{real_fire_latch.py,real_pi_service.py,real_device_runtime.py,real_allzone_reporter.py,all_zone_routes.py,real_ticket_overlay.py,real_clear_worker.py,real_flame_reader.py,real_sensor_outbox.py,cloud_sim_led.py,cloud_sim_bridge.py,start_real_monitor.sh} ~/Desktop/node1/hardware/
 ```
 
 `node1`에는 최신 `hardware/cloud_telemetry.py`, `hardware/flame_multi_reader.py`, `hardware/led_routes.py`, `hardware/led_junctions.py`, `hardware/led_layout_162.json`, `pi_led_usb.py`, `route_service.py`와 `.venv`가 이미 있어야 한다. 파일 버전·11센서 매핑이 다르면 먼저 확인하고 중단한다. 기존 SIM 시스템과 호환성은 실물에서 검증되지 않았다.

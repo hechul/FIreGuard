@@ -1,6 +1,7 @@
 """Optional exhaustive Pi-archive simulation; no GPIO, serial, or physical light.
 
 FIREGUARD_PI_PROJECT=/path/to/friends/node1 .venv/bin/python -m unittest discover -s tests -p 'pi_allzone_scenarios_test.py' -v
+Set FIREGUARD_EXHAUSTIVE=1 as well to test every non-empty set of 11 sensors.
 """
 import itertools
 import json
@@ -23,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @unittest.skipUnless(PROJECT, 'FIREGUARD_PI_PROJECT is not set')
 class PiAllZoneScenariosTest(unittest.TestCase):
-    def test_all_single_and_pair_fire_snapshots(self):
+    def test_fire_snapshots(self):
         project=Path(PROJECT).resolve()
         for filename in ('hardware/led_routes.py','hardware/led_junctions.py',
                          'hardware/cloud_telemetry.py','pi_led_usb.py',
@@ -43,7 +44,8 @@ class PiAllZoneScenariosTest(unittest.TestCase):
             self.assertEqual(len(ids),11)
             failures=[]; tested=0; fallback_count=0
             with tempfile.TemporaryDirectory() as directory:
-                for count in (1,2):
+                counts=range(1,12) if os.environ.get('FIREGUARD_EXHAUSTIVE')=='1' else (1,2)
+                for count in counts:
                     for number,fires in enumerate(itertools.combinations(ids,count)):
                         try:
                             pi=RealPiState(floor,Path(directory)/f'fire-{count}-{number}.json')
@@ -54,6 +56,13 @@ class PiAllZoneScenariosTest(unittest.TestCase):
                             commands=prepare_guide_commands(plan,logical_to_wire)
                             self.assertEqual(commands[0],'BEGIN')
                             self.assertTrue(commands[-1].startswith('GUIDE '))
+                            # A fire with no route must still produce red-only
+                            # commands; never infer evacuation through a gap.
+                            if plan['routeStatus']=='no_route':
+                                self.assertEqual(plan['ledLogicalIndices'],[])
+                                if plan['fireLedLogicalIndices']:
+                                    self.assertTrue(any(c.startswith('FIRE ') for c in commands))
+                                    self.assertFalse(any(c.startswith('SEG ') for c in commands))
                             # Synthetic ACK: this is not a hardware test.
                             payload=build_payload(snap,floor,layout,device_id='pi-01',
                                 boot_id=str(uuid4()),sequence=1,led_status='active',
@@ -65,7 +74,7 @@ class PiAllZoneScenariosTest(unittest.TestCase):
                         except Exception as exc:
                             failures.append(f'{fires}: {type(exc).__name__}: {exc}')
             self.assertFalse(failures, '\n'.join(failures))
-            self.assertEqual(tested,66)
+            self.assertEqual(tested,2047 if os.environ.get('FIREGUARD_EXHAUSTIVE')=='1' else 66)
             self.assertGreater(fallback_count,0)
         finally:
             hardware.__path__=original

@@ -363,7 +363,9 @@ def main():
     url = urlparse(args.local_url)
     if url.scheme != 'http' or url.hostname not in ('127.0.0.1', 'localhost') or url.path not in ('', '/') or url.query or url.fragment or url.username or url.password:
         parser.error('local-url must be a loopback HTTP origin')
-    floor = json.loads(Path(args.floorplan).read_text(encoding='utf-8'))
+    from hardware.real_ticket_overlay import ticket_floorplan, enable_ticket_led_mapping
+    floor = ticket_floorplan(json.loads(Path(args.floorplan).read_text(encoding='utf-8')))
+    enable_ticket_led_mapping(floor)
     layout = json.loads(Path(args.layout).read_text(encoding='utf-8'))
     def source():
         with urlopen(args.local_url.rstrip('/') + '/api/real/state', timeout=0.5) as response:

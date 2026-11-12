@@ -164,7 +164,8 @@ def main():
     parser.add_argument('--start-node', default='N33')
     parser.add_argument('--port', type=int, default=5001)
     args = parser.parse_args()
-    floorplan = json.loads(Path(args.floorplan).read_text(encoding='utf-8'))
+    from hardware.real_ticket_overlay import ticket_floorplan
+    floorplan = ticket_floorplan(json.loads(Path(args.floorplan).read_text(encoding='utf-8')))
     state = RealPiState(floorplan, args.latch_file, start_node=args.start_node)
     app = create_app(state, os.environ.get('FIREGUARD_REAL_LOCAL_TOKEN', ''))
     app.run(host='127.0.0.1', port=args.port, debug=False, use_reloader=False)

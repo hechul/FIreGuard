@@ -8,6 +8,7 @@
   const knownVersions = new Set([
     'led162-usb163-shift20-dfea4ba7d3',
     'led162-usb163-shift20-da2de217fd',
+    'led162-usb163-shift20-c5a4392f78',
   ]);
   // Same S1-S15 counts and DIN-to-DOUT directions as Pi led_routes.py.
   const specs = [

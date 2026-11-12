@@ -26,7 +26,7 @@ fi
 for FG_FILE in "$FG_PYTHON" hardware/config.py hardware/real_pi_service.py \
   hardware/real_flame_reader.py hardware/real_sensor_outbox.py \
   hardware/real_device_runtime.py hardware/real_clear_worker.py \
-  hardware/real_allzone_reporter.py hardware/all_zone_routes.py \
+  hardware/real_allzone_reporter.py hardware/all_zone_routes.py hardware/real_ticket_overlay.py \
   hardware/cloud_telemetry.py hardware/led_routes.py hardware/led_junctions.py \
   hardware/led_layout_162.json pi_led_usb.py static/data/floorplan.json; do
   if [[ ! -f $FG_FILE ]]; then echo "필수 파일 없음: $FG_FILE"; exit 1; fi

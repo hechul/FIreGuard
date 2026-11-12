@@ -24,7 +24,7 @@ class RealLauncherTest(unittest.TestCase):
             script.write_text((ROOT / 'hardware/start_real_monitor.sh').read_text())
             for name in ('config.py', 'real_pi_service.py', 'real_flame_reader.py',
                          'real_sensor_outbox.py', 'real_device_runtime.py', 'real_clear_worker.py',
-                         'real_allzone_reporter.py', 'all_zone_routes.py', 'cloud_telemetry.py',
+                         'real_allzone_reporter.py', 'all_zone_routes.py', 'real_ticket_overlay.py', 'cloud_telemetry.py',
                          'led_routes.py', 'led_junctions.py', 'led_layout_162.json'):
                 (root / 'hardware' / name).touch()
             (root / 'pi_led_usb.py').touch()
@@ -52,7 +52,7 @@ class RealLauncherTest(unittest.TestCase):
             script.write_text((ROOT / 'hardware/start_real_monitor.sh').read_text())
             for name in ('config.py', 'real_pi_service.py', 'real_flame_reader.py',
                          'real_sensor_outbox.py', 'real_device_runtime.py', 'real_clear_worker.py',
-                         'real_allzone_reporter.py', 'all_zone_routes.py', 'cloud_telemetry.py',
+                         'real_allzone_reporter.py', 'all_zone_routes.py', 'real_ticket_overlay.py', 'cloud_telemetry.py',
                          'led_routes.py', 'led_junctions.py', 'led_layout_162.json'):
                 (root / 'hardware' / name).touch()
             (root / 'pi_led_usb.py').touch()
