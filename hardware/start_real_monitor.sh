@@ -8,13 +8,18 @@ FG_PYTHON=.venv/bin/python
 FG_CLOUD_URL=https://fire-guard-seven.vercel.app
 FG_LED_PORT=
 FG_LED_LAB=0
+FG_GUIDE=0
 if [[ ${1:-} == '--verified-led' && $# -eq 2 ]]; then
   FG_LED_PORT=$2
 elif [[ ${1:-} == '--lab-unverified-led' && $# -eq 2 ]]; then
   FG_LED_PORT=$2
   FG_LED_LAB=1
+elif [[ ${1:-} == '--lab-guide-led' && $# -eq 2 ]]; then
+  FG_LED_PORT=$2
+  FG_LED_LAB=1
+  FG_GUIDE=1
 elif [[ $# -ne 0 ]]; then
-  echo '사용법: bash hardware/start_real_monitor.sh [--verified-led /dev/ttyACM0]'
+  echo '사용법: bash hardware/start_real_monitor.sh [--verified-led|--lab-unverified-led|--lab-guide-led /dev/ttyACM0]'
   exit 2
 fi
 
@@ -115,6 +120,7 @@ if [[ -n $FG_LED_PORT ]]; then
   if [[ $FG_LED_LAB == 1 ]]; then
     echo '주의: 미검증 모형 LED 시연입니다. 실제 경로와 방향을 직접 확인하세요.'
     FG_RUNTIME_OPTIONS+=(--lab-unverified-led --port "$FG_LED_PORT")
+    if [[ $FG_GUIDE == 1 ]]; then FG_RUNTIME_OPTIONS+=(--guide-led); fi
   else
     FG_RUNTIME_OPTIONS+=(--enable-verified-led --port "$FG_LED_PORT")
   fi

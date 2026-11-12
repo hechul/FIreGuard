@@ -149,6 +149,23 @@ class RealRuntimeOutputTest(unittest.TestCase):
         self.assertEqual(controller.step(self.state.snapshot())['led_status'], 'active')
         controller.close()
 
+    def test_guide_rejection_stops_without_flow_fallback(self):
+        owner = self
+        class Unsupported(self.Uno):
+            def guide(self, commands):
+                self.calls.append(('guide', commands))
+                raise RuntimeError('Arduino SEG ERR')
+        controller=self.Controller(self.state.snapshot,FLOOR,self.layout,enabled=True,port='/dev/test',
+            uno_factory=Unsupported, translate=lambda i:i if i<20 else i+1, guide=True,
+            planner=lambda s,f,l: {'directedEdges':[{'ledLogicalIndices':[0,20]}],
+                'ledLogicalIndices':[0,20], 'fireLedLogicalIndices':[21]})
+        self.state.update({self.ids[0]:True})
+        result=controller.step(self.state.snapshot())
+        self.assertEqual(result['led_status'],'error')
+        self.assertFalse(result['command_ack'])
+        self.assertEqual(owner.instances[0].calls[-1], 'stop')
+        self.assertFalse(any(isinstance(x,tuple) and x[0]=='flow' for x in owner.instances[0].calls))
+
     def test_service_termination_runs_led_cleanup(self):
         self.state.update({self.ids[0]:True})
         self.assertEqual(self.controller.step(self.state.snapshot())['led_status'], 'active')

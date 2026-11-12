@@ -230,6 +230,11 @@ class GuardedUno:
                 self.command(name + ' ' + ' '.join(map(str, wires[n:n+12])))
         self.command('FLOW 200 0 8 0')
 
+    def guide(self, commands):
+        # Commands are fully validated before opening or altering the Uno.
+        for command in commands:
+            self.command(command)
+
     def stop(self): self.command('STOP', stop=True)
     def close(self):
         if self.serial is not None:

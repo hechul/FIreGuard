@@ -138,15 +138,65 @@ def _no_redirect_json(url, *, headers=None, payload=None, timeout=3):
         return json.load(response)
 
 
+def prepare_guide_commands(plan, translate):
+    """Preflight the complete Uno GUIDE plan before any serial mutation."""
+    if not isinstance(plan, dict) or not isinstance(plan.get('directedEdges'), list):
+        raise ValueError('GUIDE 간선 계획이 없습니다')
+    path, red = plan.get('ledLogicalIndices'), plan.get('fireLedLogicalIndices')
+    if not isinstance(path, list) or not isinstance(red, list):
+        raise ValueError('GUIDE LED 목록 오류')
+    if any(type(i) is not int or not 0 <= i < 162 for i in path + red):
+        raise ValueError('GUIDE LED 번호 오류')
+    if len(set(path)) != len(path) or len(set(red)) != len(red) or set(path) & set(red):
+        raise ValueError('GUIDE 경로/화재 LED 충돌')
+    segments = []
+    directed_pairs = set()
+    for edge in plan['directedEdges']:
+        if not isinstance(edge, dict) or not isinstance(edge.get('ledLogicalIndices'), list):
+            raise ValueError('GUIDE 간선 LED 오류')
+        logical = edge['ledLogicalIndices']
+        if not logical or any(type(i) is not int or i not in set(path) for i in logical):
+            raise ValueError('GUIDE 간선/경로 불일치')
+        for a, b in zip(logical, logical[1:]):
+            if a != b and (b, a) in directed_pairs:
+                raise ValueError('GUIDE LED 반대 방향 충돌')
+            if a != b: directed_pairs.add((a, b))
+        # Each SEG is a directed sequence. Split at the protocol line limit;
+        # each resulting segment has its own independent head.
+        current = []
+        for i in logical:
+            wire = translate(i)
+            if type(wire) is not int or not 0 <= wire <= 162:
+                raise ValueError('GUIDE Arduino 슬롯 오류')
+            if current and len('SEG ' + ' '.join(map(str, current + [wire]))) > 94:
+                segments.append(current); current = []
+            current.append(wire)
+        if current: segments.append(current)
+    if set(path) != {i for edge in plan['directedEdges'] for i in edge['ledLogicalIndices']}:
+        raise ValueError('GUIDE 경로 LED가 간선과 일치하지 않습니다')
+    if len(segments) > 40 or sum(map(len, segments)) > 163:
+        raise ValueError('GUIDE Arduino 저장 한도 초과')
+    commands = ['BEGIN'] + ['SEG ' + ' '.join(map(str, s)) for s in segments]
+    wires = [translate(i) for i in red]
+    if any(type(i) is not int or not 0 <= i <= 162 for i in wires):
+        raise ValueError('GUIDE 화재 슬롯 오류')
+    commands += ['FIRE ' + ' '.join(map(str, wires[i:i+12])) for i in range(0, len(wires), 12)]
+    commands.append('GUIDE 200 0 2 0 0 16 0')
+    if any(len(c.encode('ascii')) > 94 for c in commands):
+        raise ValueError('GUIDE 시리얼 명령 길이 초과')
+    return commands
+
+
 class RealLedController:
     """Single owner of the optional serial device; FLOW ACK is not optical proof."""
     def __init__(self, source, floor, layout, *, enabled=False, port=None,
-                 uno_factory=None, planner=None, translate=None, clock=time.monotonic, lab_unverified=False):
+                 uno_factory=None, planner=None, translate=None, clock=time.monotonic, lab_unverified=False, guide=False):
         self.source, self.floor, self.layout = source, floor, layout
         self.enabled, self.port, self.clock = enabled, port, clock
         if enabled and (not port or (not lab_unverified and (layout.get('verified') is not True or layout.get('mapping_status') != 'confirmed'))):
             raise ValueError('실제 LED 출력 잠금: 포트와 검증된 confirmed 매핑이 필요합니다')
         self.uno_factory, self.planner, self.translate = uno_factory, planner, translate
+        self.guide = guide
         self.uno = None
         self.expected = None
         self.output = self._result('not_running')
@@ -178,7 +228,9 @@ class RealLedController:
             finally: self.uno = None
             return self._result('error', error='STOP 응답 미확인')
         self.expected = None
-        return self._result('error' if reason else 'off', ack=True, error=reason)
+        # A STOP acknowledgement is not an acknowledgement of the failed
+        # GUIDE/FLOW output; never claim an LED command succeeded on error.
+        return self._result('error' if reason else 'off', ack=not bool(reason), error=reason)
 
     def step(self, snapshot):
         assess_snapshot(snapshot, self.floor, self.layout)
@@ -206,6 +258,12 @@ class RealLedController:
             if not self.enabled:
                 self.output = self._result('not_running')
                 return deepcopy(self.output)
+            guide_commands = None
+            if self.guide and (self.output['led_status'] != 'active' or key != self.expected):
+                if self.translate is None:
+                    from pi_led_usb import logical_to_wire
+                    self.translate = logical_to_wire
+                guide_commands = prepare_guide_commands(self.last_all_zone, self.translate)
             if self.uno is None:
                 if self.uno_factory is None:
                     from hardware.cloud_sim_led import GuardedUno
@@ -229,7 +287,10 @@ class RealLedController:
                     from pi_led_usb import logical_to_wire
                     self.translate = logical_to_wire
                 self._check_current()
-                self.uno.flow(path, red)
+                if self.guide:
+                    self.uno.guide(guide_commands)
+                else:
+                    self.uno.flow(path, red)
                 # Report wire slots only after the Uno's FLOW OK response.
                 self.output = self._result('active', ack=True,
                     path=[self.translate(i) for i in path], red=[self.translate(i) for i in red])
@@ -238,7 +299,8 @@ class RealLedController:
                 self.uno.command('PING')
                 self.last_ping = self.clock()
         except Exception as error:
-            self.output = self._stop(f'LED 명령 실패: {type(error).__name__}')
+            prefix = 'GUIDE 명령 실패: 펌웨어 지원 및 LED 계획 확인' if self.guide else 'LED 명령 실패'
+            self.output = self._stop(f'{prefix}: {type(error).__name__}')
         return deepcopy(self.output)
 
     def unavailable(self):
@@ -292,6 +354,7 @@ def main():
     parser.add_argument('--assert-exclusive-publisher', action='store_true', help='Confirm all legacy publishers are stopped')
     parser.add_argument('--enable-verified-led', action='store_true', help='Enable LED only with verified confirmed mapping')
     parser.add_argument('--lab-unverified-led', action='store_true', help='Supervised prototype test with unverified mapping')
+    parser.add_argument('--guide-led', action='store_true', help='Use GUIDE only with confirmed compatible Uno firmware')
     parser.add_argument('--port', help='Arduino USB serial port')
     parser.add_argument('--local-url', default='http://127.0.0.1:5001')
     parser.add_argument('--floorplan', default='static/data/floorplan.json')
@@ -306,7 +369,7 @@ def main():
         with urlopen(args.local_url.rstrip('/') + '/api/real/state', timeout=0.5) as response:
             return json.load(response)
     if args.check_only:
-        if args.enable_real_cloud or args.enable_verified_led or args.lab_unverified_led or args.port:
+        if args.enable_real_cloud or args.enable_verified_led or args.lab_unverified_led or args.guide_led or args.port:
             parser.error('--check-only cannot enable output')
         print(json.dumps(assess_snapshot(source(), floor, layout), ensure_ascii=False))
         return
@@ -318,6 +381,8 @@ def main():
         parser.error('시연 LED는 포트가 필요하며 verified 옵션과 함께 쓸 수 없습니다')
     if args.port and not (args.enable_verified_led or args.lab_unverified_led):
         parser.error('--port requires --enable-verified-led')
+    if args.guide_led and not (args.enable_verified_led or args.lab_unverified_led):
+        parser.error('--guide-led requires explicit LED mode')
     telemetry_url = os.environ.get('FIREGUARD_TELEMETRY_URL', '')
     cloud = urlparse(telemetry_url)
     device_id = os.environ.get('FIREGUARD_DEVICE_ID', 'pi-01')
@@ -355,7 +420,7 @@ def main():
             raise SystemExit('마지막 REAL 화재 상태 복원 실패: 송신과 LED 출력을 시작하지 않았습니다 (' + type(error).__name__ + ')') from None
         if args.lab_unverified_led:
             print('[주의] 미검증 모형 LED 시연: 경로와 방향은 현장 확인 필요', flush=True)
-        controller = RealLedController(source, floor, layout, enabled=args.enable_verified_led or args.lab_unverified_led, port=args.port, lab_unverified=args.lab_unverified_led)
+        controller = RealLedController(source, floor, layout, enabled=args.enable_verified_led or args.lab_unverified_led, port=args.port, lab_unverified=args.lab_unverified_led, guide=args.guide_led)
         publisher = PublisherPump(reporter, floor, layout)
         publisher.start()
         last_problem = None
