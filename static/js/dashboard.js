@@ -1193,7 +1193,9 @@
       byId('routeStatusText').textContent = allZone.status;
       byId('routeCostText').textContent = allZone.label;
       const missing = state.cloud.hardware.allZone.unreachableNodes;
-      byId('routeNodeText').textContent = uncertain ? '현재 경로를 확인할 수 없습니다.' : `안내 가능 ${allZone.guidedCount}개 · 경로 없음 ${allZone.unreachableCount}개${missing.length ? ` (${missing.join(', ')})` : ''}`;
+      const fallback = allZone.fallbackDestinations;
+      const fallbackLabels = fallback.map(id => (floorplan?.fallbackDestinations || []).find(x => x.id === id)?.name || id);
+      byId('routeNodeText').textContent = uncertain ? '현재 경로를 확인할 수 없습니다.' : `안내 가능 ${allZone.guidedCount}개 · 경로 없음 ${allZone.unreachableCount}개${missing.length ? ` (${missing.join(', ')})` : ''}${fallback.length ? ` · 임시 대피지점 ${fallbackLabels.join(', ')} (출구 아님)` : ''}`;
       byId('failSafeNotice').classList.add('hidden');
       byId('fallbackNotice').classList.add('hidden');
       byId('noRouteNotice').classList.add('hidden');

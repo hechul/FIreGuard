@@ -4,7 +4,7 @@
 Multi-source Dijkstra is run from ALL available exits. A single successor per
 node forms a directed forest; it prevents opposing directions at junctions.
 Red or adjacent LEDs make the associated edge unavailable *before* routing.
-No fallback destination is silently substituted for a real exit.
+Fallback destinations are explicitly marked, never represented as exits.
 
 This is a prototype visualization only, not a certified evacuation system.
 """
@@ -105,29 +105,41 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
     exit_for = {}
     successor = {}
     heap = []
-    for dest in sorted(valid_exits):
-        distances[dest] = 0.0
-        exit_for[dest] = dest
-        heapq.heappush(heap, (0.0, dest, dest))
-    while heap:
-        cost, chosen_exit, at = heapq.heappop(heap)
-        if abs(cost-distances.get(at, float('inf'))) > 1e-9 or chosen_exit != exit_for[at]:
-            continue
-        for neighbor, weight, eid in adjacency[at]:
-            cand = cost + weight
-            new_key = (round(cand, 10), chosen_exit, at, eid)
-            old_key = (round(distances.get(neighbor, float('inf')), 10),
-                       exit_for.get(neighbor, '~'),
-                       successor.get(neighbor, ('~','~'))[0],
-                       successor.get(neighbor, ('~','~'))[1])
-            if new_key < old_key:
-                distances[neighbor] = cand
-                exit_for[neighbor] = chosen_exit
-                successor[neighbor] = (at, eid)
-                heapq.heappush(heap, (cand, chosen_exit, neighbor))
+    def search(destinations, protected=frozenset()):
+        for dest in sorted(destinations):
+            distances[dest] = 0.0
+            exit_for[dest] = dest
+            heapq.heappush(heap, (0.0, dest, dest))
+        while heap:
+            cost, chosen_exit, at = heapq.heappop(heap)
+            if abs(cost-distances.get(at, float('inf'))) > 1e-9 or chosen_exit != exit_for[at]:
+                continue
+            for neighbor, weight, eid in adjacency[at]:
+                if neighbor in protected:
+                    continue
+                cand = cost + weight
+                new_key = (round(cand, 10), chosen_exit, at, eid)
+                old_key = (round(distances.get(neighbor, float('inf')), 10),
+                           exit_for.get(neighbor, '~'),
+                           successor.get(neighbor, ('~','~'))[0],
+                           successor.get(neighbor, ('~','~'))[1])
+                if new_key < old_key:
+                    distances[neighbor] = cand
+                    exit_for[neighbor] = chosen_exit
+                    successor[neighbor] = (at, eid)
+                    heapq.heappush(heap, (cand, chosen_exit, neighbor))
 
-    reachable = sorted(known_nodes & distances.keys() - base_blocked_nodes)
-    unreachable = sorted(known_nodes - base_blocked_nodes - set(reachable))
+    search(valid_exits)
+    exit_reachable = frozenset(distances)
+    fallback_config = {x['id']: x for x in floor.get('fallbackDestinations', [])
+                       if isinstance(x, dict) and x.get('id') in known_nodes
+                       and x.get('available', True) is True
+                       and x.get('type') in ('toilet', 'descender')}
+    fallback_roots = set(fallback_config) - base_blocked_nodes - set(exit_reachable)
+    search(fallback_roots, exit_reachable)
+    terminals = valid_exits | fallback_roots
+    reachable = sorted((known_nodes & distances.keys()) - base_blocked_nodes - terminals)
+    unreachable = sorted(known_nodes - base_blocked_nodes - set(reachable) - fallback_roots)
     route_by_start = {}
     directed_edges = []
     led_distance = {}
@@ -136,7 +148,7 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
         chain = [node]
         used = set()
         cursor = node
-        while cursor not in valid_exits:
+        while cursor not in terminals:
             if cursor in used or cursor not in successor:
                 raise ValueError(f'경로 방향 트리 오류: {node}')
             used.add(cursor)
@@ -146,7 +158,10 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
         # N38은 제한 대상에서 제외하며 기존 입/출입 경로를 유지한다.
         if set(chain[1:]) & CINEMA_OUTBOUND_ONLY_NODES:
             raise ValueError(f'상영관 내부 진입 경로 생성 차단: {node}')
-        route_by_start[node] = {'exitNode': exit_for[node],
+        destination = exit_for[node]
+        route_by_start[node] = {'exitNode': destination if destination in valid_exits else None,
+                                'destinationNode': destination,
+                                'destinationType': 'exit' if destination in valid_exits else fallback_config[destination]['type'],
                                 'routeNodes': chain, 'cost': round(distances[node], 6)}
 
     # Each successor edge occurs exactly once, regardless of the number of
@@ -206,6 +221,7 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
         'directionConflictExcludedEdges': sorted(_extra_blocked_edges),
         'unmappedEdges': sorted(unmapped),
         'availableExits': sorted(valid_exits),
+        'fallbackDestinations': sorted({edge['exitNode'] for edge in directed_edges if edge['exitNode'] in fallback_roots}),
         'guidedNodes': reachable,
         'unreachableNodes': unreachable,
         'routesByStart': route_by_start,

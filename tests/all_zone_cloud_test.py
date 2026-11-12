@@ -27,6 +27,32 @@ def report():
 
 
 class AllZoneCloudTest(unittest.TestCase):
+    def test_fallback_path_is_preserved_and_not_called_an_exit(self):
+        data = report()
+        plan = data['allZone']
+        plan.update(availableExits=[], fallbackDestinations=['N5'],
+                    guidedNodes=['N13', 'N35', 'N28'], unreachableNodes=[],
+                    directedEdges=[
+                        {'edgeId':'E15', 'from':'N13', 'to':'N35', 'exitNode':'N5'},
+                        {'edgeId':'E30', 'from':'N35', 'to':'N28', 'exitNode':'N5'},
+                        {'edgeId':'E21', 'from':'N28', 'to':'N5', 'exitNode':'N5'}])
+        result = validate_hardware_telemetry(data, FLOOR, data['deviceId'])
+        self.assertEqual(result['hardware']['allZone']['fallbackDestinations'], ['N5'])
+        self.assertEqual(result['hardware']['allZone']['availableExits'], [])
+
+    def test_fallback_must_be_configured_unblocked_and_reached(self):
+        data = report()
+        plan = data['allZone']
+        plan.update(availableExits=[], fallbackDestinations=['N5'], guidedNodes=['N28'],
+                    unreachableNodes=[], directedEdges=[{'edgeId':'E21', 'from':'N28', 'to':'N5', 'exitNode':'N5'}])
+        for mutate in (lambda d: d['allZone'].update(fallbackDestinations=['N13']),
+                       lambda d: d['allZone']['directedEdges'][0].update(exitNode='N6'),
+                       lambda d: d.update(blockedNodes=['N5']),
+                       lambda d: d['allZone'].update(guidedNodes=['N28','N5'])):
+            candidate = deepcopy(data); mutate(candidate)
+            with self.assertRaises(ValueError):
+                validate_hardware_telemetry(candidate, FLOOR, candidate['deviceId'])
+
     def test_preserves_plan_and_legacy_neutral_route(self):
         data = report()
         normalized = validate_hardware_telemetry(data, FLOOR, data['deviceId'])

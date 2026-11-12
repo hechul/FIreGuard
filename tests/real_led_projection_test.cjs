@@ -41,6 +41,9 @@ const forest = {routingMode:'all_zones_to_exits', routeStatus:'partial',
  directedEdges:[{edgeId:'E26',from:'N4',to:'N27',exitNode:'EXIT_NW'}], ledExcludedEdges:['E02']};
 const whole = {...cloud,hardware:{...h,allZone:forest}};
 const view = allZoneSummary(whole);
+assert.deepEqual(view.fallbackDestinations, [], 'legacy all-zone reports remain compatible');
+assert.deepEqual(allZoneSummary({...whole,hardware:{...h,allZone:{...forest,fallbackDestinations:['N5']}}}).fallbackDestinations, ['N5']);
+assert.equal(allZoneSummary({...whole,hardware:{...h,allZone:{...forest,fallbackDestinations:[42]}}}), null);
 assert.equal(view.status,'일부 구역 경로 없음');
 assert.equal(view.guidedCount,2);
 assert.equal(view.unreachableCount,1);

@@ -24,6 +24,35 @@ PROJECT = os.environ.get('FIREGUARD_PI_PROJECT')
 
 @unittest.skipUnless(PROJECT, 'FIREGUARD_PI_PROJECT is not set')
 class PiArchiveRealIntegrationTest(unittest.TestCase):
+    def test_real_fallback_planner_reporter_server_chain(self):
+        project = Path(PROJECT).resolve()
+        sys.path.append(str(project))
+        original_path = hardware.__path__
+        hardware.__path__ = list(original_path) + [str(project / 'hardware')]
+        try:
+            from hardware.led_routes import load_files
+            from hardware.cloud_telemetry import build_payload
+            from hardware.all_zone_routes import calculate_all_zones
+            layout, floor = load_files()
+            server_floor = cloud_floorplan(json.loads(
+                (Path(__file__).resolve().parents[1] / 'static/data/floorplan.json').read_text()))
+            with tempfile.TemporaryDirectory() as directory:
+                pi = RealPiState(floor, Path(directory) / 'fire.json')
+                pi.update({sid:False for sid in pi.sensor_nodes})
+                pi.update({'FLM-03':True})
+                snap = pi.snapshot()
+                plan = calculate_all_zones(snap, floor, layout)
+                self.assertIn('N5', plan['fallbackDestinations'])
+                base = build_payload(snap, floor, layout, device_id='pi-01',
+                    boot_id=str(uuid4()), sequence=1, led_status='not_running')
+                payload = make_payload(base, plan)
+                normalized = validate_hardware_telemetry(payload, server_floor, 'pi-01')
+                self.assertEqual(normalized['hardware']['allZone']['fallbackDestinations'], ['N5'])
+                self.assertTrue(any(edge['exitNode'] == 'N5' for edge in payload['allZone']['directedEdges']))
+        finally:
+            hardware.__path__ = original_path
+            sys.path.remove(str(project))
+
     def test_two_fire_snapshots_with_planner_sender_and_server(self):
         project = Path(PROJECT).resolve()
         for filename in ('hardware/led_routes.py', 'hardware/led_junctions.py',

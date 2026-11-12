@@ -49,7 +49,8 @@
         h?.operationMode !== 'real' || !plan || plan.routingMode !== 'all_zones_to_exits' ||
         !['ok', 'partial', 'no_route'].includes(plan.routeStatus)) return null;
     const identifiers = values => Array.isArray(values) && values.every(x => typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x)) && new Set(values).size === values.length;
-    if (!identifiers(plan.availableExits) || !identifiers(plan.guidedNodes) ||
+    const fallbackDestinations = plan.fallbackDestinations ?? [];
+    if (!identifiers(plan.availableExits) || !identifiers(fallbackDestinations) || !identifiers(plan.guidedNodes) ||
         !identifiers(plan.unreachableNodes) || !identifiers(plan.ledExcludedEdges) ||
         !Array.isArray(plan.directedEdges) || plan.directedEdges.some(e => !e ||
           ![e.edgeId, e.from, e.to, e.exitNode].every(x => typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x)) || e.from === e.to)) return null;
@@ -62,6 +63,7 @@
       routeStatus: plan.routeStatus,
       guidedCount: plan.guidedNodes.length, unreachableCount: plan.unreachableNodes.length,
       availableExits: [...plan.availableExits],
+      fallbackDestinations: [...fallbackDestinations],
       directedEdges: stale || unverified ? [] : plan.directedEdges.map(({edgeId,from,to,exitNode}) => ({edgeId,from,to,exitNode})),
       ledAcknowledged: !stale && !unverified && h.ledStatus === 'active' && h.ledCommandAck === true,
     };

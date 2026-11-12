@@ -37,6 +37,8 @@ def make_payload(base, plan):
                               for edge in plan['directedEdges']],
             'ledExcludedEdges': sorted(set(plan['ledExcludedEdges']) | set(plan['blockedEdges'])),
         }
+        if 'fallbackDestinations' in plan:
+            payload['allZone']['fallbackDestinations'] = list(plan['fallbackDestinations'])
         payload.update(plannedLedLogicalIndices=list(plan['ledLogicalIndices']),
                        plannedLedIndices=list(plan['ledWireIndices']),
                        plannedFireLogicalIndices=list(plan['fireLedLogicalIndices']),

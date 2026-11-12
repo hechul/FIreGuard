@@ -42,7 +42,7 @@ ALL_ZONE_FIELDS = {'routingMode', 'routeStatus', 'availableExits', 'guidedNodes'
 
 def validate_all_zone(value, graph, blocked_nodes, blocked_edges):
     """Validate a Pi-calculated directed evacuation forest, not LED output."""
-    if not isinstance(value, dict) or set(value) != ALL_ZONE_FIELDS:
+    if not isinstance(value, dict) or set(value) not in (ALL_ZONE_FIELDS, ALL_ZONE_FIELDS | {'fallbackDestinations'}):
         raise ValueError('전체 구역 경로 보고 형식이 잘못되었습니다.')
     if value['routingMode'] != 'all_zones_to_exits':
         raise ValueError('전체 구역 경로 모드가 잘못되었습니다.')
@@ -56,11 +56,14 @@ def validate_all_zone(value, graph, blocked_nodes, blocked_edges):
         return set(entries)
 
     exits = unique_ids('availableExits', graph.exits)
+    fallback = unique_ids('fallbackDestinations', graph.fallbacks) if 'fallbackDestinations' in value else set()
+    if any(graph.fallbacks[x].get('available', True) is not True or x not in graph.nodes for x in fallback):
+        raise ValueError('사용할 수 없는 보조 대피지점입니다.')
     guided = unique_ids('guidedNodes', graph.nodes)
     unreachable = unique_ids('unreachableNodes', graph.nodes)
     excluded = unique_ids('ledExcludedEdges', graph.edges)
     blocked_nodes, blocked_edges = set(blocked_nodes), set(blocked_edges)
-    if (guided & unreachable or (guided | exits) & blocked_nodes
+    if (guided & unreachable or fallback & (guided | unreachable) or (guided | exits | fallback) & blocked_nodes
             or any(graph.exits[e].get('available', True) is not True for e in exits)):
         raise ValueError('차단된 노드 또는 출구가 전체 구역 경로에 포함되었습니다.')
     expected = 'no_route' if not guided else 'partial' if unreachable else 'ok'
@@ -78,7 +81,7 @@ def validate_all_zone(value, graph, blocked_nodes, blocked_edges):
             raise ValueError('전체 구역 간선 식별자가 잘못되었습니다.')
         edge = graph.edges.get(edge_id)
         if (not edge or src not in guided or src in successor or edge_id in used_edges
-                or dst not in graph.adjacency or dst in blocked_nodes or dest not in exits
+                or dst not in graph.adjacency or dst in blocked_nodes or dest not in exits | fallback
                 or edge_id in blocked_edges or edge_id in excluded
                 or {edge['from'], edge['to']} != {src, dst}):
             raise ValueError('전체 구역 간선 연결이 잘못되었습니다.')
@@ -88,7 +91,7 @@ def validate_all_zone(value, graph, blocked_nodes, blocked_edges):
         raise ValueError('전체 구역 출발점과 간선이 일치하지 않습니다.')
     for start in guided:
         current, visited, exit_id = start, set(), successor[start][1]
-        while current not in exits:
+        while current not in exits | fallback:
             if current in visited or current not in successor or successor[current][1] != exit_id:
                 raise ValueError('전체 구역 경로가 출구에 도달하지 못합니다.')
             visited.add(current)

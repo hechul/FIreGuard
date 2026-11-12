@@ -28,6 +28,8 @@ class RealAllZoneReporterTests(unittest.TestCase):
         self.assertEqual(payload['allZone']['ledExcludedEdges'], ['E1', 'E2'])
         self.assertEqual(payload['ledIndices'], [21])
         self.assertEqual(payload['plannedLedLogicalIndices'], [20])
+        plan['fallbackDestinations'] = ['N5']
+        self.assertEqual(make_payload(base, plan)['allZone']['fallbackDestinations'], ['N5'])
 
     def test_missing_plan_does_not_reuse_single_route(self):
         payload = make_payload({'routeNodes':['N1'], 'ledIndices':[], 'ledCommandAck':False}, None)
