@@ -141,10 +141,10 @@ def _no_redirect_json(url, *, headers=None, payload=None, timeout=3):
 class RealLedController:
     """Single owner of the optional serial device; FLOW ACK is not optical proof."""
     def __init__(self, source, floor, layout, *, enabled=False, port=None,
-                 uno_factory=None, planner=None, translate=None, clock=time.monotonic):
+                 uno_factory=None, planner=None, translate=None, clock=time.monotonic, lab_unverified=False):
         self.source, self.floor, self.layout = source, floor, layout
         self.enabled, self.port, self.clock = enabled, port, clock
-        if enabled and (not port or layout.get('verified') is not True or layout.get('mapping_status') != 'confirmed'):
+        if enabled and (not port or (not lab_unverified and (layout.get('verified') is not True or layout.get('mapping_status') != 'confirmed'))):
             raise ValueError('실제 LED 출력 잠금: 포트와 검증된 confirmed 매핑이 필요합니다')
         self.uno_factory, self.planner, self.translate = uno_factory, planner, translate
         self.uno = None
@@ -291,6 +291,7 @@ def main():
     parser.add_argument('--enable-real-cloud', action='store_true', help='Explicitly enable REAL telemetry')
     parser.add_argument('--assert-exclusive-publisher', action='store_true', help='Confirm all legacy publishers are stopped')
     parser.add_argument('--enable-verified-led', action='store_true', help='Enable LED only with verified confirmed mapping')
+    parser.add_argument('--lab-unverified-led', action='store_true', help='Supervised prototype test with unverified mapping')
     parser.add_argument('--port', help='Arduino USB serial port')
     parser.add_argument('--local-url', default='http://127.0.0.1:5001')
     parser.add_argument('--floorplan', default='static/data/floorplan.json')
@@ -305,7 +306,7 @@ def main():
         with urlopen(args.local_url.rstrip('/') + '/api/real/state', timeout=0.5) as response:
             return json.load(response)
     if args.check_only:
-        if args.enable_real_cloud or args.enable_verified_led or args.port:
+        if args.enable_real_cloud or args.enable_verified_led or args.lab_unverified_led or args.port:
             parser.error('--check-only cannot enable output')
         print(json.dumps(assess_snapshot(source(), floor, layout), ensure_ascii=False))
         return
@@ -313,7 +314,9 @@ def main():
         parser.error('REAL 송신 및 기존 송신자 종료 확인 옵션이 필요합니다')
     if args.enable_verified_led and (not args.port or layout.get('verified') is not True or layout.get('mapping_status') != 'confirmed'):
         parser.error('실제 LED 출력은 실측 검증된 confirmed 매핑 및 포트가 필요합니다')
-    if args.port and not args.enable_verified_led:
+    if args.lab_unverified_led and (not args.port or args.enable_verified_led):
+        parser.error('시연 LED는 포트가 필요하며 verified 옵션과 함께 쓸 수 없습니다')
+    if args.port and not (args.enable_verified_led or args.lab_unverified_led):
         parser.error('--port requires --enable-verified-led')
     telemetry_url = os.environ.get('FIREGUARD_TELEMETRY_URL', '')
     cloud = urlparse(telemetry_url)
@@ -350,7 +353,9 @@ def main():
             assess_snapshot(merged, floor, layout)
         except Exception as error:
             raise SystemExit('마지막 REAL 화재 상태 복원 실패: 송신과 LED 출력을 시작하지 않았습니다 (' + type(error).__name__ + ')') from None
-        controller = RealLedController(source, floor, layout, enabled=args.enable_verified_led, port=args.port)
+        if args.lab_unverified_led:
+            print('[주의] 미검증 모형 LED 시연: 경로와 방향은 현장 확인 필요', flush=True)
+        controller = RealLedController(source, floor, layout, enabled=args.enable_verified_led or args.lab_unverified_led, port=args.port, lab_unverified=args.lab_unverified_led)
         publisher = PublisherPump(reporter, floor, layout)
         publisher.start()
         last_problem = None

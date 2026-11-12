@@ -7,8 +7,12 @@ cd "$(dirname "$0")/.." || exit 1
 FG_PYTHON=.venv/bin/python
 FG_CLOUD_URL=https://fire-guard-seven.vercel.app
 FG_LED_PORT=
+FG_LED_LAB=0
 if [[ ${1:-} == '--verified-led' && $# -eq 2 ]]; then
   FG_LED_PORT=$2
+elif [[ ${1:-} == '--lab-unverified-led' && $# -eq 2 ]]; then
+  FG_LED_PORT=$2
+  FG_LED_LAB=1
 elif [[ $# -ne 0 ]]; then
   echo '사용법: bash hardware/start_real_monitor.sh [--verified-led /dev/ttyACM0]'
   exit 2
@@ -40,7 +44,7 @@ if ! curl -fsS --connect-timeout 5 --max-time 10 "$FG_CLOUD_URL/api/health" >/de
 fi
 if [[ -n $FG_LED_PORT ]]; then
   if [[ ! -e $FG_LED_PORT ]]; then echo "Arduino 포트를 찾지 못했습니다: $FG_LED_PORT"; exit 1; fi
-  if ! "$FG_PYTHON" -c 'import json; x=json.load(open("hardware/led_layout_162.json")); assert x.get("verified") is True and x.get("mapping_status") == "confirmed"'; then
+  if [[ $FG_LED_LAB == 0 ]] && ! "$FG_PYTHON" -c 'import json; x=json.load(open("hardware/led_layout_162.json")); assert x.get("verified") is True and x.get("mapping_status") == "confirmed"'; then
     echo '실물 LED 매핑이 검증되지 않아 실제 LED 출력을 시작할 수 없습니다.'; exit 1
   fi
 fi
@@ -107,7 +111,14 @@ if ! curl -fsS --max-time 1 http://127.0.0.1:5001/api/real/state | "$FG_PYTHON" 
 fi
 
 FG_RUNTIME_OPTIONS=(--enable-real-cloud --assert-exclusive-publisher)
-if [[ -n $FG_LED_PORT ]]; then FG_RUNTIME_OPTIONS+=(--enable-verified-led --port "$FG_LED_PORT"); fi
+if [[ -n $FG_LED_PORT ]]; then
+  if [[ $FG_LED_LAB == 1 ]]; then
+    echo '주의: 미검증 모형 LED 시연입니다. 실제 경로와 방향을 직접 확인하세요.'
+    FG_RUNTIME_OPTIONS+=(--lab-unverified-led --port "$FG_LED_PORT")
+  else
+    FG_RUNTIME_OPTIONS+=(--enable-verified-led --port "$FG_LED_PORT")
+  fi
+fi
 "$FG_PYTHON" -u -m hardware.real_device_runtime "${FG_RUNTIME_OPTIONS[@]}" >runtime/real-cloud.log 2>&1 &
 FG_RUNTIME=$!; FG_PIDS+=("$FG_RUNTIME")
 "$FG_PYTHON" -u -m hardware.real_clear_worker --cloud-url "$FG_CLOUD_URL" --enable-real-clear >runtime/real-clear.log 2>&1 &

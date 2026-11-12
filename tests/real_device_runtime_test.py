@@ -139,6 +139,16 @@ class RealRuntimeOutputTest(unittest.TestCase):
                 enabled=True,port='/dev/test',uno_factory=self.Uno)
         self.assertEqual(self.instances,[])
 
+    def test_unverified_mapping_requires_explicit_lab_mode(self):
+        controller = self.Controller(self.state.snapshot, FLOOR,
+            {'verified':False, 'mapping_status':'needs_verification'}, enabled=True,
+            port='/dev/test', uno_factory=self.Uno, lab_unverified=True,
+            planner=lambda s,f,l: ([0,20],[21]), translate=lambda i:i if i<20 else i+1,
+            clock=lambda:self.clock)
+        self.state.update({self.ids[0]:True})
+        self.assertEqual(controller.step(self.state.snapshot())['led_status'], 'active')
+        controller.close()
+
     def test_service_termination_runs_led_cleanup(self):
         self.state.update({self.ids[0]:True})
         self.assertEqual(self.controller.step(self.state.snapshot())['led_status'], 'active')
