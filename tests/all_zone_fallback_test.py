@@ -74,7 +74,9 @@ class FallbackRouteTest(unittest.TestCase):
         self.module._edge_leds=lambda edge, floor, layout: mapping[edge['id']]
         result=self.plan(['E2'])
         excluded=set(result['directionConflictExcludedEdges'])
-        self.assertTrue(excluded)
+        # One conflicting edge is enough here; dropping both needlessly
+        # removes unrelated guidance from the recomputed forest.
+        self.assertEqual(len(excluded), 1)
         self.assertFalse(excluded & {edge['edgeId'] for edge in result['directedEdges']})
         self.assertIn('N13',result['unreachableNodes'])
 

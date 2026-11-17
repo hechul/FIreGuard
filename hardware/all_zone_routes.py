@@ -196,15 +196,23 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
         if len(signs) > 1:
             opposing.append(idx)
     if opposing:
-        # Do not publish ambiguous directions. Remove participating physical
-        # edges and re-run the multi-exit calculation until conflicts vanish.
+        # Do not publish ambiguous directions. Removing every participating edge
+        # also cuts branches that could still guide people after just one edge
+        # is rerouted. Remove the least-used edge, then recalculate the entire
+        # forest and check for conflicts again.
         conflicting_edges = {e['edgeId'] for e in directed_edges
                              if set(e['ledLogicalIndices']) & set(opposing)}
         newly_forbidden = conflicting_edges - set(_extra_blocked_edges)
         if not newly_forbidden:
             raise ValueError(f'해소 불가능한 역방향 LED 충돌: {sorted(opposing)}')
+        use_count = defaultdict(int)
+        for route in route_by_start.values():
+            for src, dst in zip(route['routeNodes'], route['routeNodes'][1:]):
+                if src in successor and successor[src][0] == dst:
+                    use_count[successor[src][1]] += 1
+        edge_to_remove = min(newly_forbidden, key=lambda eid: (use_count[eid], eid))
         return calculate_all_zones(snapshot, floor, layout,
-                                   _extra_blocked_edges=frozenset(set(_extra_blocked_edges) | newly_forbidden))
+                                   _extra_blocked_edges=frozenset(set(_extra_blocked_edges) | {edge_to_remove}))
 
     ordered_leds = sorted(led_distance, key=lambda i: (-led_distance[i], i))
     if len(ordered_leds) != len(set(ordered_leds)) or (set(ordered_leds) & red):
