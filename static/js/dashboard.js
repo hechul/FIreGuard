@@ -872,10 +872,12 @@
 
   function renderMap(state) {
     if (!floorplan) return;
-    const displayPlan = window.FireGuardPrototypeProjection ? window.FireGuardPrototypeProjection.project(floorplan) : floorplan;
+    const reportPlan = cloudView === 'real' && window.FireGuardRealLedProjection
+      ? window.FireGuardRealLedProjection.floorplanForReport(floorplan, state.cloud) : floorplan;
+    const displayPlan = window.FireGuardPrototypeProjection ? window.FireGuardPrototypeProjection.project(reportPlan) : reportPlan;
     const points = Object.fromEntries([...displayPlan.nodes, ...displayPlan.exits].map(item => [item.id, item]));
     const displayRouter = MapGeometry.createRouter(displayPlan);
-    const edgesById = edgeMap();
+    const edgesById = Object.fromEntries(displayPlan.edges.map(edge => [edge.id, edge]));
     const edgeLayer = byId('edgeLayer');
     const routeLayer = byId('routeLayer');
     const shutterLayer = byId('shutterLayer');
@@ -1024,8 +1026,9 @@
 
     displayPlan.nodes.forEach((node) => {
       const groupModel = window.FireGuardNodeGroups;
-      if (groupModel && groupModel.displayId(node.id) !== node.id) return;
-      const groupIds = groupModel ? groupModel.members(node.id) : [node.id];
+      const hasGroup = groupModel && displayPlan.nodes.some(n => n.id === groupModel.displayId(node.id));
+      if (hasGroup && groupModel.displayId(node.id) !== node.id) return;
+      const groupIds = hasGroup ? groupModel.members(node.id) : [node.id];
       const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       group.setAttribute('role', 'button'); group.setAttribute('tabindex', '0');
       const blocked = groupIds.some(id => state.blockedNodes.includes(id));

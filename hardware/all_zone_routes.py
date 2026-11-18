@@ -116,6 +116,9 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
             raise ValueError('N4 인접 통로 매핑이 예상과 다름: LED 출력 취소')
         red_by_sensor['FLM-04'].discard(106)
     red = set().union(*red_by_sensor.values()) if red_by_sensor else set()
+    # Site correction: these two S9 tip LEDs look like inward shop guidance
+    # during an N4 fire. Suppress green only; another sensor's red still wins.
+    suppressed_green = {117,118} if compact_fire and 'FLM-04' in active_sensors else set()
     pixels = led_coordinates(layout)
     led_by_idx = {item[3]: item for item in pixels}
     sensor_red_pixels = {sid: [led_by_idx[i] for i in indices]
@@ -282,7 +285,8 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
     # distinct starts that eventually merge into it.
     for node in reachable:
         nxt, eid = successor[node]
-        indices = _edge_leds({'id': eid, 'from':node, 'to':nxt}, floor, layout)
+        indices = [i for i in _edge_leds({'id': eid, 'from':node, 'to':nxt}, floor, layout)
+                   if i not in suppressed_green]
         if not indices:
             raise ValueError('경로 간선 LED 매핑 불가')
         weight = float(overrides.get(eid, edges[eid]['weight']))
@@ -344,7 +348,7 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
                 todo.extend(outgoing[at])
         return False
     if compact_fire:
-        for eid in ('E01', 'E02', 'E09'):
+        for eid in ('E01', 'E02', 'E09', 'E35'):
             edge = edges.get(eid)
             if not edge or eid in blocked_edges or any(e['edgeId'] == eid for e in directed_edges):
                 continue
@@ -355,6 +359,9 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
                     continue
                 seq = _edge_leds({'id':eid, 'from':src, 'to':dst}, floor, layout)
                 if not seq or any(hazardous(eid, i) for i in seq):
+                    continue
+                seq = [i for i in seq if i not in suppressed_green]
+                if not seq:
                     continue
                 if any((b,a) in pairs for a,b in zip(seq,seq[1:]) if a != b):
                     continue

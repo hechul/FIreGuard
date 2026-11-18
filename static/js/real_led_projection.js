@@ -11,6 +11,7 @@
     'led162-usb163-shift20-c5a4392f78',
     'led162-usb163-shift20-ca3ff6b9c6',
     'led162-usb163-shift20-4a635eec44',
+    'led162-usb163-shift20-9c9cd2f1eb',
   ]);
   // Same S1-S15 counts and DIN-to-DOUT directions as Pi led_routes.py.
   const specs = [
@@ -57,7 +58,7 @@
     const partialEdges = plan.partialEdges ?? [];
     if (!identifiers(plan.availableExits) || !identifiers(fallbackDestinations) || !identifiers(plan.guidedNodes) ||
         !identifiers(plan.unreachableNodes) || !identifiers(plan.ledExcludedEdges) ||
-        !Array.isArray(plan.directedEdges) || !Array.isArray(coverageEdges) || coverageEdges.length > 3 ||
+        !Array.isArray(plan.directedEdges) || !Array.isArray(coverageEdges) || coverageEdges.length > 4 ||
         !Array.isArray(partialEdges) || partialEdges.length > 1 || partialEdges.some(e => !e ||
           e.edgeId !== 'E10' || e.towardNode !== 'N3' || !identifiers([e.exitNode]) ||
           !validIndices(e.ledLogicalIndices) || e.ledLogicalIndices.length < 2) ||
@@ -90,7 +91,7 @@
         !consistent(h.fireLedLogicalIndices, h.fireLedIndices)) return null;
     // The new Pi S15 mapping locates LEDs 159–162 at the room 5 branch;
     // retain the old drawing for earlier devices and historical reports.
-    const mappedSections = ['led162-usb163-shift20-ca3ff6b9c6', 'led162-usb163-shift20-4a635eec44'].includes(h.ledMappingVersion)
+    const mappedSections = ['led162-usb163-shift20-ca3ff6b9c6', 'led162-usb163-shift20-4a635eec44', 'led162-usb163-shift20-9c9cd2f1eb'].includes(h.ledMappingVersion)
       ? sections?.map(s => s.id === 'S15' ? {...s, line:[[240,263.5],[240,145]]} : s)
       : sections;
     const coords = coordinates(mappedSections);
@@ -117,5 +118,18 @@
       equipment: (state.equipment || []).map(item => ({...item, status:'offline',
         stateLabel:'서버 연결 끊김 · 현재 상태 미확인'}))};
   }
-  return { coordinates, project, allZoneSummary, projectFor3d, markConnectionUnknown };
+  function floorplanForReport(floor, cloud) {
+    const version = cloud?.hardware?.graphMappingVersion;
+    if (!cloud?.enabled || !version || version === 'graph-be3845ee66' ||
+        !floor.nodes.some(n => n.id === 'N41')) return floor;
+    const result = JSON.parse(JSON.stringify(floor));
+    result.nodes = result.nodes.filter(n => n.id !== 'N41');
+    result.nodes.find(n => n.id === 'N2').x = 240;
+    result.edges = result.edges.filter(e => e.id !== 'E40');
+    result.edges.find(e => e.id === 'E23').to = 'N2';
+    result.edges.find(e => e.id === 'E33').from = 'N2';
+    Object.assign(result.edges.find(e => e.id === 'E34'), {from:'N2',to:'N25',weight:2.6946});
+    return result;
+  }
+  return { coordinates, project, allZoneSummary, projectFor3d, markConnectionUnknown, floorplanForReport };
 }));

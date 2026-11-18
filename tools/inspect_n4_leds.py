@@ -28,12 +28,12 @@ def main():
     sys.path.append(str(project))
     from hardware.led_routes import load_files
     from hardware.led_junctions import EDGE_SECTIONS
-    from hardware.real_ticket_overlay import prototype_floorplan, enable_prototype_led_mapping, cinema_five_layout
+    from hardware.real_ticket_overlay import calibrated_floorplan, enable_calibrated_led_mapping, cinema_five_layout
     from hardware.all_zone_routes import calculate_all_zones, _edge_leds
     from pi_led_usb import logical_to_wire
     layout, floor = load_files()
-    floor = prototype_floorplan(floor)
-    enable_prototype_led_mapping(floor)
+    floor = calibrated_floorplan(floor)
+    enable_calibrated_led_mapping(floor)
     layout = cinema_five_layout(layout, floor)
     snapshot = {'flameSensors': {sid: {'active': True, 'connected': True} for sid in args.fires}}
     for compact in (False, True):

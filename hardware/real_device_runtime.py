@@ -401,9 +401,9 @@ def main():
     url = urlparse(args.local_url)
     if url.scheme != 'http' or url.hostname not in ('127.0.0.1', 'localhost') or url.path not in ('', '/') or url.query or url.fragment or url.username or url.password:
         parser.error('local-url must be a loopback HTTP origin')
-    from hardware.real_ticket_overlay import prototype_floorplan, enable_prototype_led_mapping, cinema_five_layout
-    floor = prototype_floorplan(json.loads(Path(args.floorplan).read_text(encoding='utf-8')))
-    enable_prototype_led_mapping(floor)
+    from hardware.real_ticket_overlay import calibrated_floorplan, enable_calibrated_led_mapping, cinema_five_layout
+    floor = calibrated_floorplan(json.loads(Path(args.floorplan).read_text(encoding='utf-8')))
+    enable_calibrated_led_mapping(floor)
     layout = cinema_five_layout(json.loads(Path(args.layout).read_text(encoding='utf-8')), floor)
     def source():
         with urlopen(args.local_url.rstrip('/') + '/api/real/state', timeout=0.5) as response:

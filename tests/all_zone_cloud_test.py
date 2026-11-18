@@ -6,11 +6,12 @@ from datetime import datetime, timezone
 from cloud_bridge_contract_test import FLOOR, sample
 from cloud_model import validate_hardware_telemetry, project_state
 from route_service import FloorGraph
+from hardware.real_ticket_overlay import legacy_room5_floorplan
 
 
 def report():
     data = sample('01_REAL_NORMAL.json')
-    graph = FloorGraph(FLOOR)
+    graph = FloorGraph(legacy_room5_floorplan(FLOOR))
     nodes = ['N4', 'N27', 'N25', 'N2', 'N23', 'N20', 'EXIT_NW']
     edges = []
     for start, end in zip(nodes, nodes[1:]):

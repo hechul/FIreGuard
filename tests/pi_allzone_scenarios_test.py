@@ -39,14 +39,14 @@ class PiAllZoneScenariosTest(unittest.TestCase):
             from hardware.cloud_telemetry import build_payload
             from hardware.all_zone_routes import calculate_all_zones
             from hardware.led_junctions import EDGE_SECTIONS, LABELS_1BASED
-            from hardware.real_ticket_overlay import prototype_floorplan, enable_prototype_led_mapping, cinema_five_layout
+            from hardware.real_ticket_overlay import calibrated_floorplan, enable_calibrated_led_mapping, cinema_five_layout
             from pi_led_usb import logical_to_wire
             old_edges, old_labels = deepcopy(EDGE_SECTIONS), deepcopy(LABELS_1BASED)
             self.addCleanup(lambda: (EDGE_SECTIONS.clear(), EDGE_SECTIONS.update(old_edges),
                                      LABELS_1BASED.clear(), LABELS_1BASED.update(old_labels)))
             layout,floor=load_files()
-            floor = prototype_floorplan(floor)
-            enable_prototype_led_mapping(floor)
+            floor = calibrated_floorplan(floor)
+            enable_calibrated_led_mapping(floor)
             layout = cinema_five_layout(layout, floor)
             server=cloud_floorplan(json.loads((ROOT/'static/data/floorplan.json').read_text()))
             ids=[s['id'] for s in floor['sensors'] if s['type']=='flame']

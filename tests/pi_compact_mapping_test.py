@@ -24,7 +24,7 @@ class CompactMappingTest(unittest.TestCase):
         try:
             from hardware.led_routes import load_files
             from hardware.led_junctions import EDGE_SECTIONS, LABELS_1BASED
-            from hardware.real_ticket_overlay import prototype_floorplan, enable_prototype_led_mapping, cinema_five_layout
+            from hardware.real_ticket_overlay import calibrated_floorplan, enable_calibrated_led_mapping, cinema_five_layout
             from hardware.all_zone_routes import calculate_all_zones, compact_fire_leds
             from pi_led_usb import logical_to_wire
             from hardware.cloud_telemetry import build_payload
@@ -35,8 +35,8 @@ class CompactMappingTest(unittest.TestCase):
             self.addCleanup(lambda: (EDGE_SECTIONS.clear(), EDGE_SECTIONS.update(original_edges),
                                      LABELS_1BASED.clear(), LABELS_1BASED.update(original_labels)))
             layout, floor = load_files()
-            floor = prototype_floorplan(floor)
-            enable_prototype_led_mapping(floor)
+            floor = calibrated_floorplan(floor)
+            enable_calibrated_led_mapping(floor)
             layout = cinema_five_layout(layout, floor)
 
             # Execute the production pure serializer without importing Linux
@@ -53,6 +53,17 @@ class CompactMappingTest(unittest.TestCase):
                 return calculate_all_zones({'flameSensors': {sid: {'active': True, 'connected': True} for sid in fires}},
                                            floor, layout, compact_fire=True)
             n4 = plan(['FLM-04'])
+            self.assertFalse({117,118} & set(n4['ledLogicalIndices']))
+            n2 = plan(['FLM-02'])
+            self.assertEqual(n2['fireLedLogicalIndices'], list(range(150,155)))
+            self.assertTrue(set(range(158,162)) <= set(n2['ledLogicalIndices']))
+            self.assertIn('N41', n2['routesByStart']['N37']['routeNodes'])
+            self.assertNotIn('N2', n2['routesByStart']['N37']['routeNodes'])
+            self.assertIn('SEG 162 161 160 159', serialize(n2, logical_to_wire))
+            n3 = plan(['FLM-03'])
+            self.assertTrue(set(range(114,119)) <= set(n3['ledLogicalIndices']))
+            shop = next(e for e in n3['coverageEdges'] if e['edgeId'] == 'E35')
+            self.assertEqual((shop['from'], shop['to']), ('N27','N25'))
             self.assertEqual(n4['fireLedLogicalIndices'], [108,109,110,111,112])
             self.assertEqual(n4['routesByStart']['N40']['routeNodes'][:3], ['N40','N14','N9'])
             self.assertIn('SEG 123 122 121 120', serialize(n4, logical_to_wire))
@@ -97,6 +108,8 @@ class CompactMappingTest(unittest.TestCase):
                         self.assertEqual(red, set().union(*(zones[sid] for sid in fires)))
                         self.assertLessEqual(len(red), 5 * len(fires))
                         self.assertFalse(red & green)
+                        if 'FLM-04' in fires:
+                            self.assertFalse({117,118} & green)
                         self.assertNotIn(20, result['ledWireIndices'] + result['fireLedWireIndices'])
                         for route in result['routesByStart'].values():
                             self.assertFalse(set(route['routeNodes']) & {sensors[sid] for sid in fires})

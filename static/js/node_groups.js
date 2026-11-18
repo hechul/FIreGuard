@@ -4,7 +4,7 @@
   else root.FireGuardNodeGroups = factory();
 }(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
-  const groups = Object.freeze({N2: ['N2', 'N1'], N29: ['N29', 'N8'], N30: ['N30', 'N34'], N35: ['N35', 'N28']});
+  const groups = Object.freeze({N41: ['N41', 'N1'], N29: ['N29', 'N8'], N30: ['N30', 'N34'], N35: ['N35', 'N28']});
   const representative = Object.fromEntries(Object.entries(groups).flatMap(([rep, ids]) => ids.map(id => [id, rep])));
   const members = id => groups[representative[id]] || [id];
   const displayId = id => representative[id] || id;

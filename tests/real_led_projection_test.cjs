@@ -1,6 +1,14 @@
 'use strict';
 const assert = require('node:assert/strict');
-const {project, projectFor3d, coordinates, allZoneSummary, markConnectionUnknown} = require('../static/js/real_led_projection.js');
+const {project, projectFor3d, coordinates, allZoneSummary, markConnectionUnknown, floorplanForReport} = require('../static/js/real_led_projection.js');
+const calibratedFloor = require('../static/data/floorplan.json');
+const beforeFloor = JSON.stringify(calibratedFloor);
+const oldFloor = floorplanForReport(calibratedFloor, {enabled:true,hardware:{graphMappingVersion:'graph-690e1a64b5'}});
+assert(!oldFloor.nodes.some(n => n.id === 'N41'));
+assert.equal(oldFloor.edges.find(e => e.id === 'E23').to, 'N2');
+assert.equal(oldFloor.edges.find(e => e.id === 'E34').to, 'N25');
+assert.equal(JSON.stringify(calibratedFloor), beforeFloor);
+assert.equal(floorplanForReport(calibratedFloor, {enabled:true,hardware:{graphMappingVersion:'graph-be3845ee66'}}), calibratedFloor);
 const {sections} = require('../static/js/prototype_map.js');
 const coords = coordinates(sections);
 assert.equal(coords.length, 162);

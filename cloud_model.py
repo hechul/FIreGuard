@@ -14,6 +14,7 @@ from uuid import UUID
 
 from route_service import FloorGraph
 from state_manager import SimulationState
+from hardware.real_ticket_overlay import legacy_room5_floorplan
 
 CONFIG = json.loads((Path(__file__).parent / 'config/cloud_sensors.json').read_text(encoding='utf-8'))
 MAPPING_VERSION = CONFIG['mappingVersion']
@@ -28,6 +29,8 @@ HARDWARE_TICKET_LED_VERSION = 'led162-usb163-shift20-c5a4392f78'
 HARDWARE_CINEMA_LED_VERSION = 'led162-usb163-shift20-ca3ff6b9c6'
 HARDWARE_S2_GRAPH_VERSION = 'graph-690e1a64b5'
 HARDWARE_S2_LED_VERSION = 'led162-usb163-shift20-4a635eec44'
+HARDWARE_CALIBRATED_GRAPH_VERSION = 'graph-be3845ee66'
+HARDWARE_CALIBRATED_LED_VERSION = 'led162-usb163-shift20-9c9cd2f1eb'
 
 HARDWARE_FIELDS = {
     'deviceId', 'bootId', 'sequence', 'observedAt', 'mappingVersion',
@@ -105,7 +108,7 @@ def validate_all_zone(value, graph, blocked_nodes, blocked_edges, fire_leds=None
         if current != exit_id:
             raise ValueError('전체 구역 목적지가 일치하지 않습니다.')
     coverage = value.get('coverageEdges', [])
-    if not isinstance(coverage, list) or len(coverage) > 3:
+    if not isinstance(coverage, list) or len(coverage) > 4:
         raise ValueError('추가 구간 안내 형식이 잘못되었습니다.')
     outgoing = {src: [dst] for src, (dst, _) in successor.items()}
     for item in coverage:
@@ -115,7 +118,7 @@ def validate_all_zone(value, graph, blocked_nodes, blocked_edges, fire_leds=None
         if not all(isinstance(x, str) for x in (eid, src, dst, dest)):
             raise ValueError('추가 구간 안내 식별자 오류')
         edge = graph.edges.get(eid)
-        if (eid not in {'E01', 'E02', 'E09'} or not edge or eid in used_edges
+        if (eid not in {'E01', 'E02', 'E09', 'E35'} or not edge or eid in used_edges
                 or eid in blocked_edges | excluded or src not in guided or dst not in guided | exits
                 or {edge['from'], edge['to']} != {src, dst}
                 or dest not in exits or (dst if dst in exits else successor[dst][1]) != dest):
@@ -180,9 +183,13 @@ def validate_hardware_telemetry(data, floorplan, device_id, now=None):
                           (data['graphMappingVersion'] == HARDWARE_TICKET_GRAPH_VERSION and
                            data['ledMappingVersion'] in (HARDWARE_TICKET_LED_VERSION, HARDWARE_CINEMA_LED_VERSION)) or
                           (data['graphMappingVersion'] == HARDWARE_S2_GRAPH_VERSION and
-                           data['ledMappingVersion'] == HARDWARE_S2_LED_VERSION))
+                           data['ledMappingVersion'] == HARDWARE_S2_LED_VERSION) or
+                          (data['graphMappingVersion'] == HARDWARE_CALIBRATED_GRAPH_VERSION and
+                           data['ledMappingVersion'] == HARDWARE_CALIBRATED_LED_VERSION))
     if data['mappingVersion'] != HARDWARE_SENSOR_VERSION or not compatible_mapping:
         raise ValueError('센서, 지도 또는 LED 매핑 버전이 서버와 다릅니다.')
+    if data['graphMappingVersion'] != HARDWARE_CALIBRATED_GRAPH_VERSION:
+        floorplan = legacy_room5_floorplan(floorplan)
     if (data['source'] != 'raspberry-pi' or type(data['physicalLedCount']) is not int
             or data['physicalLedCount'] != 162 or type(data['arduinoSlotCount']) is not int
             or data['arduinoSlotCount'] != 163 or type(data['arduinoIndexBase']) is not int
@@ -212,7 +219,7 @@ def validate_hardware_telemetry(data, floorplan, device_id, now=None):
             raise ValueError('마지막 화재 센서 노드가 차단 목록에 없습니다.')
         validate_all_zone(data['allZone'], graph, data['blockedNodes'], data['blockedEdges'],
                           fire_leds=data.get('plannedFireLogicalIndices'))
-        if data['allZone'].get('partialEdges') and data['ledMappingVersion'] != HARDWARE_S2_LED_VERSION:
+        if data['allZone'].get('partialEdges') and data['ledMappingVersion'] not in {HARDWARE_S2_LED_VERSION, HARDWARE_CALIBRATED_LED_VERSION}:
             raise ValueError('부분 복도 안내는 S2 매핑 버전이 필요합니다.')
         if data['startNode'] is not None or data['routeStatus'] != 'no_route':
             raise ValueError('전체 구역 보고에는 단일 출발 경로를 포함할 수 없습니다.')
@@ -396,9 +403,11 @@ def project_state(floorplan, row, events, device_id, stale_seconds=15, now=None,
     received = row['received_at'] if row else None
     stale = not row or max((now - timestamp(received)).total_seconds(),
                            (now - timestamp(row['observed_at'])).total_seconds()) > stale_seconds
+    hardware = telemetry.get('hardware') if telemetry else None
+    if hardware and hardware.get('graphMappingVersion') != HARDWARE_CALIBRATED_GRAPH_VERSION:
+        floorplan = legacy_room5_floorplan(floorplan)
     model = SimulationState(floorplan)
     model.set_operation_mode('real')
-    hardware = telemetry.get('hardware') if telemetry else None
     model.start_node = preview_start or (telemetry.get('startNode', 'N33') if telemetry else 'N33')
     for sid, value in model.flame_sensors.items():
         report = (hardware.get('flame', {}).get(sid, {}) if hardware else {})
