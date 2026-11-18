@@ -4,6 +4,7 @@ FIREGUARD_PI_PROJECT=/path/to/friends/node1 .venv/bin/python -m unittest discove
 Set FIREGUARD_EXHAUSTIVE=1 as well to test every non-empty set of 11 sensors.
 """
 import itertools
+from copy import deepcopy
 import json
 import os
 import sys
@@ -37,8 +38,16 @@ class PiAllZoneScenariosTest(unittest.TestCase):
             from hardware.led_routes import load_files
             from hardware.cloud_telemetry import build_payload
             from hardware.all_zone_routes import calculate_all_zones
+            from hardware.led_junctions import EDGE_SECTIONS, LABELS_1BASED
+            from hardware.real_ticket_overlay import prototype_floorplan, enable_prototype_led_mapping, cinema_five_layout
             from pi_led_usb import logical_to_wire
+            old_edges, old_labels = deepcopy(EDGE_SECTIONS), deepcopy(LABELS_1BASED)
+            self.addCleanup(lambda: (EDGE_SECTIONS.clear(), EDGE_SECTIONS.update(old_edges),
+                                     LABELS_1BASED.clear(), LABELS_1BASED.update(old_labels)))
             layout,floor=load_files()
+            floor = prototype_floorplan(floor)
+            enable_prototype_led_mapping(floor)
+            layout = cinema_five_layout(layout, floor)
             server=cloud_floorplan(json.loads((ROOT/'static/data/floorplan.json').read_text()))
             ids=[s['id'] for s in floor['sensors'] if s['type']=='flame']
             self.assertEqual(len(ids),11)
@@ -52,7 +61,9 @@ class PiAllZoneScenariosTest(unittest.TestCase):
                             pi.update({sid:False for sid in ids})
                             pi.update({sid:True for sid in fires})
                             snap=pi.snapshot()
-                            plan=calculate_all_zones(snap,floor,layout)
+                            plan=calculate_all_zones(snap,floor,layout,compact_fire=True)
+                            self.assertLessEqual(len(plan['fireLedLogicalIndices']), 5 * len(fires))
+                            self.assertFalse(set(plan['fireLedLogicalIndices']) & set(plan['ledLogicalIndices']))
                             commands=prepare_guide_commands(plan,logical_to_wire)
                             self.assertEqual(commands[0],'BEGIN')
                             self.assertTrue(commands[-1].startswith('GUIDE '))

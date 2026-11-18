@@ -17,6 +17,14 @@ const room5 = project({...cloud, hardware:{...h, ledMappingVersion:'led162-usb16
  ledLogicalIndices:[158,161],ledIndices:[159,162],fireLedLogicalIndices:[],fireLedIndices:[]}}, sections);
 assert.equal(room5.points[0].x,240);
 assert(room5.points[0].y > room5.points[1].y, '159 is corridor side, 162 inside room 5');
+const s2mapping = project({...cloud,hardware:{...h,ledMappingVersion:'led162-usb163-shift20-4a635eec44',
+ ledLogicalIndices:[4,5,6,7,158,161],ledIndices:[4,5,6,7,159,162],fireLedLogicalIndices:[],fireLedIndices:[]}},sections);
+assert.equal(s2mapping.points.length,6);
+assert.equal(s2mapping.points[4].x,240,'new mapping retains room 5 location');
+assert(s2mapping.points[0].y > s2mapping.points[3].y,'S2 points toward lower end');
+const floor = require('../static/data/floorplan.json');
+assert.equal(floor.exits.filter(e=>e.id==='EXIT_S2').length,1);
+assert.deepEqual(floor.edges.find(e=>e.id==='E39'),{id:'E39',from:'N7',to:'EXIT_S2',weight:0.5});
 const liveState = {cloud, connections:{pi:true,server:true}, flameSensors:{'FLM-01':{active:true,connected:true}}, sensorCounts:{offline:0}, equipment:[{id:'FLM-01',status:'danger'}]};
 const unavailable = markConnectionUnknown(liveState);
 assert.equal(unavailable.cloud.stale,true);
@@ -52,6 +60,11 @@ assert.equal(view.status,'일부 구역 경로 없음');
 assert.equal(view.guidedCount,2);
 assert.equal(view.unreachableCount,1);
 assert.deepEqual(view.directedEdges,forest.directedEdges);
+const coverage = [{edgeId:'E01',from:'N23',to:'N20',exitNode:'EXIT_NW'}];
+const extended = {...whole,hardware:{...h,allZone:{...forest,coverageEdges:coverage}}};
+assert.deepEqual(allZoneSummary(extended).directedEdges,[...forest.directedEdges,...coverage]);
+assert.deepEqual(allZoneSummary({...extended,stale:true}).directedEdges,[]);
+assert.equal(allZoneSummary({...extended,hardware:{...h,allZone:{...forest,coverageEdges:'invalid'}}}),null);
 assert.equal(view.ledAcknowledged,true);
 assert.match(view.label,/계산 경로.*별도 확인/);
 assert.match(project(whole,sections).label,/전체 구역.*발광 미확인/);

@@ -8,6 +8,41 @@ from copy import deepcopy
 
 TICKET_NODE = {'id': 'N40', 'name': '매표소 내부', 'x': 443.0, 'y': 409.93}
 TICKET_EDGE = {'id': 'E38', 'from': 'N14', 'to': 'N40', 'weight': 1.3654}
+S2_EXIT = {'id': 'EXIT_S2', 'name': 'S2 하단 출구', 'x': 107.07, 'y': 590.0, 'available': True}
+S2_EDGE = {'id': 'E39', 'from': 'N7', 'to': 'EXIT_S2', 'weight': 0.5}
+
+
+def prototype_floorplan(floor):
+    """User-confirmed exit at S2 LED 5; drawing position/weight are estimates."""
+    result = ticket_floorplan(floor)
+    exits, edges = result['exits'], result['edges']
+    existing_exit = next((x for x in exits if x['id'] == 'EXIT_S2'), None)
+    existing_edge = next((x for x in edges if x['id'] == 'E39'), None)
+    if (existing_exit is None) != (existing_edge is None):
+        raise ValueError('S2 출구 지도 연결이 불완전합니다')
+    if existing_exit is None:
+        if not any(n['id'] == 'N7' for n in result['nodes']):
+            raise ValueError('S2 출구 입구 N7이 없습니다')
+        exits.append(deepcopy(S2_EXIT))
+        edges.append(deepcopy(S2_EDGE))
+    elif existing_exit != S2_EXIT or existing_edge != S2_EDGE:
+        raise ValueError('S2 출구 지도 버전이 예상과 다릅니다')
+    return result
+
+
+def enable_prototype_led_mapping(floor):
+    from hardware.led_junctions import EDGE_SECTIONS, LABELS_1BASED
+    enable_ticket_led_mapping(floor)
+    if next((e for e in floor['edges'] if e['id'] == 'E39'), None) != S2_EDGE:
+        raise ValueError('S2 출구 간선이 일치하지 않습니다')
+    if EDGE_SECTIONS.get('E39', 'S2') != 'S2':
+        raise ValueError('S2 출구 LED 매핑 충돌')
+    if LABELS_1BASED.get('EXIT_S2', {'S2': 5}) != {'S2': 5}:
+        raise ValueError('S2 출구 앵커 충돌')
+    if LABELS_1BASED.get('N7', {}).get('S2') != 8:
+        raise ValueError('S2 N7 앵커가 예상과 다릅니다')
+    EDGE_SECTIONS['E39'] = 'S2'
+    LABELS_1BASED['EXIT_S2'] = {'S2': 5}
 
 
 def ticket_floorplan(floor):

@@ -22,6 +22,8 @@ Vercel **Production**의 기존 `FIREGUARD_DEVICE_TOKEN`은 Pi 송신·명령 �
 
 ## Pi 파일 준비
 
+2026-11-18 S2 출구/짧은 화재 표시 변경은 **서버 배포 확인 후 Pi 적용** 순서다. 새 버전, 검증 범위와 5개 파일의 동시 적용은 [N4 수정 안내](N4_COMPACT_FIRE_WORKING_NOTES_KO.md)를 따른다. `real_allzone_reporter.py`도 함께 갱신해야 추가 분기가 서버와 웹에 전달된다.
+
 친구 Pi의 `~/FIreGuard`에 최신 Git 코드가 있고, 실제 하드웨어 프로젝트는 `~/Desktop/node1`이라고 가정한다. 이 단계는 Pi가 준비되었을 때만 진행한다. 기존 파일 백업을 남기고 새 REAL 파일과 공용 시리얼 브리지만 복사한다.
 
 ```bash

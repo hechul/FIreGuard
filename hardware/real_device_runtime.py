@@ -151,7 +151,8 @@ def prepare_guide_commands(plan, translate):
         raise ValueError('GUIDE 경로/화재 LED 충돌')
     segments = []
     directed_pairs = set()
-    for edge in plan['directedEdges']:
+    guide_edges = plan['directedEdges'] + plan.get('coverageEdges', [])
+    for edge in guide_edges:
         if not isinstance(edge, dict) or not isinstance(edge.get('ledLogicalIndices'), list):
             raise ValueError('GUIDE 간선 LED 오류')
         logical = edge['ledLogicalIndices']
@@ -172,8 +173,29 @@ def prepare_guide_commands(plan, translate):
                 segments.append(current); current = []
             current.append(wire)
         if current: segments.append(current)
-    if set(path) != {i for edge in plan['directedEdges'] for i in edge['ledLogicalIndices']}:
+    if set(path) != {i for edge in guide_edges for i in edge['ledLogicalIndices']}:
         raise ValueError('GUIDE 경로 LED가 간선과 일치하지 않습니다')
+    # Shared junction endpoints may occur in several SEG arrays. If needed,
+    # store each redundant endpoint in fewer arrays; never remove an interior
+    # pixel or the last occurrence of any guided LED. Full direction conflict
+    # validation above still uses the original, untrimmed edge sequences.
+    while sum(map(len, segments)) > 163:
+        counts = {}
+        for segment in segments:
+            for wire in segment:
+                counts[wire] = counts.get(wire, 0) + 1
+        trimmed = False
+        for segment in reversed(segments):
+            if len(segment) > 1 and counts[segment[0]] > 1:
+                segment.pop(0)
+                trimmed = True
+                break
+            if len(segment) > 1 and counts[segment[-1]] > 1:
+                segment.pop()
+                trimmed = True
+                break
+        if not trimmed:
+            break
     if len(segments) > 40 or sum(map(len, segments)) > 163:
         raise ValueError('GUIDE Arduino 저장 한도 초과')
     commands = ['BEGIN'] + ['SEG ' + ' '.join(map(str, s)) for s in segments]
@@ -199,6 +221,7 @@ class RealLedController:
             raise ValueError('실제 LED 출력 잠금: 포트와 검증된 confirmed 매핑이 필요합니다')
         self.uno_factory, self.planner, self.translate = uno_factory, planner, translate
         self.guide = guide
+        self.compact_fire = lab_unverified
         self.uno = None
         self.expected = None
         self.output = self._result('not_running')
@@ -254,7 +277,8 @@ class RealLedController:
                 self.plan_key = None
                 if self.planner is None:
                     from hardware.all_zone_routes import calculate_all_zones
-                    self.last_all_zone = calculate_all_zones(snapshot, self.floor, self.layout)
+                    self.last_all_zone = calculate_all_zones(
+                        snapshot, self.floor, self.layout, compact_fire=self.compact_fire)
                 else:
                     self.last_all_zone = self.planner(snapshot, self.floor, self.layout)
                 self.plan_key = key
@@ -377,9 +401,9 @@ def main():
     url = urlparse(args.local_url)
     if url.scheme != 'http' or url.hostname not in ('127.0.0.1', 'localhost') or url.path not in ('', '/') or url.query or url.fragment or url.username or url.password:
         parser.error('local-url must be a loopback HTTP origin')
-    from hardware.real_ticket_overlay import ticket_floorplan, enable_ticket_led_mapping, cinema_five_layout
-    floor = ticket_floorplan(json.loads(Path(args.floorplan).read_text(encoding='utf-8')))
-    enable_ticket_led_mapping(floor)
+    from hardware.real_ticket_overlay import prototype_floorplan, enable_prototype_led_mapping, cinema_five_layout
+    floor = prototype_floorplan(json.loads(Path(args.floorplan).read_text(encoding='utf-8')))
+    enable_prototype_led_mapping(floor)
     layout = cinema_five_layout(json.loads(Path(args.layout).read_text(encoding='utf-8')), floor)
     def source():
         with urlopen(args.local_url.rstrip('/') + '/api/real/state', timeout=0.5) as response:

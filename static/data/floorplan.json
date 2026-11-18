@@ -226,6 +226,13 @@
       "x": 45.0,
       "y": 150.0,
       "available": true
+    },
+    {
+      "id": "EXIT_S2",
+      "name": "S2 하단 출구",
+      "x": 107.07,
+      "y": 590.0,
+      "available": true
     }
   ],
   "edges": [
@@ -486,6 +493,12 @@
       "from": "N20",
       "to": "N23",
       "weight": 1.0
+    },
+    {
+      "id": "E39",
+      "from": "N7",
+      "to": "EXIT_S2",
+      "weight": 0.5
     }
   ],
   "sensors": [

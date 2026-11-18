@@ -10,6 +10,7 @@
     'led162-usb163-shift20-da2de217fd',
     'led162-usb163-shift20-c5a4392f78',
     'led162-usb163-shift20-ca3ff6b9c6',
+    'led162-usb163-shift20-4a635eec44',
   ]);
   // Same S1-S15 counts and DIN-to-DOUT directions as Pi led_routes.py.
   const specs = [
@@ -52,9 +53,11 @@
         !['ok', 'partial', 'no_route'].includes(plan.routeStatus)) return null;
     const identifiers = values => Array.isArray(values) && values.every(x => typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x)) && new Set(values).size === values.length;
     const fallbackDestinations = plan.fallbackDestinations ?? [];
+    const coverageEdges = plan.coverageEdges ?? [];
     if (!identifiers(plan.availableExits) || !identifiers(fallbackDestinations) || !identifiers(plan.guidedNodes) ||
         !identifiers(plan.unreachableNodes) || !identifiers(plan.ledExcludedEdges) ||
-        !Array.isArray(plan.directedEdges) || plan.directedEdges.some(e => !e ||
+        !Array.isArray(plan.directedEdges) || !Array.isArray(coverageEdges) || coverageEdges.length > 2 ||
+        [...plan.directedEdges, ...coverageEdges].some(e => !e ||
           ![e.edgeId, e.from, e.to, e.exitNode].every(x => typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x)) || e.from === e.to)) return null;
     const stale = cloud.stale !== false;
     const unverified = cloud.routeSource === 'pi_unverified';
@@ -66,7 +69,7 @@
       guidedCount: plan.guidedNodes.length, unreachableCount: plan.unreachableNodes.length,
       availableExits: [...plan.availableExits],
       fallbackDestinations: [...fallbackDestinations],
-      directedEdges: stale || unverified ? [] : plan.directedEdges.map(({edgeId,from,to,exitNode}) => ({edgeId,from,to,exitNode})),
+      directedEdges: stale || unverified ? [] : [...plan.directedEdges, ...coverageEdges].map(({edgeId,from,to,exitNode}) => ({edgeId,from,to,exitNode})),
       ledAcknowledged: !stale && !unverified && h.ledStatus === 'active' && h.ledCommandAck === true,
     };
   }
@@ -79,7 +82,7 @@
         !consistent(h.fireLedLogicalIndices, h.fireLedIndices)) return null;
     // The new Pi S15 mapping locates LEDs 159–162 at the room 5 branch;
     // retain the old drawing for earlier devices and historical reports.
-    const mappedSections = h.ledMappingVersion === 'led162-usb163-shift20-ca3ff6b9c6'
+    const mappedSections = ['led162-usb163-shift20-ca3ff6b9c6', 'led162-usb163-shift20-4a635eec44'].includes(h.ledMappingVersion)
       ? sections?.map(s => s.id === 'S15' ? {...s, line:[[240,263.5],[240,145]]} : s)
       : sections;
     const coords = coordinates(mappedSections);

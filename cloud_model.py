@@ -26,6 +26,8 @@ HARDWARE_LED_VERSION = 'led162-usb163-shift20-dfea4ba7d3'
 HARDWARE_LED_VERSIONS = {HARDWARE_LED_VERSION, 'led162-usb163-shift20-da2de217fd'}
 HARDWARE_TICKET_LED_VERSION = 'led162-usb163-shift20-c5a4392f78'
 HARDWARE_CINEMA_LED_VERSION = 'led162-usb163-shift20-ca3ff6b9c6'
+HARDWARE_S2_GRAPH_VERSION = 'graph-690e1a64b5'
+HARDWARE_S2_LED_VERSION = 'led162-usb163-shift20-4a635eec44'
 
 HARDWARE_FIELDS = {
     'deviceId', 'bootId', 'sequence', 'observedAt', 'mappingVersion',
@@ -45,7 +47,8 @@ ALL_ZONE_FIELDS = {'routingMode', 'routeStatus', 'availableExits', 'guidedNodes'
 
 def validate_all_zone(value, graph, blocked_nodes, blocked_edges):
     """Validate a Pi-calculated directed evacuation forest, not LED output."""
-    if not isinstance(value, dict) or set(value) not in (ALL_ZONE_FIELDS, ALL_ZONE_FIELDS | {'fallbackDestinations'}):
+    if (not isinstance(value, dict) or not ALL_ZONE_FIELDS <= set(value)
+            or set(value) - ALL_ZONE_FIELDS - {'fallbackDestinations', 'coverageEdges'}):
         raise ValueError('전체 구역 경로 보고 형식이 잘못되었습니다.')
     if value['routingMode'] != 'all_zones_to_exits':
         raise ValueError('전체 구역 경로 모드가 잘못되었습니다.')
@@ -101,6 +104,39 @@ def validate_all_zone(value, graph, blocked_nodes, blocked_edges):
             current = successor[current][0]
         if current != exit_id:
             raise ValueError('전체 구역 목적지가 일치하지 않습니다.')
+    coverage = value.get('coverageEdges', [])
+    if not isinstance(coverage, list) or len(coverage) > 2:
+        raise ValueError('추가 구간 안내 형식이 잘못되었습니다.')
+    outgoing = {src: [dst] for src, (dst, _) in successor.items()}
+    for item in coverage:
+        if not isinstance(item, dict) or set(item) != {'edgeId', 'from', 'to', 'exitNode'}:
+            raise ValueError('추가 구간 안내 간선 형식이 잘못되었습니다.')
+        eid, src, dst, dest = (item[k] for k in ('edgeId', 'from', 'to', 'exitNode'))
+        if not all(isinstance(x, str) for x in (eid, src, dst, dest)):
+            raise ValueError('추가 구간 안내 식별자 오류')
+        edge = graph.edges.get(eid)
+        if (eid not in {'E01', 'E02'} or not edge or eid in used_edges
+                or eid in blocked_edges | excluded or src not in guided or dst not in guided
+                or {edge['from'], edge['to']} != {src, dst}
+                or dest not in exits or successor[dst][1] != dest):
+            raise ValueError('추가 구간 안내 연결이 잘못되었습니다.')
+        outgoing[src].append(dst)
+        used_edges.add(eid)
+    # Primary routes already terminate. Reject any cycle introduced by an
+    # additional branch, including cycles formed by two added branches.
+    visiting, complete = set(), set()
+    def visit(node):
+        if node in visiting:
+            raise ValueError('추가 구간 안내 순환')
+        if node in complete:
+            return
+        visiting.add(node)
+        for nxt in outgoing.get(node, []):
+            visit(nxt)
+        visiting.remove(node)
+        complete.add(node)
+    for node in guided:
+        visit(node)
     return deepcopy(value)
 
 
@@ -117,7 +153,9 @@ def validate_hardware_telemetry(data, floorplan, device_id, now=None):
     compatible_mapping = isinstance(data['ledMappingVersion'], str) and ((data['graphMappingVersion'] == HARDWARE_GRAPH_VERSION and
                            data['ledMappingVersion'] in HARDWARE_LED_VERSIONS) or
                           (data['graphMappingVersion'] == HARDWARE_TICKET_GRAPH_VERSION and
-                           data['ledMappingVersion'] in (HARDWARE_TICKET_LED_VERSION, HARDWARE_CINEMA_LED_VERSION)))
+                           data['ledMappingVersion'] in (HARDWARE_TICKET_LED_VERSION, HARDWARE_CINEMA_LED_VERSION)) or
+                          (data['graphMappingVersion'] == HARDWARE_S2_GRAPH_VERSION and
+                           data['ledMappingVersion'] == HARDWARE_S2_LED_VERSION))
     if data['mappingVersion'] != HARDWARE_SENSOR_VERSION or not compatible_mapping:
         raise ValueError('센서, 지도 또는 LED 매핑 버전이 서버와 다릅니다.')
     if (data['source'] != 'raspberry-pi' or type(data['physicalLedCount']) is not int
@@ -366,7 +404,7 @@ def project_state(floorplan, row, events, device_id, stale_seconds=15, now=None,
             result['overallStatus'] = ('no_route' if all_zone['routeStatus'] == 'no_route'
                                        else 'fire' if result['realFireDetected'] else 'normal')
         if all_zone and any(edge['from'] in last_danger or edge['to'] in last_danger
-                            for edge in all_zone['directedEdges']):
+                            for edge in all_zone['directedEdges'] + all_zone.get('coverageEdges', [])):
             source = 'pi_unverified'
         if result['route'] and last_danger.intersection(result['route']['nodes']):
             result['route'] = None

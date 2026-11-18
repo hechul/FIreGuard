@@ -22,8 +22,6 @@ class GuideProtocolTest(unittest.TestCase):
         invalid = [
             {'directedEdges':[{'ledLogicalIndices':[0,1]}, {'ledLogicalIndices':[1,0]}],
              'ledLogicalIndices':[0,1], 'fireLedLogicalIndices':[]},
-            {'directedEdges':[{'ledLogicalIndices':list(range(162))}, {'ledLogicalIndices':[0,1]}],
-             'ledLogicalIndices':list(range(162)), 'fireLedLogicalIndices':[]},
             {'directedEdges':[{'ledLogicalIndices':[0]} for _ in range(41)],
              'ledLogicalIndices':[0], 'fireLedLogicalIndices':[]},
             {'directedEdges':[{'ledLogicalIndices':[0]}], 'ledLogicalIndices':[0], 'fireLedLogicalIndices':[0]},
@@ -32,6 +30,15 @@ class GuideProtocolTest(unittest.TestCase):
         for plan in invalid:
             with self.subTest(plan=plan), self.assertRaises(ValueError):
                 prepare_guide_commands(plan,wire)
+
+    def test_shared_endpoints_fit_memory_without_losing_pixels(self):
+        plan = {'directedEdges':[{'ledLogicalIndices':list(range(162))}],
+                'coverageEdges':[{'ledLogicalIndices':[0,1]}],
+                'ledLogicalIndices':list(range(162)), 'fireLedLogicalIndices':[]}
+        commands = prepare_guide_commands(plan, wire)
+        segments = [list(map(int,c.split()[1:])) for c in commands if c.startswith('SEG ')]
+        self.assertLessEqual(sum(map(len,segments)),163)
+        self.assertEqual({i for seg in segments for i in seg}, {wire(i) for i in range(162)})
 
     def test_long_segment_lines_are_within_firmware_limit(self):
         logical=list(range(100))

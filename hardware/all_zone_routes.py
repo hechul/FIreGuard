@@ -15,6 +15,7 @@ import heapq
 import math
 
 from hardware.led_junctions import EDGE_SECTIONS, selected_edge_leds
+import hardware.led_junctions as led_junctions
 from hardware.led_routes import (_active_sensors, _near_hazard_green,
                                  fire_led_indices, led_coordinates)
 from pi_led_usb import logical_to_wire
@@ -35,8 +36,29 @@ def _edge_leds(edge, floor, layout):
     }, floor, layout)
 
 
+def compact_fire_leds(sensor_id, floor, layout):
+    """Prototype marker: center +/- two LEDs within one physical section.
+
+    Prefer the Pi's manual 1-based logical anchors. Otherwise use the nearest
+    drawing coordinate, which is an estimate, not a measured fire boundary.
+    Never cross a section boundary merely because wire indices are adjacent.
+    """
+    sensor = next(s for s in floor['sensors'] if s['id'] == sensor_id)
+    node = next(n for n in floor['nodes'] if n['id'] == sensor['node'])
+    pixels = led_coordinates(layout)
+    if not pixels:
+        raise ValueError('화재 표시 LED 좌표가 없습니다')
+    anchors = getattr(led_junctions, 'LABELS_1BASED', {}).get(node['id'], {})
+    candidates = [p for p in pixels if anchors.get(p[2]) == p[3] + 1]
+    if anchors and not candidates:
+        raise ValueError('화재 노드 LED 앵커가 레이아웃과 일치하지 않습니다')
+    center = min(candidates or pixels,
+                 key=lambda p: ((p[0]-node['x'])**2 + (p[1]-node['y'])**2, p[3]))
+    return {p[3] for p in pixels if p[2] == center[2] and abs(p[3]-center[3]) <= 2}
+
+
 def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
-                        _extra_blocked_edges=frozenset()) -> dict:
+                        compact_fire=False, _extra_blocked_edges=frozenset()) -> dict:
     """Return all-zone plan independent of snapshot['startNode'] and ['route'].
 
     planned green indices are unique 0-based logical LEDs. A global UNO FLOW
@@ -74,8 +96,11 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
         single = dict(snapshot)
         single['flameSensors'] = {sensor_id: (snapshot.get('flameSensors') or {}).get(
             sensor_id, {'active': True, 'connected': True})}
-        red_by_sensor[sensor_id], _ = fire_led_indices(single, floor, layout)
-    if 'FLM-04' in red_by_sensor:
+        if compact_fire:
+            red_by_sensor[sensor_id] = compact_fire_leds(sensor_id, floor, layout)
+        else:
+            red_by_sensor[sensor_id], _ = fire_led_indices(single, floor, layout)
+    if not compact_fire and 'FLM-04' in red_by_sensor:
         corridor = edges.get('E18')
         if (not corridor or {corridor['from'], corridor['to']} != {'N14', 'N9'}
                 or 106 not in _edge_leds(corridor, floor, layout)):
@@ -86,12 +111,18 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
     led_by_idx = {item[3]: item for item in pixels}
     sensor_red_pixels = {sid: [led_by_idx[i] for i in indices]
                          for sid, indices in red_by_sensor.items()}
+    # In compact lab mode the ticket branch is usable for N4 alone. Its
+    # approximate coordinates fall inside the legacy clearance radius despite
+    # containing no red pixels. Only this sensor/edge clearance is relaxed;
+    # direct red overlap, N4 node blocking and every other fire still apply.
     def hazardous(eid, idx):
         if idx in red:
             return True
         return any(_near_hazard_green(led_by_idx[idx], sensor_pixels)
                    for sid, sensor_pixels in sensor_red_pixels.items()
-                   if not (sid == 'FLM-04' and eid == 'E18'))
+                   if not (sid == 'FLM-04' and (eid == 'E18' or
+                           (compact_fire and eid == 'E38' and
+                            {edges[eid]['from'], edges[eid]['to']} == {'N14', 'N40'}))))
     # All graph edges used for guidance must have *real* mapped LED locations.
     edge_pixels = {}
     visual_blocked = set()
@@ -170,16 +201,16 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
     # Prefer them only when the complete target path already reaches the
     # intended available exit without returning through the source node.
     for source, target, edge_id, desired_exit in (
-        ('N3', 'N7', 'E10', 'EXIT_W'),
+        ('N3', 'N7', 'E10', exit_for.get('N7') if exit_for.get('N7') in {'EXIT_W', 'EXIT_S2'} else 'EXIT_W'),
         # Keep the western vertical corridor continuous toward N7 when its
         # entire downstream route is available and avoids the hazard.
-        ('N23', 'N3', 'E31', 'EXIT_W'),
+        ('N23', 'N3', 'E31', exit_for.get('N7') if exit_for.get('N7') in {'EXIT_W', 'EXIT_S2'} else 'EXIT_W'),
         ('N31', 'N38', 'E13', 'EXIT_S'),
         # Join the east corridor to the already available south exit route.
         ('N33', 'N31', 'E04', 'EXIT_S'),
         # Keep the N29–N8 corridor lit toward the west exit when that whole
         # route is available; never use the preference across a blocked edge.
-        ('N29', 'N8', 'E29', 'EXIT_W'),
+        ('N29', 'N8', 'E29', exit_for.get('N8') if exit_for.get('N8') in {'EXIT_W', 'EXIT_S2'} else 'EXIT_W'),
     ):
         if (source not in successor or exit_for.get(target) != desired_exit
                 or not any(n == source and e == edge_id for n, _, e in adjacency[target])):
@@ -282,7 +313,52 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
                     use_count[successor[src][1]] += 1
         edge_to_remove = min(newly_forbidden, key=lambda eid: (use_count[eid], eid))
         return calculate_all_zones(snapshot, floor, layout,
+                                   compact_fire=compact_fire,
                                    _extra_blocked_edges=frozenset(set(_extra_blocked_edges) | {edge_to_remove}))
+
+    # A forest chooses one outgoing edge at each node, leaving some usable
+    # corridors between exit catchments dark. Represent these as explicit
+    # additional exit-reaching branches, never as a second primary successor.
+    # All branches together must remain acyclic and agree on LED pair direction.
+    coverage_edges = []
+    outgoing = defaultdict(set)
+    for edge in directed_edges:
+        outgoing[edge['from']].add(edge['to'])
+    def reaches(start, goal):
+        todo, visited = [start], set()
+        while todo:
+            at = todo.pop()
+            if at == goal:
+                return True
+            if at not in visited:
+                visited.add(at)
+                todo.extend(outgoing[at])
+        return False
+    if compact_fire:
+        for eid in ('E01', 'E02'):
+            edge = edges.get(eid)
+            if not edge or eid in blocked_edges or any(e['edgeId'] == eid for e in directed_edges):
+                continue
+            a, b = edge['from'], edge['to']
+            for src, dst in sorted(((a,b), (b,a)), key=lambda p: (distances.get(p[1], math.inf), p)):
+                if (src not in reachable or dst not in reachable or dst in CINEMA_OUTBOUND_ONLY_NODES
+                        or exit_for[dst] not in valid_exits or reaches(dst, src)):
+                    continue
+                seq = _edge_leds({'id':eid, 'from':src, 'to':dst}, floor, layout)
+                if not seq or any(hazardous(eid, i) for i in seq):
+                    continue
+                if any((b,a) in pairs for a,b in zip(seq,seq[1:]) if a != b):
+                    continue
+                coverage_edges.append({'edgeId':eid, 'from':src, 'to':dst,
+                                       'exitNode':exit_for[dst], 'ledLogicalIndices':seq})
+                outgoing[src].add(dst)
+                for a,b in zip(seq,seq[1:]):
+                    if a != b:
+                        pairs[(a,b)].add(eid)
+                for j, idx in enumerate(seq):
+                    cost = distances[dst] + float(overrides.get(eid, edge['weight'])) * (1-(j+.5)/len(seq))
+                    led_distance[idx] = max(led_distance.get(idx, -math.inf), cost)
+                break
 
     ordered_leds = sorted(led_distance, key=lambda i: (-led_distance[i], i))
     if len(ordered_leds) != len(set(ordered_leds)) or (set(ordered_leds) & red):
@@ -304,6 +380,7 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
         'unreachableNodes': unreachable,
         'routesByStart': route_by_start,
         'directedEdges': directed_edges,
+        **({'coverageEdges': coverage_edges} if compact_fire else {}),
         'ledLogicalIndices': ordered_leds,
         'ledWireIndices': [logical_to_wire(i) for i in ordered_leds],
         'fireLedLogicalIndices': sorted(red),
