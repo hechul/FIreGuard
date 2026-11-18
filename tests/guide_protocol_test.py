@@ -13,10 +13,10 @@ class GuideProtocolTest(unittest.TestCase):
                 'ledLogicalIndices':[19,20,21,22], 'fireLedLogicalIndices':[18,23]}
         self.assertEqual(prepare_guide_commands(plan, wire),
             ['BEGIN', 'SEG 19 21 22', 'SEG 22 23', 'FIRE 18 24',
-             'GUIDE 200 0 6 0 0 16 0'])
+             'GUIDE 200 0 6 0 0 0 6'])
         self.assertEqual(prepare_guide_commands({'directedEdges':[],
             'ledLogicalIndices':[], 'fireLedLogicalIndices':[20]},wire),
-            ['BEGIN','FIRE 21','GUIDE 200 0 6 0 0 16 0'])
+            ['BEGIN','FIRE 21','GUIDE 200 0 6 0 0 0 6'])
 
     def test_bounds_conflicts_and_consistency_rejected_before_commands(self):
         invalid = [

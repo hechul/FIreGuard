@@ -30,3 +30,13 @@ class GuideSerializationPortableTest(unittest.TestCase):
                 'ledLogicalIndices':[0,1], 'fireLedLogicalIndices':[]}
         with self.assertRaisesRegex(ValueError,'반대 방향'):
             self.serialize(plan,self.wire)
+
+    def test_dim_green_blue_and_room5_shared_endpoint(self):
+        plan = {'directedEdges':[{'ledLogicalIndices':[161,160,159,158]},
+                                 {'ledLogicalIndices':[158]}],
+                'ledLogicalIndices':[158,159,160,161], 'fireLedLogicalIndices':[110]}
+        commands = self.serialize(plan,self.wire)
+        self.assertIn('SEG 162 161 160 159',commands)
+        self.assertNotIn('SEG 159',commands, 'Shared junction must not be a stationary blue head')
+        self.assertIn('FIRE 111',commands)
+        self.assertEqual(commands[-1], 'GUIDE 200 0 6 0 0 0 6')

@@ -43,7 +43,7 @@ def main():
                   'redWireSlots': plan['fireLedWireIndices'], 'routes': plan['routesByStart'],
                   'ledExcludedEdges': plan['ledExcludedEdges'], 'partialEdges': plan.get('partialEdges', []),
                   'requestedLogical1Based': []}
-        for label in [*range(39,41), *range(5,8), *range(30,37), 20,65,66, *range(71,79), *range(120,124), *range(129,141)]:
+        for label in [*range(39,41), *range(5,8), *range(30,37), 20,65,66, *range(71,79), *range(120,124), *range(129,141), *range(159,163)]:
             idx = label-1
             edges = [e['id'] for e in floor['edges'] if idx in _edge_leds(e, floor, layout)]
             report['requestedLogical1Based'].append({

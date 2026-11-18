@@ -175,6 +175,12 @@ def prepare_guide_commands(plan, translate):
         if current: segments.append(current)
     if set(path) != {i for edge in guide_edges for i in edge['ledLogicalIndices']}:
         raise ValueError('GUIDE 경로 LED가 간선과 일치하지 않습니다')
+    # A shared one-pixel junction (room 5 slot 159) has no direction of its
+    # own. Its permanent head would overwrite the moving head of the longer
+    # segment every frame. Keep its pixel in that segment instead.
+    moving_pixels = {wire for segment in segments if len(segment) > 1 for wire in segment}
+    segments = [segment for segment in segments
+                if len(segment) > 1 or segment[0] not in moving_pixels]
     # Shared junction endpoints may occur in several SEG arrays. If needed,
     # store each redundant endpoint in fewer arrays; never remove an interior
     # pixel or the last occurrence of any guided LED. Full direction conflict
@@ -203,9 +209,9 @@ def prepare_guide_commands(plan, translate):
     if any(type(i) is not int or not 0 <= i <= 162 for i in wires):
         raise ValueError('GUIDE 화재 슬롯 오류')
     commands += ['FIRE ' + ' '.join(map(str, wires[i:i+12])) for i in range(0, len(wires), 12)]
-    # Base green 6/255 remains below the Uno firmware's 12/255 channel cap,
-    # but is easier to distinguish from an unlit LED on the model.
-    commands.append('GUIDE 200 0 6 0 0 16 0')
+    # Dim green base with an equally low-channel blue moving head.
+    # The existing GUIDE firmware accepts both RGB colors independently.
+    commands.append('GUIDE 200 0 6 0 0 0 6')
     if any(len(c.encode('ascii')) > 94 for c in commands):
         raise ValueError('GUIDE 시리얼 명령 길이 초과')
     return commands

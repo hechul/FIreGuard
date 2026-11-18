@@ -74,6 +74,8 @@ class CompactMappingTest(unittest.TestCase):
             self.assertEqual({e['edgeId'] for e in n4['coverageEdges']}, {'E01','E02','E09'})
             self.assertTrue({64,65} <= set(n4['ledLogicalIndices']))
             self.assertTrue(set(range(128,140)) <= set(n4['ledLogicalIndices']), 'Popcorn exit path')
+            self.assertTrue(set(range(158,162)) <= set(n4['ledLogicalIndices']), 'N4: room 5 LEDs 159-162')
+            self.assertIn('SEG 162 161 160 159', serialize(n4, logical_to_wire))
             self.assertEqual(n4['routesByStart']['N19']['routeNodes'][:4], ['N19','N15','N27','N25'])
             s2 = next(e for e in n4['directedEdges'] if e['edgeId'] == 'E39')
             self.assertEqual(s2['ledLogicalIndices'], [7,6,5,4])
@@ -115,6 +117,13 @@ class CompactMappingTest(unittest.TestCase):
                             self.assertFalse(set(route['routeNodes']) & {sensors[sid] for sid in fires})
                             self.assertEqual(len(route['routeNodes']), len(set(route['routeNodes'])))
                         commands = serialize(result, logical_to_wire)
+                        self.assertEqual(commands[-1], 'GUIDE 200 0 6 0 0 0 6')
+                        if 'N37' in result['routesByStart']:
+                            self.assertTrue(set(range(158,162)) <= green,
+                                            'Room 5 guidance must include corridor LED 159')
+                        self.assertEqual(bool(green & set(range(158,162))),
+                                         set(range(158,162)) <= green,
+                                         'Room 5 must not lose its endpoint alone')
                         self.assertTrue(commands[-1].startswith('GUIDE '))
                         wire_segments = [list(map(int,c.split()[1:])) for c in commands if c.startswith('SEG ')]
                         self.assertEqual({i for seg in wire_segments for i in seg}, set(result['ledWireIndices']))
