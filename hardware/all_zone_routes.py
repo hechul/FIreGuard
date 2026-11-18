@@ -172,6 +172,9 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
     for source, target, edge_id, desired_exit in (
         ('N3', 'N7', 'E10', 'EXIT_W'),
         ('N31', 'N38', 'E13', 'EXIT_S'),
+        # Keep the N29–N8 corridor lit toward the west exit when that whole
+        # route is available; never use the preference across a blocked edge.
+        ('N29', 'N8', 'E29', 'EXIT_W'),
     ):
         if (source not in successor or exit_for.get(target) != desired_exit
                 or not any(n == source and e == edge_id for n, _, e in adjacency[target])):
