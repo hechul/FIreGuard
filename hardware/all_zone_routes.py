@@ -164,6 +164,47 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
     fallback_roots = set(fallback_config) - base_blocked_nodes - set(exit_reachable)
     search(fallback_roots, exit_reachable)
     terminals = valid_exits | fallback_roots
+
+    # These prototype branches have physical exit-direction markings: the
+    # descender corridor points toward N7 and the 1관 branch toward EXIT_S.
+    # Prefer them only when the complete target path already reaches the
+    # intended available exit without returning through the source node.
+    for source, target, edge_id, desired_exit in (
+        ('N3', 'N7', 'E10', 'EXIT_W'),
+        ('N31', 'N38', 'E13', 'EXIT_S'),
+    ):
+        if (source not in successor or exit_for.get(target) != desired_exit
+                or not any(n == source and e == edge_id for n, _, e in adjacency[target])):
+            continue
+        chain = {source}
+        cursor = target
+        while cursor in successor and cursor not in chain:
+            chain.add(cursor)
+            cursor = successor[cursor][0]
+        if cursor in chain or cursor != desired_exit:
+            continue
+        successor[source] = (target, edge_id)
+        # A changed successor also changes the distance and destination of
+        # every upstream node; never publish the previous Dijkstra values.
+        for node in list(successor):
+            walk = []
+            cursor = node
+            visited = set()
+            while cursor in successor:
+                if cursor in visited:
+                    raise ValueError('방향 우선 경로 순환')
+                visited.add(cursor)
+                nxt, eid = successor[cursor]
+                walk.append((cursor, eid))
+                cursor = nxt
+            if cursor not in terminals:
+                raise ValueError('방향 우선 경로 목적지 없음')
+            cost = 0.0
+            for at, eid in reversed(walk):
+                cost += float(overrides.get(eid, edges[eid]['weight']))
+                distances[at] = cost
+                exit_for[at] = cursor
+
     reachable = sorted((known_nodes & distances.keys()) - base_blocked_nodes - terminals)
     unreachable = sorted(known_nodes - base_blocked_nodes - set(reachable) - fallback_roots)
     route_by_start = {}

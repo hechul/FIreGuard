@@ -25,6 +25,7 @@ HARDWARE_TICKET_GRAPH_VERSION = 'graph-e434bafc81'
 HARDWARE_LED_VERSION = 'led162-usb163-shift20-dfea4ba7d3'
 HARDWARE_LED_VERSIONS = {HARDWARE_LED_VERSION, 'led162-usb163-shift20-da2de217fd'}
 HARDWARE_TICKET_LED_VERSION = 'led162-usb163-shift20-c5a4392f78'
+HARDWARE_CINEMA_LED_VERSION = 'led162-usb163-shift20-ca3ff6b9c6'
 
 HARDWARE_FIELDS = {
     'deviceId', 'bootId', 'sequence', 'observedAt', 'mappingVersion',
@@ -116,7 +117,7 @@ def validate_hardware_telemetry(data, floorplan, device_id, now=None):
     compatible_mapping = isinstance(data['ledMappingVersion'], str) and ((data['graphMappingVersion'] == HARDWARE_GRAPH_VERSION and
                            data['ledMappingVersion'] in HARDWARE_LED_VERSIONS) or
                           (data['graphMappingVersion'] == HARDWARE_TICKET_GRAPH_VERSION and
-                           data['ledMappingVersion'] == HARDWARE_TICKET_LED_VERSION))
+                           data['ledMappingVersion'] in (HARDWARE_TICKET_LED_VERSION, HARDWARE_CINEMA_LED_VERSION)))
     if data['mappingVersion'] != HARDWARE_SENSOR_VERSION or not compatible_mapping:
         raise ValueError('센서, 지도 또는 LED 매핑 버전이 서버와 다릅니다.')
     if (data['source'] != 'raspberry-pi' or type(data['physicalLedCount']) is not int

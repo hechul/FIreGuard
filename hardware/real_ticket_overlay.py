@@ -38,3 +38,34 @@ def enable_ticket_led_mapping(floor):
     if previous not in ('missing', 'S10'):
         raise ValueError('기존 매표소 LED 매핑과 충돌합니다')
     EDGE_SECTIONS['E38'] = 'S10'
+
+
+def cinema_five_layout(layout, floor):
+    """Prototype S15: physical LED 159 at corridor, 162 inside room 5.
+
+    The N1/N2 split shares LED 159 because no independent junction LED was
+    supplied. The physical positions remain subject to on-site verification.
+    """
+    from hardware.led_junctions import EDGE_SECTIONS, LABELS_1BASED
+    result = deepcopy(layout)
+    sections = result.get('sections', [])
+    if not sections or (sections[-1].get('id'), sections[-1].get('count')) != ('S15', 4):
+        raise ValueError('5관 LED 구간이 예상과 다릅니다')
+    if sum(s.get('count', 0) for s in sections) != 162:
+        raise ValueError('전체 LED 개수가 예상과 다릅니다')
+    edges = {e['id']: {e['from'], e['to']} for e in floor.get('edges', [])}
+    if edges.get('E33') != {'N2', 'N1'} or edges.get('E25') != {'N1', 'N37'}:
+        raise ValueError('5관 간선이 예상과 다릅니다')
+    nodes = {n['id']: n for n in floor.get('nodes', [])}
+    if not {'N1', 'N2', 'N37'} <= nodes.keys():
+        raise ValueError('5관 노드가 없습니다')
+    if any(EDGE_SECTIONS.get(eid) not in (None, 'S15') for eid in ('E25', 'E33')):
+        raise ValueError('5관 LED 매핑이 기존 매핑과 충돌합니다')
+    sections[-1]['line'] = [[nodes['N2']['x'], nodes['N2']['y']],
+                            [nodes['N37']['x'], nodes['N37']['y']]]
+    sections[-1]['label'] = '5관 출입구 (현장 확인 필요)'
+    sections[-1]['physical_direction'] = '하→상'
+    EDGE_SECTIONS.update({'E33': 'S15', 'E25': 'S15'})
+    for node, led in (('N2', 159), ('N1', 159), ('N37', 162)):
+        LABELS_1BASED.setdefault(node, {})['S15'] = led
+    return result

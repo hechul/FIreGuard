@@ -9,6 +9,7 @@
     'led162-usb163-shift20-dfea4ba7d3',
     'led162-usb163-shift20-da2de217fd',
     'led162-usb163-shift20-c5a4392f78',
+    'led162-usb163-shift20-ca3ff6b9c6',
   ]);
   // Same S1-S15 counts and DIN-to-DOUT directions as Pi led_routes.py.
   const specs = [
@@ -76,7 +77,12 @@
         !knownVersions.has(h.ledMappingVersion) || !validIndices(h.ledLogicalIndices) ||
         !validIndices(h.fireLedLogicalIndices) || !consistent(h.ledLogicalIndices, h.ledIndices) ||
         !consistent(h.fireLedLogicalIndices, h.fireLedIndices)) return null;
-    const coords = coordinates(sections);
+    // The new Pi S15 mapping locates LEDs 159–162 at the room 5 branch;
+    // retain the old drawing for earlier devices and historical reports.
+    const mappedSections = h.ledMappingVersion === 'led162-usb163-shift20-ca3ff6b9c6'
+      ? sections?.map(s => s.id === 'S15' ? {...s, line:[[240,263.5],[240,145]]} : s)
+      : sections;
+    const coords = coordinates(mappedSections);
     if (!coords) return null;
     const fires = new Set(h.fireLedLogicalIndices), seen = new Set([...h.ledLogicalIndices, ...fires]);
     return {

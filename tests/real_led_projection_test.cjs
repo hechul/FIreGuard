@@ -13,6 +13,10 @@ const h = {operationMode:'real', ledStatus:'active', ledCommandAck:true,
  fireLedLogicalIndices:[61,80], fireLedIndices:[62,81]};
 const cloud = {enabled:true,hasTelemetry:true,stale:false,routeSource:'pi',hardware:h};
 const result = project(cloud,sections);
+const room5 = project({...cloud, hardware:{...h, ledMappingVersion:'led162-usb163-shift20-ca3ff6b9c6',
+ ledLogicalIndices:[158,161],ledIndices:[159,162],fireLedLogicalIndices:[],fireLedIndices:[]}}, sections);
+assert.equal(room5.points[0].x,240);
+assert(room5.points[0].y > room5.points[1].y, '159 is corridor side, 162 inside room 5');
 const liveState = {cloud, connections:{pi:true,server:true}, flameSensors:{'FLM-01':{active:true,connected:true}}, sensorCounts:{offline:0}, equipment:[{id:'FLM-01',status:'danger'}]};
 const unavailable = markConnectionUnknown(liveState);
 assert.equal(unavailable.cloud.stale,true);
