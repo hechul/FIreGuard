@@ -209,9 +209,9 @@ def prepare_guide_commands(plan, translate):
     if any(type(i) is not int or not 0 <= i <= 162 for i in wires):
         raise ValueError('GUIDE 화재 슬롯 오류')
     commands += ['FIRE ' + ' '.join(map(str, wires[i:i+12])) for i in range(0, len(wires), 12)]
-    # Dim green base with an equally low-channel blue moving head.
+    # Dim green base with a stronger blue moving head (12/255).
     # The existing GUIDE firmware accepts both RGB colors independently.
-    commands.append('GUIDE 200 0 6 0 0 0 6')
+    commands.append('GUIDE 200 0 6 0 0 0 12')
     if any(len(c.encode('ascii')) > 94 for c in commands):
         raise ValueError('GUIDE 시리얼 명령 길이 초과')
     return commands

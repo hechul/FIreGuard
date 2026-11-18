@@ -117,7 +117,7 @@ class CompactMappingTest(unittest.TestCase):
                             self.assertFalse(set(route['routeNodes']) & {sensors[sid] for sid in fires})
                             self.assertEqual(len(route['routeNodes']), len(set(route['routeNodes'])))
                         commands = serialize(result, logical_to_wire)
-                        self.assertEqual(commands[-1], 'GUIDE 200 0 6 0 0 0 6')
+                        self.assertEqual(commands[-1], 'GUIDE 200 0 6 0 0 0 12')
                         if 'N37' in result['routesByStart']:
                             self.assertTrue(set(range(158,162)) <= green,
                                             'Room 5 guidance must include corridor LED 159')

@@ -39,4 +39,4 @@ class GuideSerializationPortableTest(unittest.TestCase):
         self.assertIn('SEG 162 161 160 159',commands)
         self.assertNotIn('SEG 159',commands, 'Shared junction must not be a stationary blue head')
         self.assertIn('FIRE 111',commands)
-        self.assertEqual(commands[-1], 'GUIDE 200 0 6 0 0 0 6')
+        self.assertEqual(commands[-1], 'GUIDE 200 0 6 0 0 0 12')
