@@ -151,7 +151,7 @@ def prepare_guide_commands(plan, translate):
         raise ValueError('GUIDE 경로/화재 LED 충돌')
     segments = []
     directed_pairs = set()
-    guide_edges = plan['directedEdges'] + plan.get('coverageEdges', [])
+    guide_edges = plan['directedEdges'] + plan.get('coverageEdges', []) + plan.get('partialEdges', [])
     for edge in guide_edges:
         if not isinstance(edge, dict) or not isinstance(edge.get('ledLogicalIndices'), list):
             raise ValueError('GUIDE 간선 LED 오류')

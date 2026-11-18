@@ -45,10 +45,10 @@ ALL_ZONE_FIELDS = {'routingMode', 'routeStatus', 'availableExits', 'guidedNodes'
                    'unreachableNodes', 'directedEdges', 'ledExcludedEdges'}
 
 
-def validate_all_zone(value, graph, blocked_nodes, blocked_edges):
+def validate_all_zone(value, graph, blocked_nodes, blocked_edges, fire_leds=None):
     """Validate a Pi-calculated directed evacuation forest, not LED output."""
     if (not isinstance(value, dict) or not ALL_ZONE_FIELDS <= set(value)
-            or set(value) - ALL_ZONE_FIELDS - {'fallbackDestinations', 'coverageEdges'}):
+            or set(value) - ALL_ZONE_FIELDS - {'fallbackDestinations', 'coverageEdges', 'partialEdges'}):
         raise ValueError('전체 구역 경로 보고 형식이 잘못되었습니다.')
     if value['routingMode'] != 'all_zones_to_exits':
         raise ValueError('전체 구역 경로 모드가 잘못되었습니다.')
@@ -105,7 +105,7 @@ def validate_all_zone(value, graph, blocked_nodes, blocked_edges):
         if current != exit_id:
             raise ValueError('전체 구역 목적지가 일치하지 않습니다.')
     coverage = value.get('coverageEdges', [])
-    if not isinstance(coverage, list) or len(coverage) > 2:
+    if not isinstance(coverage, list) or len(coverage) > 3:
         raise ValueError('추가 구간 안내 형식이 잘못되었습니다.')
     outgoing = {src: [dst] for src, (dst, _) in successor.items()}
     for item in coverage:
@@ -115,10 +115,10 @@ def validate_all_zone(value, graph, blocked_nodes, blocked_edges):
         if not all(isinstance(x, str) for x in (eid, src, dst, dest)):
             raise ValueError('추가 구간 안내 식별자 오류')
         edge = graph.edges.get(eid)
-        if (eid not in {'E01', 'E02'} or not edge or eid in used_edges
-                or eid in blocked_edges | excluded or src not in guided or dst not in guided
+        if (eid not in {'E01', 'E02', 'E09'} or not edge or eid in used_edges
+                or eid in blocked_edges | excluded or src not in guided or dst not in guided | exits
                 or {edge['from'], edge['to']} != {src, dst}
-                or dest not in exits or successor[dst][1] != dest):
+                or dest not in exits or (dst if dst in exits else successor[dst][1]) != dest):
             raise ValueError('추가 구간 안내 연결이 잘못되었습니다.')
         outgoing[src].append(dst)
         used_edges.add(eid)
@@ -137,6 +137,31 @@ def validate_all_zone(value, graph, blocked_nodes, blocked_edges):
         complete.add(node)
     for node in guided:
         visit(node)
+    partial = value.get('partialEdges', [])
+    if not isinstance(partial, list) or len(partial) > 1:
+        raise ValueError('부분 복도 안내 형식 오류')
+    for item in partial:
+        if not isinstance(item, dict) or set(item) != {'edgeId','towardNode','exitNode','ledLogicalIndices'}:
+            raise ValueError('부분 복도 안내 필드 오류')
+        eid, target, dest = (item[k] for k in ('edgeId','towardNode','exitNode'))
+        if not all(isinstance(x, str) for x in (eid,target,dest)):
+            raise ValueError('부분 복도 안내 식별자 오류')
+        edge = graph.edges.get(eid)
+        if (eid != 'E10' or not edge or {edge['from'],edge['to']} != {'N7','N3'}
+                or eid in blocked_edges or eid in used_edges or 'N7' not in blocked_nodes
+                or target != 'N3' or target not in guided or dest not in exits
+                or successor[target][1] != dest):
+            raise ValueError('부분 복도 안내 목적지 또는 차단 상태 오류')
+        if not isinstance(fire_leds,list) or any(type(i) is not int or not 0 <= i < 162 for i in fire_leds):
+            raise ValueError('부분 복도 화재 LED 정보 오류')
+        # Known S2 mapping: N7 is logical 7, N3 is logical 21. The only
+        # supported partial guidance is the full non-red suffix toward N3.
+        red_on_edge = [i for i in fire_leds if 7 <= i <= 21]
+        expected = list(range(max(red_on_edge)+1,22)) if red_on_edge else []
+        seq = item['ledLogicalIndices']
+        if (len(expected) < 2 or not isinstance(seq,list)
+                or any(type(i) is not int for i in seq) or seq != expected):
+            raise ValueError('부분 복도 안내가 화재 이후 연속 구간과 다릅니다.')
     return deepcopy(value)
 
 
@@ -185,7 +210,10 @@ def validate_hardware_telemetry(data, floorplan, device_id, now=None):
     if 'allZone' in data:
         if any(v['active'] and v['node'] not in data['blockedNodes'] for v in flame.values()):
             raise ValueError('마지막 화재 센서 노드가 차단 목록에 없습니다.')
-        validate_all_zone(data['allZone'], graph, data['blockedNodes'], data['blockedEdges'])
+        validate_all_zone(data['allZone'], graph, data['blockedNodes'], data['blockedEdges'],
+                          fire_leds=data.get('plannedFireLogicalIndices'))
+        if data['allZone'].get('partialEdges') and data['ledMappingVersion'] != HARDWARE_S2_LED_VERSION:
+            raise ValueError('부분 복도 안내는 S2 매핑 버전이 필요합니다.')
         if data['startNode'] is not None or data['routeStatus'] != 'no_route':
             raise ValueError('전체 구역 보고에는 단일 출발 경로를 포함할 수 없습니다.')
     status = data['ledStatus']
@@ -206,6 +234,9 @@ def validate_hardware_telemetry(data, floorplan, device_id, now=None):
                 or not isinstance(slots, list) or any(type(i) is not int for i in slots)
                 or slots != [i if i < 20 else i + 1 for i in values]):
             raise ValueError(f'{logical}와 {wire}의 LED 번호 변환이 잘못되었습니다.')
+    for partial in data.get('allZone', {}).get('partialEdges', []):
+        if not set(partial['ledLogicalIndices']) <= set(data['plannedLedLogicalIndices']):
+            raise ValueError('부분 복도 안내와 계획 LED가 일치하지 않습니다.')
     if (status != 'active' or not data['ledCommandAck']) and any(data[k] for k in ('ledIndices', 'ledLogicalIndices', 'fireLedIndices', 'fireLedLogicalIndices')):
         raise ValueError('확인되지 않은 LED 출력을 적용 완료로 보고할 수 없습니다.')
     route = None

@@ -65,6 +65,12 @@ const extended = {...whole,hardware:{...h,allZone:{...forest,coverageEdges:cover
 assert.deepEqual(allZoneSummary(extended).directedEdges,[...forest.directedEdges,...coverage]);
 assert.deepEqual(allZoneSummary({...extended,stale:true}).directedEdges,[]);
 assert.equal(allZoneSummary({...extended,hardware:{...h,allZone:{...forest,coverageEdges:'invalid'}}}),null);
+const partial = {...whole,hardware:{...h,allZone:{...forest,partialEdges:[{
+ edgeId:'E10',towardNode:'N3',exitNode:'EXIT_NW',ledLogicalIndices:Array.from({length:12},(_,i)=>i+10)}]}}};
+assert.equal(allZoneSummary(partial).partialGuidanceCount,1);
+assert.deepEqual(allZoneSummary(partial).directedEdges,forest.directedEdges,'no full E10 arrow across fire');
+assert.equal(allZoneSummary({...partial,stale:true}).partialGuidanceCount,0);
+assert.equal(allZoneSummary({...partial,hardware:{...h,allZone:{...forest,partialEdges:[{}]}}}),null);
 assert.equal(view.ledAcknowledged,true);
 assert.match(view.label,/계산 경로.*별도 확인/);
 assert.match(project(whole,sections).label,/전체 구역.*발광 미확인/);

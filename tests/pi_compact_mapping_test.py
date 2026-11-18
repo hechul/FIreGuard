@@ -60,13 +60,33 @@ class CompactMappingTest(unittest.TestCase):
             self.assertTrue({i-1 for i in requested} <= set(n4['ledLogicalIndices']))
             self.assertTrue({22,23,24,25,26,27,28,41,42,43} <= set(n4['ledWireIndices']),
                             'Existing west and south corridor guidance must remain lit')
-            self.assertEqual({e['edgeId'] for e in n4['coverageEdges']}, {'E01','E02'})
+            self.assertEqual({e['edgeId'] for e in n4['coverageEdges']}, {'E01','E02','E09'})
+            self.assertTrue({64,65} <= set(n4['ledLogicalIndices']))
+            self.assertTrue(set(range(128,140)) <= set(n4['ledLogicalIndices']), 'Popcorn exit path')
+            self.assertEqual(n4['routesByStart']['N19']['routeNodes'][:4], ['N19','N15','N27','N25'])
             s2 = next(e for e in n4['directedEdges'] if e['edgeId'] == 'E39')
             self.assertEqual(s2['ledLogicalIndices'], [7,6,5,4])
             self.assertEqual((s2['from'],s2['to']), ('N7','EXIT_S2'))
             both = plan(['FLM-04', 'FLM-09'])
             self.assertNotIn('N40', both['routesByStart'])
             self.assertFalse(set(range(119,123)) & set(both['ledLogicalIndices']))
+            two = plan(['FLM-07','FLM-09'])
+            self.assertEqual(set(two['fallbackDestinations']), {'N5','N6'})
+            self.assertEqual(two['routesByStart']['N28']['destinationNode'],'N5')
+            self.assertEqual(two['routesByStart']['N29']['destinationNode'],'N6')
+            self.assertTrue(set(range(70,78)) <= set(two['ledLogicalIndices']))
+            three = plan(['FLM-07','FLM-08','FLM-09'])
+            self.assertEqual(three['routesByStart']['N13']['routeNodes'],['N13','N35','N28','N5'])
+            self.assertEqual(zones['FLM-08'],set(range(56,61)), 'N8 route anchor 59, not coordinate pixel 54')
+            for result in (two,three):
+                self.assertIn(19,result['ledLogicalIndices'], 'Logical LED 20 can leave away from N7')
+                self.assertEqual(result['partialEdges'],[{'edgeId':'E10','towardNode':'N3',
+                    'exitNode':'EXIT_NW','ledLogicalIndices':list(range(10,22))}])
+                self.assertFalse({64,65} & set(result['ledLogicalIndices']), 'Do not guide through burning N7')
+            self.assertEqual(plan(['FLM-07','FLM-03'])['partialEdges'],[], 'No stub when far endpoint burns')
+            manual = calculate_all_zones({'flameSensors':{'FLM-07':{'active':True,'connected':True}},
+                                         'blockedEdges':['E10']},floor,layout,compact_fire=True)
+            self.assertEqual(manual['partialEdges'],[], 'Manual closure covers the entire corridor')
             tested = 0
             for count in range(1,12):
                 for fires in combinations(sensors, count):
@@ -87,6 +107,10 @@ class CompactMappingTest(unittest.TestCase):
                         self.assertEqual({i for seg in wire_segments for i in seg}, set(result['ledWireIndices']))
                         self.assertLessEqual(sum(map(len,wire_segments)),163)
                         self.assertLessEqual(len(wire_segments),40)
+                        for stub in result['partialEdges']:
+                            self.assertIn(stub['towardNode'],result['routesByStart'])
+                            self.assertEqual(result['routesByStart'][stub['towardNode']]['exitNode'],stub['exitNode'])
+                            self.assertFalse(red & set(stub['ledLogicalIndices']))
                         snapshot = {'operationMode': 'real', 'startNode': None, 'route': None,
                                     'flameSensors': {sid: {'active': sid in fires, 'connected': True,
                                                           'updatedAt': None} for sid in sensors},

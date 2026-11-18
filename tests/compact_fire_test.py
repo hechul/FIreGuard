@@ -6,6 +6,7 @@ from all_zone_fallback_test import load_module
 class CompactFireTest(unittest.TestCase):
     def setUp(self):
         self.m = load_module()
+        self.m.led_junctions.LABELS_1BASED = {'A': {'S1': 6}, 'B': {'S2': 15}}
         self.m.led_coordinates = lambda layout: [(i, 0, 'S1' if i < 10 else 'S2', i)
                                                   for i in range(20)]
         self.floor = {'nodes': [{'id': 'A', 'x': 5, 'y': 0},
@@ -21,7 +22,15 @@ class CompactFireTest(unittest.TestCase):
 
     def test_does_not_spill_into_unrelated_next_section(self):
         self.floor['nodes'][0]['x'] = 9
+        self.m.led_junctions.LABELS_1BASED['A'] = {'S1':10}
         self.assertEqual(self.m.compact_fire_leds('F1', self.floor, {}), {7, 8, 9})
+
+    def test_interpolated_route_anchor_replaces_independent_nearest_pixel(self):
+        self.m.led_junctions.LABELS_1BASED.pop('A')
+        self.floor['edges'] = [{'id':'E1','from':'A','to':'B'}]
+        self.m.EDGE_SECTIONS['E1'] = 'S1'
+        self.m.led_junctions.anchor_for_node = lambda *args: 7
+        self.assertEqual(self.m.compact_fire_leds('F1',self.floor,{}), {5,6,7,8,9})
 
     def test_invalid_manual_anchor_fails_closed(self):
         self.m.led_junctions.LABELS_1BASED = {'A': {'S1': 100}}

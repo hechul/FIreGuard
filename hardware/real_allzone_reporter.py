@@ -43,6 +43,11 @@ def make_payload(base, plan):
             payload['allZone']['coverageEdges'] = [
                 {k: edge[k] for k in ('edgeId', 'from', 'to', 'exitNode')}
                 for edge in plan['coverageEdges']]
+        if 'partialEdges' in plan:
+            payload['allZone']['partialEdges'] = [
+                {**{k: edge[k] for k in ('edgeId', 'towardNode', 'exitNode')},
+                 'ledLogicalIndices': list(edge['ledLogicalIndices'])}
+                for edge in plan['partialEdges']]
         payload.update(plannedLedLogicalIndices=list(plan['ledLogicalIndices']),
                        plannedLedIndices=list(plan['ledWireIndices']),
                        plannedFireLogicalIndices=list(plan['fireLedLogicalIndices']),

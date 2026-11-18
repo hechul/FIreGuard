@@ -54,9 +54,13 @@
     const identifiers = values => Array.isArray(values) && values.every(x => typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x)) && new Set(values).size === values.length;
     const fallbackDestinations = plan.fallbackDestinations ?? [];
     const coverageEdges = plan.coverageEdges ?? [];
+    const partialEdges = plan.partialEdges ?? [];
     if (!identifiers(plan.availableExits) || !identifiers(fallbackDestinations) || !identifiers(plan.guidedNodes) ||
         !identifiers(plan.unreachableNodes) || !identifiers(plan.ledExcludedEdges) ||
-        !Array.isArray(plan.directedEdges) || !Array.isArray(coverageEdges) || coverageEdges.length > 2 ||
+        !Array.isArray(plan.directedEdges) || !Array.isArray(coverageEdges) || coverageEdges.length > 3 ||
+        !Array.isArray(partialEdges) || partialEdges.length > 1 || partialEdges.some(e => !e ||
+          e.edgeId !== 'E10' || e.towardNode !== 'N3' || !identifiers([e.exitNode]) ||
+          !validIndices(e.ledLogicalIndices) || e.ledLogicalIndices.length < 2) ||
         [...plan.directedEdges, ...coverageEdges].some(e => !e ||
           ![e.edgeId, e.from, e.to, e.exitNode].every(x => typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x)) || e.from === e.to)) return null;
     const stale = cloud.stale !== false;
@@ -64,11 +68,15 @@
     const statuses = {ok:'전체 구역 경로 계산', partial:'일부 구역 경로 없음', no_route:'전체 구역 경로 없음'};
     return {
       stale, unverified, status: stale ? '전체 구역 마지막 보고 · 현재 미확인' : unverified ? 'Pi 전체 경로 확인 필요' : statuses[plan.routeStatus],
-      label: stale ? '마지막 Pi 보고 · 현재 상태 미확인' : unverified ? 'Pi 경로와 센서 상태를 확인해 주세요' : 'Pi 계산 경로 · LED 적용 및 실제 발광은 별도 확인',
+      label: stale ? '마지막 Pi 보고 · 현재 상태 미확인' : unverified ? 'Pi 경로와 센서 상태를 확인해 주세요' :
+        'Pi 계산 경로 · LED 적용 및 실제 발광은 별도 확인' + (partialEdges.length ? ' · 복도 일부 안내 포함' : ''),
       routeStatus: plan.routeStatus,
       guidedCount: plan.guidedNodes.length, unreachableCount: plan.unreachableNodes.length,
       availableExits: [...plan.availableExits],
       fallbackDestinations: [...fallbackDestinations],
+      // Partial corridor output is shown by acknowledged LED dots only;
+      // never draw the whole E10 graph edge through the burning N7 endpoint.
+      partialGuidanceCount: stale || unverified ? 0 : partialEdges.length,
       directedEdges: stale || unverified ? [] : [...plan.directedEdges, ...coverageEdges].map(({edgeId,from,to,exitNode}) => ({edgeId,from,to,exitNode})),
       ledAcknowledged: !stale && !unverified && h.ledStatus === 'active' && h.ledCommandAck === true,
     };

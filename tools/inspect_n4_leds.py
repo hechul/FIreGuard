@@ -12,6 +12,8 @@ from pathlib import Path
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--pi-project', required=True)
+    parser.add_argument('--fires', nargs='+', default=['FLM-04'],
+                        choices=[f'FLM-{i:02}' for i in range(1,12)])
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     project = Path(args.pi_project).resolve()
@@ -33,14 +35,15 @@ def main():
     floor = prototype_floorplan(floor)
     enable_prototype_led_mapping(floor)
     layout = cinema_five_layout(layout, floor)
-    snapshot = {'flameSensors': {'FLM-04': {'active': True, 'connected': True}}}
+    snapshot = {'flameSensors': {sid: {'active': True, 'connected': True} for sid in args.fires}}
     for compact in (False, True):
         plan = calculate_all_zones(snapshot, floor, layout, compact_fire=compact)
         red, green = set(plan['fireLedLogicalIndices']), set(plan['ledLogicalIndices'])
-        report = {'compactFire': compact, 'redLogical1Based': sorted(i+1 for i in red),
+        report = {'activeSensors': args.fires, 'compactFire': compact, 'redLogical1Based': sorted(i+1 for i in red),
                   'redWireSlots': plan['fireLedWireIndices'], 'routes': plan['routesByStart'],
-                  'ledExcludedEdges': plan['ledExcludedEdges'], 'requestedLogical1Based': []}
-        for label in [*range(39,41), *range(5,8), *range(30,37), 20, *range(120,124)]:
+                  'ledExcludedEdges': plan['ledExcludedEdges'], 'partialEdges': plan.get('partialEdges', []),
+                  'requestedLogical1Based': []}
+        for label in [*range(39,41), *range(5,8), *range(30,37), 20,65,66, *range(71,79), *range(120,124), *range(129,141)]:
             idx = label-1
             edges = [e['id'] for e in floor['edges'] if idx in _edge_leds(e, floor, layout)]
             report['requestedLogical1Based'].append({
@@ -49,7 +52,7 @@ def main():
                 'mappedEdges': edges,
                 'sections': sorted({EDGE_SECTIONS[e] for e in edges if EDGE_SECTIONS[e]}),
                 'excludedEdges': sorted(set(edges) & set(plan['ledExcludedEdges'])),
-                'selectedDirections': [e for e in plan['directedEdges'] + plan.get('coverageEdges', [])
+                'selectedDirections': [e for e in plan['directedEdges'] + plan.get('coverageEdges', []) + plan.get('partialEdges', [])
                                        if idx in e['ledLogicalIndices']]})
         print(json.dumps(report, ensure_ascii=False, indent=2))
 
