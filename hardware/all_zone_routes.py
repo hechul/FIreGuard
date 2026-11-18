@@ -61,10 +61,37 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
         if eid not in edges or not isinstance(weight, (int,float)) or not math.isfinite(weight) or weight <= 0:
             raise ValueError(f'잘못된 간선 가중치: {eid}')
 
-    red, _ = fire_led_indices(snapshot, floor, layout)
+    # The team confirmed the N14–N9 corridor is usable for an N4-only
+    # prototype fire. The legacy coordinate estimate extends FLM-04 red one
+    # pixel into that corridor (logical 106); do not let that extrapolation
+    # close the entire corridor. Other active sensors keep their own full red
+    # zones and clearance, even when FLM-04 is active at the same time.
+    # This is an installation-specific prototype assumption, not a real-life
+    # assessment of smoke, fire spread or corridor safety.
+    active_sensors = set(_active_sensors(snapshot))
+    red_by_sensor = {}
+    for sensor_id in active_sensors:
+        single = dict(snapshot)
+        single['flameSensors'] = {sensor_id: (snapshot.get('flameSensors') or {}).get(
+            sensor_id, {'active': True, 'connected': True})}
+        red_by_sensor[sensor_id], _ = fire_led_indices(single, floor, layout)
+    if 'FLM-04' in red_by_sensor:
+        corridor = edges.get('E18')
+        if (not corridor or {corridor['from'], corridor['to']} != {'N14', 'N9'}
+                or 106 not in _edge_leds(corridor, floor, layout)):
+            raise ValueError('N4 인접 통로 매핑이 예상과 다름: LED 출력 취소')
+        red_by_sensor['FLM-04'].discard(106)
+    red = set().union(*red_by_sensor.values()) if red_by_sensor else set()
     pixels = led_coordinates(layout)
     led_by_idx = {item[3]: item for item in pixels}
-    red_pixels = [led_by_idx[i] for i in red]
+    sensor_red_pixels = {sid: [led_by_idx[i] for i in indices]
+                         for sid, indices in red_by_sensor.items()}
+    def hazardous(eid, idx):
+        if idx in red:
+            return True
+        return any(_near_hazard_green(led_by_idx[idx], sensor_pixels)
+                   for sid, sensor_pixels in sensor_red_pixels.items()
+                   if not (sid == 'FLM-04' and eid == 'E18'))
     # All graph edges used for guidance must have *real* mapped LED locations.
     edge_pixels = {}
     visual_blocked = set()
@@ -74,8 +101,7 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
         edge_pixels[eid] = index_list
         if not index_list:
             unmapped.add(eid)
-        elif red and any(i in red or _near_hazard_green(led_by_idx[i], red_pixels)
-                             for i in index_list):
+        elif any(hazardous(eid, i) for i in index_list):
             visual_blocked.add(eid)
     # No green route should be published through red, a nearby hazardous LED,
     # or a corridor whose physical LED location cannot be represented.
@@ -173,7 +199,7 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
             raise ValueError('경로 간선 LED 매핑 불가')
         weight = float(overrides.get(eid, edges[eid]['weight']))
         for j, idx in enumerate(indices):
-            if idx in red or (red and _near_hazard_green(led_by_idx[idx], red_pixels)):
+            if hazardous(eid, idx):
                 raise ValueError(f'위험구역 경유 LED {idx}: 안전 경로 계산 실패')
             # High distance from exit = earlier in a global UNO FLOW sequence.
             # Prefer larger distance for shared junction pixels.
