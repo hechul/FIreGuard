@@ -181,7 +181,9 @@ def prepare_guide_commands(plan, translate):
     if any(type(i) is not int or not 0 <= i <= 162 for i in wires):
         raise ValueError('GUIDE 화재 슬롯 오류')
     commands += ['FIRE ' + ' '.join(map(str, wires[i:i+12])) for i in range(0, len(wires), 12)]
-    commands.append('GUIDE 200 0 2 0 0 16 0')
+    # Base green 6/255 remains below the Uno firmware's 12/255 channel cap,
+    # but is easier to distinguish from an unlit LED on the model.
+    commands.append('GUIDE 200 0 6 0 0 16 0')
     if any(len(c.encode('ascii')) > 94 for c in commands):
         raise ValueError('GUIDE 시리얼 명령 길이 초과')
     return commands
@@ -203,6 +205,7 @@ class RealLedController:
         self.last_ping = 0.0
         self.last_all_zone = None
         self.plan_key = None
+        self.last_logged_error = None
 
     @staticmethod
     def _result(status, *, ack=False, path=(), red=(), error=None):
@@ -294,6 +297,14 @@ class RealLedController:
                 # Report wire slots only after the Uno's FLOW OK response.
                 self.output = self._result('active', ack=True,
                     path=[self.translate(i) for i in path], red=[self.translate(i) for i in red])
+                # Acknowledged serial commands do not prove optical output.
+                # Log only when the plan changes, so the installed model can
+                # be compared with what was actually requested of the Uno.
+                print('[REAL LED] Arduino 명령 응답 OK; 실제 발광 확인 아님; '
+                      f"mode={'GUIDE' if self.guide else 'FLOW'} "
+                      f"green_slots={self.output['commanded_path']} "
+                      f"red_slots={self.output['commanded_fire']}", flush=True)
+                self.last_logged_error = None
                 self.last_ping = self.clock()
             elif self.clock() - self.last_ping >= 1.0:
                 self.uno.command('PING')
@@ -301,6 +312,9 @@ class RealLedController:
         except Exception as error:
             prefix = 'GUIDE 명령 실패: 펌웨어 지원 및 LED 계획 확인' if self.guide else 'LED 명령 실패'
             self.output = self._stop(f'{prefix}: {type(error).__name__}')
+            if self.output['led_error'] != self.last_logged_error:
+                print(f'[REAL LED] {self.output["led_error"]}', flush=True)
+                self.last_logged_error = self.output['led_error']
         return deepcopy(self.output)
 
     def unavailable(self):
