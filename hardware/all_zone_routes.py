@@ -171,7 +171,12 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
     # intended available exit without returning through the source node.
     for source, target, edge_id, desired_exit in (
         ('N3', 'N7', 'E10', 'EXIT_W'),
+        # Keep the western vertical corridor continuous toward N7 when its
+        # entire downstream route is available and avoids the hazard.
+        ('N23', 'N3', 'E31', 'EXIT_W'),
         ('N31', 'N38', 'E13', 'EXIT_S'),
+        # Join the east corridor to the already available south exit route.
+        ('N33', 'N31', 'E04', 'EXIT_S'),
         # Keep the N29–N8 corridor lit toward the west exit when that whole
         # route is available; never use the preference across a blocked edge.
         ('N29', 'N8', 'E29', 'EXIT_W'),
@@ -213,7 +218,6 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
     route_by_start = {}
     directed_edges = []
     led_distance = {}
-    led_directions = defaultdict(set)
     for node in reachable:
         chain = [node]
         used = set()
@@ -249,29 +253,25 @@ def calculate_all_zones(snapshot: dict, floor: dict, layout: dict, *,
             # Prefer larger distance for shared junction pixels.
             location_cost = distances[nxt] + weight*(1 - (j + 0.5)/len(indices))
             led_distance[idx] = max(led_distance.get(idx, float('-inf')), location_cost)
-            led_directions[idx].add((node,nxt))
         directed_edges.append({'edgeId':eid, 'from':node,'to':nxt,
                                'exitNode':exit_for[node], 'ledLogicalIndices':indices})
 
-    # A logical LED must not carry opposite directions at the same time.
-    # Shared junction anchor pixels are fine when the directions agree.
-    opposing = []
-    for idx, references in led_directions.items():
-        signs = set()
-        for src, dst in references:
-            edge = next(e for e in directed_edges if e['from'] == src and e['to'] == dst)
-            sequence = edge['ledLogicalIndices']
-            if len(sequence) >= 2:
-                signs.add(1 if sequence[-1] > sequence[0] else -1)
-        if len(signs) > 1:
-            opposing.append(idx)
+    # Two paths may converge on a single shared junction LED from either
+    # numerical direction. Only reverse traversal of the same LED pair is a
+    # genuine physical direction conflict (also enforced by GUIDE preflight).
+    pairs = defaultdict(set)
+    for edge in directed_edges:
+        seq = edge['ledLogicalIndices']
+        for a, b in zip(seq, seq[1:]):
+            if a != b:
+                pairs[(a, b)].add(edge['edgeId'])
+    opposing = {(a, b) for a, b in pairs if (b, a) in pairs}
     if opposing:
         # Do not publish ambiguous directions. Removing every participating edge
         # also cuts branches that could still guide people after just one edge
         # is rerouted. Remove the least-used edge, then recalculate the entire
         # forest and check for conflicts again.
-        conflicting_edges = {e['edgeId'] for e in directed_edges
-                             if set(e['ledLogicalIndices']) & set(opposing)}
+        conflicting_edges = set().union(*(pairs[pair] for pair in opposing))
         newly_forbidden = conflicting_edges - set(_extra_blocked_edges)
         if not newly_forbidden:
             raise ValueError(f'해소 불가능한 역방향 LED 충돌: {sorted(opposing)}')

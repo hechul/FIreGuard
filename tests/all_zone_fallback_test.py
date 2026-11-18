@@ -69,8 +69,15 @@ class FallbackRouteTest(unittest.TestCase):
                         self.assertNotIn(route['destinationNode'], result['unreachableNodes'])
                         self.assertFalse(set(blocked) & {e['edgeId'] for e in result['directedEdges']})
 
-    def test_direction_conflict_recalculates_and_never_reuses_excluded_edge(self):
+    def test_junction_convergence_preserves_both_edges(self):
         mapping={'E1':[1,2], 'E2':[2,3], 'E3':[3,2]}
+        self.module._edge_leds=lambda edge, floor, layout: mapping[edge['id']]
+        result=self.plan(['E2'])
+        self.assertEqual(result['directionConflictExcludedEdges'], [])
+        self.assertEqual({edge['edgeId'] for edge in result['directedEdges']}, {'E1','E3'})
+
+    def test_direction_conflict_recalculates_and_never_reuses_excluded_edge(self):
+        mapping={'E1':[2,3], 'E2':[1,2], 'E3':[3,2]}
         self.module._edge_leds=lambda edge, floor, layout: mapping[edge['id']]
         result=self.plan(['E2'])
         excluded=set(result['directionConflictExcludedEdges'])
