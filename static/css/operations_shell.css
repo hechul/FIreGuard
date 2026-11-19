@@ -1,0 +1,97 @@
+/* Shared operator shell; page content and the public QR view have their own styles. */
+:root {
+  --board-base: #0c1925;
+  --board-panel: #142838;
+  --board-raised: #1c3243;
+  --board-rule: #324a5b;
+  --board-text: #e1edf5;
+  --board-soft: #aec1d0;
+  --board-accent: #81cfed;
+}
+body:has(.app-shell), .app-shell {
+  background: var(--board-base);
+}
+.app-shell .main-area {
+  min-height: 100vh;
+  min-width: 0;
+  background: radial-gradient(ellipse at 50% 22%, #172f45, #0a1724 70%);
+  color: var(--board-text);
+}
+body:has(:is(#overview,.page).active) .sidebar {
+  background: #0a1721;
+  color: var(--board-text);
+  border-color: #273d4c;
+  scrollbar-color: #345166 #0a1721;
+}
+.app-shell .brand-mark {
+  background: #18364b;
+  border: 1px solid #46728b;
+  box-shadow: none;
+}
+.app-shell .brand-mark::before { color: #b4e5f4; }
+.app-shell .brand-copy strong { color: var(--board-text); letter-spacing: .035em; }
+.app-shell .brand-copy span, .app-shell .sidebar-footer strong { color: var(--board-soft); }
+.app-shell .sidebar-footer { border-color: var(--board-rule); }
+.app-shell .sidebar-footer span { color: #8ba2b5; }
+.app-shell .sidebar-toggle, .app-shell .sidebar-mobile-toggle {
+  color: var(--board-soft); background: #142a3a; border: 1px solid #304a5c;
+}
+.app-shell .sidebar-group-toggle { color: #94afc3; }
+.app-shell .sidebar-group-toggle:hover, .app-shell .sidebar-toggle:hover,
+.app-shell .sidebar-mobile-toggle:hover { background: #21394b; color: #d5edfc; }
+.app-shell .nav-item {
+  color: #c7d6e2;
+  border: 0;
+  border-radius: 5px;
+  min-height: 50px;
+}
+.app-shell .nav-item small { color: #9bb1c0; }
+.app-shell .nav-item:hover { background: #142a39; color: #fff; }
+body:has(:is(#overview,.page).active) .sidebar .nav-item.active {
+  color: #eaf8ff;
+  background: linear-gradient(90deg, #24475d, #152e40);
+  box-shadow: inset 3px 0 #81cfed;
+}
+.app-shell .nav-item.active .nav-icon { color: #99dcf8; }
+body:has(:is(#overview,.page).active) .topbar {
+  background: transparent;
+  border-color: var(--board-rule);
+  color: var(--board-text);
+  box-shadow: none;
+  padding-block: 16px;
+}
+.app-shell .topbar h1 { background: none; color: #f1f7fc; -webkit-text-fill-color: currentColor; }
+.app-shell .topbar .eyebrow { color: var(--board-accent); }
+body:has(:is(#overview,.page).active) .connection-chip {
+  padding: 4px 3px;
+  min-height: 26px;
+  border: 0; border-radius: 0; background: transparent; box-shadow: none;
+}
+.app-shell .connection-chip b { color: var(--board-text); }
+.app-shell .connection-chip em { color: #79dfba; }
+.app-shell .connection-chip.off em { color: #ff9c9e; }
+.app-shell .connection-chip.warning em { color: #f6c67d; }
+.app-shell .connection-chip:not(.off):not(.warning) .status-dot { background: #67d3b0; }
+.app-shell .mode-toggle {
+  background: #0e1d2a; border-color: var(--board-rule); border-radius: 6px;
+}
+.app-shell .mode-toggle button { color: var(--board-soft); border-radius: 4px; }
+.app-shell .mode-toggle button.active { color: #fff; background: #285672; box-shadow: none; }
+.app-shell .real-fire-switch {
+  color: var(--board-soft); background: #182c3a; border-color: var(--board-rule); border-radius: 6px;
+}
+.app-shell .real-fire-switch:disabled { opacity: 1; }
+.app-shell .real-fire-switch.fire-detected { background: #a62d3e; color: white; border-color: #ee8391; }
+.app-shell #realFireClearBtn { background: #37232c; color: #ffc1c5; border: 1px solid #98515d; }
+body:has(:is(#overview,.page).active) .clock-block {
+  background: transparent; border: 0; border-inline-start: 1px solid var(--board-rule);
+  border-radius: 0; padding-inline-start: 12px;
+}
+.app-shell .clock-block strong { color: var(--board-text); font-variant-numeric: tabular-nums; }
+.app-shell .clock-block span { color: var(--board-soft); }
+@media (max-width: 760px) {
+  .app-shell .topbar { gap: 10px; }
+  .app-shell .topbar-right { gap: 4px 12px; }
+  .app-shell .mode-controls { flex-basis: 100%; padding-block-start: 4px; }
+  .app-shell .sidebar-backdrop { background: #020a13a8; }
+}

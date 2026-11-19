@@ -1,0 +1,24 @@
+:root {
+  color-scheme: dark;
+  font-family: "Pretendard Variable", "Apple SD Gothic Neo", system-ui, sans-serif;
+  background: #0c1925;
+  color: #e1edf5;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+.wrap { max-width: 32rem; margin: auto; padding: 24px 20px 40px; }
+.brand { color: #81cfed; font-weight: 800; letter-spacing: .11em; font-size: .85rem; }
+.card { margin-top: 18px; padding: 26px 0 0; border-top: 1px solid #324a5b; }
+.tag, .muted, .footer, .status span { color: #aec1d0; }
+.tag { font-weight: 600; font-size: .8rem; }
+.loc { font-weight: 800; font-size: 2.6rem; letter-spacing: -.04em; }
+.muted, .footer, .status span { font-size: .85rem; line-height: 1.65; }
+.status { --signal: #aec1d0; padding: 14px 16px; margin-top: 26px; border-inline-start: 3px solid var(--signal); background: #142838; }
+.status strong, .status span { display: block; }
+.status strong { color: var(--signal); font-size: 1.15rem; }
+.status[data-tone="normal"] { --signal: #87dcbd; }
+.status[data-tone="warning"] { --signal: #f2c788; }
+.status[data-tone="danger"] { --signal: #ff969c; }
+.exit { margin-top: 24px; color: #c2eaff; font-size: 1.9rem; font-weight: 800; }
+.route { line-height: 1.75; margin-top: 8px; overflow-wrap: anywhere; }
+.footer { border-top: 1px solid #324a5b; margin-top: 26px; padding-top: 14px; }

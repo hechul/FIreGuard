@@ -158,3 +158,37 @@ body { font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Apple SD G
   .mode-controls { flex-wrap:wrap; max-width:100%; }
   .real-fire-switch { white-space:normal; max-width:100%; }
 }
+
+/* Operations cards: preserve the severity classes supplied by the live feed. */
+.dashboard-side :is(.status-card,.sensor-card,.log-mini-card) .panel-heading h2 {
+  font-size: clamp(17px, 1.25vw, 20px);
+  letter-spacing: -.035em;
+}
+.status-card .response-item {
+  min-width: 0;
+  background: linear-gradient(125deg,#f0f4fa,#f8f9fb);
+  border-color: #e7ecf2;
+}
+.status-card .response-item strong { font-size: 21px; line-height: 1.3; overflow-wrap: anywhere; }
+.status-card .response-item small { font-size: 11px; line-height: 1.55; max-height: none; color: #556475; }
+.sensor-card .sensor-metric:not(.has-danger):not(.has-warning) { background: #f2f5f8; }
+.sensor-card .sensor-metric strong { font-variant-numeric: tabular-nums; }
+.sensor-card .sensor-row { padding: 8px 3px; gap: 8px; font-size: 11px; line-height: 1.45; }
+.log-mini-card .mini-event-list { gap: 0; }
+.log-mini-card .mini-event {
+  position: relative;
+  grid-template-columns: 9px minmax(0,1fr);
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: #526073;
+  overflow-wrap: anywhere;
+}
+.log-mini-card .mini-event strong { color: #253449; font-variant-numeric: tabular-nums; }
+.log-mini-card .mini-event i { margin-top: 5px; }
+.log-mini-card .mini-event:not(:last-child)::after {
+  content: ""; position: absolute; left: 3px; top: 25px; bottom: -11px;
+  width: 1px; background: #dde3ea; pointer-events: none;
+}

@@ -1,0 +1,192 @@
+/* Operations overview: side rails flank the floor plan on a wall display. */
+body:has(#overview.active) .main-area {
+  background: radial-gradient(ellipse at 50% 22%, #172f45, #0a1724 70%);
+  color: #e5f0f8;
+  min-height: 100vh;
+}
+body:has(#overview.active) .topbar { border-color: #344a5e; }
+body:has(#overview.active) .topbar h1 { color: #f3f9ff; -webkit-text-fill-color: currentColor; background: none; }
+body:has(#overview.active) .topbar .eyebrow { color: #82bdda; }
+#overview { --console-surface: #122638; --console-line: #30485b; --console-ink: #e2eff8; --console-muted: #afc4d4; }
+#overview .panel { background: transparent; border: 0; border-radius: 0; box-shadow: none; min-width: 0; }
+#overview .panel-heading { padding-bottom: 12px; border-bottom: 1px solid var(--console-line); }
+#overview .panel-heading h2 { color: var(--console-ink); }
+#overview .panel-kicker { color: #7dc9e7; letter-spacing: .13em; }
+#overview .panel .legend { color: var(--console-muted); }
+#overview .map-summary-row > div, #overview .response-item, #overview .sensor-metric {
+  background: transparent; border: 0; border-radius: 0; padding: 8px 0;
+}
+#overview .response-item strong, #overview .map-summary-row strong, #overview .sensor-metric strong,
+#overview .log-mini-card .mini-event strong { color: var(--console-ink); }
+#overview .response-item small, #overview .response-item span, #overview .map-summary-row span,
+#overview .sensor-metric span, #overview .sensor-row, #overview .mini-event, #overview .qr-mini-body p {
+  color: var(--console-muted); border-color: var(--console-line);
+}
+#overview .sensor-metric.has-danger { border-inline-start: 3px solid #ef757e; padding-inline-start: 8px; background: linear-gradient(90deg,#402530,transparent); }
+#overview .sensor-metric.has-warning { border-inline-start: 3px solid #d8a45e; padding-inline-start: 8px; background: linear-gradient(90deg,#3a3027,transparent); }
+#overview .text-btn, #overview .qr-mini-body a, #overview .map-panel .btn.ghost { color: #8fd6fc; }
+#overview .map-panel .btn.ghost { background: #193248; border-color: #46657a; }
+#overview .system-banner { border-radius: 8px; color: #172a34; }
+#overview .scenario-lab, #overview .scenario-featured, #overview .scenario-explanation { color: #23374c; }
+#overview .scenario-featured button { color: #23374c; }
+#overview .mini-event-list { align-content: start; }
+#overview .log-mini-card .mini-event:not(:last-child)::after { background: var(--console-line); }
+@media (min-width: 1440px) {
+  #overview .dashboard-grid {
+    display: grid; grid-template-columns: minmax(185px,.78fr) minmax(450px,2.45fr) minmax(235px,1fr);
+    grid-template-areas: "status map events" "sensors map events" "qr map events" ". map events" "scenario scenario scenario";
+    grid-template-rows: auto auto auto 1fr auto; gap: 12px; align-items: start;
+  }
+  #overview .dashboard-side, #overview .lower-side-grid { display: contents; }
+  #overview .map-panel { grid-area: map; }
+  #overview .status-card { grid-area: status; }
+  #overview .sensor-card { grid-area: sensors; }
+  #overview .log-mini-card { grid-area: events; }
+  #overview .qr-mini-card { grid-area: qr; }
+  #overview .scenario-card { grid-area: scenario; }
+  #overview .response-grid { grid-template-columns: 1fr; }
+  #overview .panel { padding: 15px; }
+}
+@media (max-width: 760px) {
+  #overview .dashboard-grid { grid-template-columns: minmax(0,1fr); gap: 12px; }
+  #overview .dashboard-side { grid-template-columns: minmax(0,1fr); }
+  #overview .panel { padding: 14px; }
+}
+
+/* Shared chrome and surfaces for the monitoring view. */
+body:has(#overview.active) {
+  --board-base: #0c1925;
+  --board-panel: #142838;
+  --board-raised: #1c3243;
+  --board-rule: #324a5b;
+  --board-text: #e1edf5;
+  --board-soft: #aec1d0;
+  --board-accent: #81cfed;
+}
+body:has(#overview.active) :is(.sidebar,.topbar) {
+  background: var(--board-base); color: var(--board-text); border-color: var(--board-rule); box-shadow: none;
+}
+body:has(#overview.active) .sidebar :is(.brand-copy strong,.nav-item) { color: var(--board-text); }
+body:has(#overview.active) .sidebar :is(.brand-copy span,.nav-item small,.sidebar-footer,.sidebar-group-toggle) { color: var(--board-soft); }
+body:has(#overview.active) .sidebar .nav-item.active { background: #203e52; box-shadow: inset 3px 0 var(--board-accent); }
+body:has(#overview.active) :is(.clock-block,.connection-chip,.mode-toggle) { background: var(--board-panel); border-color: var(--board-rule); }
+body:has(#overview.active) :is(.clock-block strong,.connection-chip b) { color: var(--board-text); }
+body:has(#overview.active) :is(.clock-block span,.mode-toggle button) { color: var(--board-soft); }
+body:has(#overview.active) .mode-toggle button.active { background: #285672; color: #fff; }
+body:has(#overview.active) .connection-chip em { color: #79dfba; }
+body:has(#overview.active) .connection-chip.off em { color: #ff9c9e; }
+body:has(#overview.active) .connection-chip.warning em { color: #f6c67d; }
+
+#overview .system-banner {
+  --signal: #77dfb8;
+  border: 1px solid var(--board-rule); border-inline-start: 4px solid var(--signal);
+  background: var(--board-panel); color: var(--board-text); padding: 16px 20px;
+}
+#overview .system-banner:is(.fire,.no-route) { --signal: #ff858b; }
+#overview .system-banner:is(.warning,.device-offline,.sensor-fault) { --signal: #efc17e; }
+#overview .system-banner .system-banner-icon { color: var(--signal); background: #ffffff0c; }
+#overview .system-banner .system-banner-copy strong { color: var(--signal); }
+#overview .system-banner :is(.system-banner-message strong,.system-banner-meta strong) { color: var(--board-text); }
+#overview .system-banner :is(.system-banner-meta span,.system-banner-copy span) { color: var(--board-soft); }
+#overview :is(.scenario-lab,.scenario-explanation,.scenario-compact,.scenario-btn) {
+  background: var(--board-raised); border-color: var(--board-rule); color: var(--board-text);
+}
+#overview .scenario-featured button { color: var(--board-text); }
+#overview :is(.scenario-group-title b,.scenario-compact b,.scenario-explanation strong) { color: var(--board-text); }
+#overview :is(.scenario-group-title small,.scenario-compact span,.fallback-safety-note) { color: var(--board-soft); }
+#overview :is(.scenario-group-title > span,.scenario-lab summary > strong,.scenario-compact i) { background: #243e50; color: var(--board-accent); }
+#overview :is(.scenario-compact.danger i,.scenario-btn.danger) { color: #ffa8a9; }
+#overview :is(.scenario-compact.warning i,.scenario-compact.fallback i) { color: #f4cb88; }
+#overview :is(.scenario-btn,.scenario-compact):enabled:hover { background: #234257; border-color: #5f90a9; }
+@media (min-width: 1100px) and (max-width: 1439px) {
+  #overview .dashboard-grid { grid-template-columns: minmax(0,1.8fr) minmax(280px,1fr); align-items: start; }
+  #overview .dashboard-side { grid-template-columns: 1fr; }
+}
+
+#overview .dashboard-grid { column-gap: clamp(12px, 1.6vw, 32px); }
+#overview .panel-heading { border-bottom-color: #7495ae38; }
+#overview .map-summary-row { border-top: 1px solid #7495ae38; }
+#overview .response-grid { row-gap: 4px; }
+#overview .system-banner {
+  border-block: 0;
+  border-inline-end: 0;
+  border-radius: 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--signal) 12%, transparent), transparent 85%);
+}
+
+#overview .sensor-strip {
+  display: flex;
+  gap: 3px;
+  margin: 10px 0 16px;
+}
+#overview .sensor-strip span {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  color: var(--board-soft);
+  font: 10px/1.5 ui-monospace, monospace;
+}
+#overview .sensor-strip i {
+  display: block;
+  height: 9px;
+  margin-bottom: 4px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(135deg,#405566 0 2px,#233646 2px 4px);
+}
+#overview .sensor-strip [data-signal="normal"] i { background: #58c4ac; }
+#overview .sensor-strip [data-signal="fire"] i { background: #ff8189; box-shadow: 0 0 6px #ff657a66; }
+#overview .sensor-strip [data-signal="offline"] i { background: #e6b469; }
+
+#overview .scenario-featured small { color: var(--board-soft); }
+#overview .scenario-btn.fallback :is(strong,span) { color: #f4cb88; }
+
+/* Quiet watch strip while the system is healthy. */
+#overview .system-banner.normal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  min-height: 56px;
+  padding: 12px 4px;
+  border: 0;
+  border-bottom: 1px solid #7495ae38;
+  background: transparent;
+}
+#overview .normal .system-banner-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 0 4px #77dfb817;
+  margin-inline: 4px;
+}
+#overview .normal .system-banner-copy > span { display: none; }
+#overview .normal .system-banner-copy strong {
+  color: var(--board-text);
+  font-size: 18px;
+  font-weight: 680;
+  letter-spacing: -.04em;
+  margin: 0;
+}
+#overview .normal .system-banner-message {
+  display: block;
+  padding: 0;
+  border: 0;
+}
+#overview .normal .system-banner-message strong {
+  color: var(--board-soft);
+  font-size: 13px;
+  font-weight: 450;
+}
+#overview .normal .system-banner-meta {
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+}
+#overview .system-banner:is(.failsafe,.fallback,.congestion) { --signal: #efc17e; }
+@media (max-width: 760px) {
+  #overview .system-banner:not(.normal) .system-banner-message {
+    display: block;
+    grid-column: 1 / -1;
+    border: 0;
+    padding: 0;
+  }
+}

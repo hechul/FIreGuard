@@ -7,7 +7,11 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css', v='allzone-20261111') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar.css', v='ui-20261109') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/polish.css', v='status-header-20261109') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/gallery_refresh.css', v='apple-bento-20261110') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/gallery_refresh.css', v='bento-monitor-20261119') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/control_room.css', v='status-20261119e') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/control_map.css', v='room-20261119d') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/operations_shell.css', v='ops-1') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/operations_pages.css', v='ops-1') }}">
   {% if not cloud_enabled %}<script src="/socket.io/socket.io.js"></script>{% endif %}
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -28,7 +32,7 @@
       </div>
 
       <nav class="nav-list" aria-label="주요 메뉴">
-        <button class="nav-item active" data-page="overview"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20H3zM9 20v-6h6v6"/></svg></span><div>대시보드<small>Dashboard</small></div></button>
+        <button class="nav-item active" aria-current="page" data-page="overview"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20H3zM9 20v-6h6v6"/></svg></span><div>대시보드<small>Dashboard</small></div></button>
         <button class="nav-item" data-page="equipment"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12h2l1.5-3 2 6 1.5-3H17"/></svg></span><div>장비 관리<small>Devices</small></div></button>
         <button class="nav-item" data-page="routing"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="5" cy="18" r="2"/><circle cx="19" cy="6" r="2"/><path d="M7 18h3a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h8"/></svg></span><div>대피 경로<small>Routing</small></div></button>
         <button class="nav-item" data-page="events"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span><div>이벤트 로그<small>Events</small></div></button>
@@ -46,8 +50,8 @@
     <main class="main-area">
       <header class="topbar">
         <div class="topbar-title">
-          <span class="eyebrow">MOVIE THEATER FIRE EVACUATION SYSTEM</span>
-          <h1 id="pageTitle">영화관 화재 대피 통합 관제 시스템</h1>
+          <span class="eyebrow">FIREGUARD · CONTROL ROOM</span>
+          <h1 id="pageTitle">화재 대피 종합상황판</h1>
         </div>
 
         <div class="topbar-right">
@@ -98,14 +102,14 @@
       <!-- OVERVIEW -->
       <section id="overview" class="page active">
         <div id="systemBanner" class="system-banner {{ 'device-offline' if cloud_enabled else 'normal' }}"{% if cloud_enabled %} hidden{% endif %}>
-          <div class="system-banner-icon" id="systemIcon">{{ '?' if cloud_enabled else '✓' }}</div>
+          <div class="system-banner-icon" aria-hidden="true" id="systemIcon">{{ '?' if cloud_enabled else '' }}</div>
           <div class="system-banner-copy">
-            <span>CURRENT STATUS</span>
-            <strong id="systemTitle">{{ '장비 상태 확인 대기' if cloud_enabled else 'SAFE' }}</strong>
+            <span>관제 상태</span>
+            <strong id="systemTitle">{{ '장비 상태 확인 대기' if cloud_enabled else '정상 감시 중' }}</strong>
           </div>
           <div class="system-banner-message">
-            <strong id="systemDescription">{{ 'Pi의 첫 상태 보고를 기다립니다. 현재 장비 상태는 미확인입니다.' if cloud_enabled else '현재 화재 상황이 없습니다. 모든 경로를 정상 감시 중입니다.' }}</strong>
-            <span>센서 입력 → 위험구역 차단 → Dijkstra 재계산 → LED 유도 → 대시보드 갱신</span>
+            <strong id="systemDescription">{{ 'Pi의 첫 상태 보고를 기다립니다. 현재 장비 상태는 미확인입니다.' if cloud_enabled else '감지된 화재 없음' }}</strong>
+
           </div>
           <div class="system-banner-meta">
             <span>업데이트</span><strong id="updatedAt">-</strong>
@@ -120,14 +124,7 @@
                 <span class="panel-kicker">DIGITAL TWIN</span>
                 <h2>영화관 화재 대피 경로</h2>
               </div>
-              <div style="display:flex;align-items:center;gap:12px;">
-                <div class="legend" id="map2dLegend">
-                  <span><i class="legend-line active"></i>대피 경로</span>
-                  <span><i class="legend-dot normal"></i>일반 노드</span>
-                  <span><i class="legend-dot danger"></i>화재</span>
-                  <span><i class="legend-square shutter"></i>통행 제한</span>
-                  <span><i class="legend-exit">EXIT</i>비상구</span>
-                </div>
+              <div class="map-toolbar">
                 <!-- 2D / 3D View Toggle -->
                 <div class="mode-toggle" id="mapViewToggle" style="flex-shrink:0;">
                   <button id="mapView2dBtn" class="active" type="button">2D</button>
@@ -136,6 +133,14 @@
                 <button id="prototypeOverlayBtn" type="button" class="btn ghost" aria-pressed="false">실물 LED 배치 참고</button>
               </div>
             </div>
+
+                <div class="legend" id="map2dLegend">
+                  <span><i class="legend-line active"></i>대피 경로</span>
+                  <span><i class="legend-dot normal"></i>일반 노드</span>
+                  <span><i class="legend-dot danger"></i>화재</span>
+                  <span><i class="legend-square shutter"></i>통행 제한</span>
+                  <span><i class="legend-exit">EXIT</i>비상구</span>
+                </div>
 
             <div class="map-stage-container" style="position: relative;">
               <!-- 2D SVG Layer -->
@@ -241,8 +246,13 @@
               <div class="sensor-metric-grid">
                 <div class="sensor-metric flame">
                   <div class="sensor-icon">🔥</div>
-                  <div><span>화염 센서</span><strong id="flameCount">0 / {{ floorplan.sensors | selectattr("type", "equalto", "flame") | list | length }}</strong><small id="flameStateText">정상</small></div>
+                  <div><span>화염 센서</span><strong id="flameCount">0 / {{ floorplan.sensors | selectattr("type", "equalto", "flame") | list | length }}</strong><small id="flameStateText">상태 확인 중</small></div>
                 </div>
+              </div>
+              <div class="sensor-strip" id="sensorSignalStrip" role="list" aria-label="센서 번호별 상태">
+                {% for sensor in floorplan.sensors | selectattr("type", "equalto", "flame") | sort(attribute="id") %}
+                <span role="listitem" data-sensor="{{ sensor.id }}" aria-label="{{ sensor.id }} 미확인" title="{{ sensor.id }} 미확인"><i></i>{{ sensor.id.split('-')[-1] }}</span>
+                {% endfor %}
               </div>
               <div class="sensor-detail-list" id="sensorSummary"></div>
             </section>
@@ -343,19 +353,20 @@
       <!-- EQUIPMENT -->
       <section id="equipment" class="page">
         <div class="page-header-card">
-          <div><span class="panel-kicker">DEVICE MANAGEMENT</span><h2>장비 관리</h2><p>Raspberry Pi, 센서, 방화셔터, LED, 전원장치의 실시간 상태를 확인합니다.</p></div>
-          <div class="device-summary"><strong>{{ floorplan.sensors | selectattr("type", "equalto", "flame") | list | length }}</strong><span>Flame</span><strong>2</strong><span>Shutter</span></div>
+          <div><span class="panel-kicker">DEVICE MANAGEMENT</span><h2>장비 관리</h2><p>장비별 연결 상태와 마지막 수신 시각을 확인하세요.</p></div>
+          <div class="device-summary"><strong id="equipmentTotal">—</strong><span>전체 장비</span><strong id="equipmentAttention">—</strong><span>확인 필요</span></div>
         </div>
         <section class="panel page-panel">
           <div class="toolbar">
-            <input id="equipmentSearch" type="search" placeholder="장비명 / ID / 위치 검색">
-            <select id="equipmentFilter">
+            <input id="equipmentSearch" aria-label="장비명, ID 또는 위치 검색" type="search" placeholder="장비명 / ID / 위치 검색">
+            <select id="equipmentFilter" aria-label="장비 상태 필터">
               <option value="all">전체 상태</option>
               <option value="normal">정상</option>
               <option value="warning">주의</option>
               <option value="danger">위험</option>
               <option value="offline">연결 끊김</option>
             </select>
+            <span id="equipmentResult" class="equipment-result"></span>
           </div>
           <div class="table-wrap">
             <table class="equipment-table">
@@ -369,7 +380,7 @@
       <!-- ROUTING -->
       <section id="routing" class="page">
         <div class="page-header-card">
-          <div><span class="panel-kicker">ROUTE CONTROL</span><h2>대피 경로 및 수동 설정</h2><p>발표용 고급 시뮬레이션과 방화셔터·통로 차단을 제어합니다.</p></div>
+          <div><span class="panel-kicker">ROUTE CONTROL</span><h2>대피 경로 및 수동 설정</h2><p>출발 위치와 화재 지점을 지정하고, 통로 차단에 따른 대피 경로를 확인하세요.</p></div>
         </div>
 
         <div class="routing-layout">
@@ -380,10 +391,10 @@
               <button id="startApplyBtn" class="btn primary simulation-only" type="button">출발 위치 적용</button>
             </div>
             <div class="control-block">
-              <h3>Flame 개별 제어</h3>
+              <h3>불꽃 센서 모의 입력</h3>
               <select id="flameSelect"></select>
               <div class="inline-control">
-                <button id="flameOnBtn" class="btn danger simulation-only" type="button">화재 ON</button>
+                <button id="flameOnBtn" class="btn danger simulation-only" type="button">모의 화재 발생</button>
                 <button id="flameOffBtn" class="btn secondary simulation-only" type="button">해제</button>
               </div>
             </div>
@@ -394,8 +405,8 @@
               <h3>일반 통로 수동 차단</h3>
               <select id="manualEdgeSelect"></select>
               <div class="inline-control">
-                <button id="edgeBlockBtn" class="btn warning simulation-only" type="button">BLOCK</button>
-                <button id="edgeOpenBtn" class="btn secondary simulation-only" type="button">OPEN</button>
+                <button id="edgeBlockBtn" class="btn warning simulation-only" type="button">통로 차단</button>
+                <button id="edgeOpenBtn" class="btn secondary simulation-only" type="button">차단 해제</button>
               </div>
             </div>
             <div class="control-block">
@@ -574,7 +585,7 @@
   <script src="{{ url_for('static', filename='js/node_groups.js', v='node-groups-20261109') }}"></script>
   <script src="{{ url_for('static', filename='js/prototype_map.js', v='toilet-layout-20261109') }}"></script>
   <script src="{{ url_for('static', filename='js/real_led_projection.js', v='ticket-20261113') }}"></script>
-  <script src="{{ url_for('static', filename='js/dashboard.js', v='fallback-20261112') }}"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js', v='status-20261119e') }}"></script>
   <script src="{{ url_for('static', filename='js/physical_sim_control.js', v='multi-fire-20261110') }}"></script>
   <script src="{{ url_for('static', filename='js/real_fire_control.js', v='real-clear-20261112') }}"></script>
   <script src="{{ url_for('static', filename='js/sidebar.js', v='ui-20261109') }}"></script>

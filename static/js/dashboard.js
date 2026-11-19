@@ -51,7 +51,7 @@
 
   const STATUS_COPY = {
     unknown: { icon: '?', title: '장비 상태 확인 대기', description: 'Pi에서 센서와 LED 상태를 아직 받지 못했습니다.' },
-    normal: { icon: '✓', title: 'SAFE', description: '현재 화재 상황이 없습니다. 모든 경로를 정상 감시 중입니다.' },
+    normal: { icon: '', title: '정상 감시 중', description: '감지된 화재 없음' },
     warning: { icon: '!', title: 'WARNING', description: '일부 센서에서 주의 수준이 감지되었습니다. 상태를 확인하세요.' },
     fire: { icon: '🔥', title: 'FIRE DETECTED', description: '불꽃 센서에서 화재가 감지되었습니다. 안전 경로를 재계산합니다.' },
     no_route: { icon: '×', title: 'NO SAFE ROUTE', description: '현재 시작 위치에서 사용 가능한 안전 대피 경로를 찾을 수 없습니다.' },
@@ -136,7 +136,7 @@
   }
 
   function eventTone(type) {
-    if (['FIRE', 'CLEAR'].includes(type)) return 'tone-danger';
+    if (type === 'FIRE') return 'tone-danger';
     if (['SHUTTER', 'CONNECTION', 'CONGESTION', 'SENSOR'].includes(type)) return 'tone-warning';
     if (['ROUTE', 'START', 'MODE'].includes(type)) return 'tone-info';
     return 'tone-safe';
@@ -165,6 +165,21 @@
       geometrySignature = signature;
     }
     return geometryRouter;
+  }
+
+  // A quiet continuous track keeps the corridor legible between moving dashes.
+  function appendRouteTrack(layer, vertices, color) {
+    const track = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    track.setAttribute('d', 'M' + vertices.join(' L'));
+    track.setAttribute('fill', 'none');
+    track.setAttribute('stroke', color);
+    track.setAttribute('stroke-opacity', '.22');
+    track.setAttribute('stroke-width', '7');
+    track.setAttribute('stroke-linejoin', 'round');
+    track.setAttribute('stroke-linecap', 'round');
+    track.setAttribute('pointer-events', 'none');
+    track.setAttribute('aria-hidden', 'true');
+    layer.appendChild(track);
   }
 
   function buildEdgePath(a, b, className, mapRouter = router()) {
@@ -961,6 +976,7 @@
         if (backward) vertices.reverse();
         path.setAttribute('points', vertices.join(' '));
         path.setAttribute('marker-end', 'url(#arrowGreen)');
+        appendRouteTrack(routeLayer, vertices, '#3182f6');
         routeLayer.appendChild(path);
       }
     } else if (state.route && state.route.nodes?.length > 1) {
@@ -988,6 +1004,7 @@
         path.dataset.edgeId = edge.id;
         path.dataset.fromNode = state.route.nodes[i];
         path.dataset.toNode = state.route.nodes[i + 1];
+        appendRouteTrack(routeLayer, vertices, '#159968');
         routeLayer.appendChild(path);
         const coords = vertices.map(p => p.split(',').map(Number));
         routeDistance += coords.slice(1).reduce((length, p, j) => length + Math.hypot(p[0] - coords[j][0], p[1] - coords[j][1]), 0);
@@ -1220,6 +1237,15 @@
     const sensorOffline = counts.offline || 0;
     const awaiting = state.cloud?.enabled && !state.cloud.hasTelemetry;
     const stale = state.cloud?.enabled && state.cloud.stale;
+    for (const cell of byId('sensorSignalStrip').children) {
+      const sensor = state.flameSensors[cell.dataset.sensor];
+      const signal = awaiting || stale || !sensor ? 'unknown'
+        : sensor.active ? 'fire' : sensor.connected ? 'normal' : 'offline';
+      const label = { unknown: '미확인', fire: '화재 감지', normal: '정상', offline: '연결 끊김' }[signal];
+      cell.dataset.signal = signal;
+      cell.title = cell.dataset.sensor + ' · ' + label;
+      cell.setAttribute('aria-label', cell.title);
+    }
     const normalLabel = awaiting || stale ? '현재 정상 여부' : '불꽃 센서 정상';
     const normalValue = awaiting || stale ? '미확인' : `${normalFlame}/${counts.flameTotal}`;
     const offlineLabel = awaiting ? '센서 미수신' : stale ? '현재 확인 불가 센서' : '센서 통신 장애';
@@ -1238,12 +1264,15 @@
       const haystack = `${escapeHtml(e.id)} ${escapeHtml(e.category)} ${escapeHtml(e.name)} ${escapeHtml(e.location)}`.toLowerCase();
       return matchesFilter && haystack.includes(q);
     });
+    byId('equipmentTotal').textContent = state.equipment.length;
+    byId('equipmentAttention').textContent = state.equipment.filter(e => ['warning', 'danger', 'offline'].includes(e.status)).length;
+    byId('equipmentResult').textContent = `장비 ${rows.length}건`;
     byId('equipmentRows').innerHTML = rows.map((e) => `
       <tr><td>${escapeHtml(e.id)}</td><td>${escapeHtml(e.category)}</td><td>${escapeHtml(e.name)}</td><td>${escapeHtml(e.location)}</td><td>${escapeHtml(e.value ?? '-')}</td><td><span class="status-chip ${stateClass(e.status)}">${escapeHtml(e.stateLabel)}</span></td><td>${fmtTime(e.lastSeen)}</td></tr>`).join('') || '<tr><td colspan="7">조건에 맞는 장비가 없습니다.</td></tr>';
   }
 
   function renderEvents(state) {
-    byId('eventCount').textContent = `${state.events.length} EVENTS`;
+    byId('eventCount').textContent = `${state.events.length}건`;
     byId('eventList').innerHTML = state.events.map((e) => `
       <div class="event-row">
         <div class="event-time">${escapeHtml(String(e.timestamp).replace('T', ' ').slice(0, 19))}</div>
@@ -1254,7 +1283,7 @@
 
     const recent = state.events.slice(0, 5);
     byId('miniEventList').innerHTML = recent.map((e) => {
-      const tone = ['FIRE', 'CLEAR'].includes(e.type) ? 'danger' : ['SHUTTER', 'CONNECTION'].includes(e.type) ? 'warning' : '';
+      const tone = e.type === 'FIRE' ? 'danger' : ['SHUTTER', 'CONNECTION'].includes(e.type) ? 'warning' : '';
       return `<div class="mini-event ${tone}"><i></i><span><strong>${fmtTime(e.timestamp)} · ${escapeHtml(e.type)}</strong><br>${escapeHtml(e.change)}</span></div>`;
     }).join('') || '<div class="mini-event"><i></i><span>이벤트 기록 없음</span></div>';
   }
@@ -1527,9 +1556,14 @@
     if (cloudConfig.enabled && pageId === 'mapEditor') { showToast('클라우드에서는 지도 편집을 사용할 수 없습니다.'); return; }
     editorDrag = null;
     editorConnectFrom = null;
-    document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.page === pageId));
+    document.querySelectorAll('.nav-item').forEach((button) => {
+      const active = button.dataset.page === pageId;
+      button.classList.toggle('active', active);
+      if (active) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    });
     document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p.id === pageId));
-    const titles = { overview: '실시간 화재 대피 통합 관제', equipment: '장비 관리', routing: '경로 및 수동 설정', events: '이벤트 기록', qr: 'QR 기반 모바일 대피 안내', mapEditor: '수정 모드 · 지도 편집' };
+    const titles = { overview: '화재 대피 종합상황판', equipment: '장비 관리', routing: '경로 및 수동 설정', events: '이벤트 기록', qr: 'QR 기반 모바일 대피 안내', mapEditor: '수정 모드 · 지도 편집' };
     if (pageId === 'mapEditor') setEditorMode('node');
     if (pageId === 'overview' && mapViewMode === '3d') setMapView('3d');
     byId('pageTitle').textContent = titles[pageId] || 'FireGuard';

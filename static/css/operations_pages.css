@@ -1,0 +1,75 @@
+/* Operator views share the situation board's surface and alarm colors. */
+.page:not(#overview) {
+  --text: var(--board-text);
+  --text-2: var(--board-text);
+  --ink: var(--board-text);
+  --muted: var(--board-soft);
+  --line: var(--board-rule);
+  --surface-2: var(--board-raised);
+  --danger: #ff969c;
+  --blue: var(--board-accent);
+  color: var(--board-text);
+  color-scheme: dark;
+}
+.page:not(#overview) .page-header-card,
+.page:not(#overview) .panel {
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+}
+.page:not(#overview) .page-header-card {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 0 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.page:not(#overview) .page-header-card h2 { color: var(--text); }
+.page:not(#overview) :is(.panel-kicker,.event-count) { color: var(--board-accent); }
+.page:not(#overview) :is(.page-panel,.control-panel) { padding: 16px 0; }
+#equipment .device-summary { grid-template-columns: repeat(2,auto auto); align-items: baseline; gap: 8px; }
+#equipment .device-summary strong:last-of-type { margin-inline-start: 12px; }
+#equipment .toolbar { align-items: center; flex-wrap: wrap; }
+#equipment .toolbar select { width: auto; }
+#equipment .equipment-result { margin-inline-start: auto; color: var(--muted); font-size: 12px; }
+.page:not(#overview) :is(input:not([type=checkbox]), select) {
+  background: var(--board-panel); border: 1px solid var(--line); color: var(--text); border-radius: 6px;
+}
+.page:not(#overview) :is(button,a,input,select):focus-visible { outline: 2px solid var(--board-accent); outline-offset: 2px; }
+#equipment .equipment-table { font-size: 12px; }
+#equipment .equipment-table th { color: var(--muted); background: var(--board-panel); }
+#equipment .equipment-table td { color: var(--text); border-color: var(--line); }
+#equipment .equipment-table tbody tr:hover { background: var(--board-panel); }
+#equipment .status-chip { font-size: 11px; white-space: nowrap; }
+#equipment .status-chip.normal { background: #173f42; color: #9ce4cf; }
+#equipment .status-chip.warning,.page:not(#overview) .btn.warning { background: #433727; color: #f2c788; }
+#equipment .status-chip.danger,.page:not(#overview) .btn.danger { background: #492d38; color: #ffadb1; }
+#equipment .status-chip.offline { background: #303d4e; color: #d0dbe7; }
+.page:not(#overview) .btn.primary { background: #245575; color: #effaff; }
+.page:not(#overview) .btn.primary:hover:enabled { background: #306786; }
+.page:not(#overview) :is(.btn.secondary,.btn.ghost,.blocked-item,.shutter-item) {
+  background: var(--board-panel); border-color: var(--line); color: var(--text);
+}
+#routing .control-block h3 { color: var(--text); }
+#routing .state-normal,#events .tone-safe { color: #87dcbd; }
+#events .event-row { font-size: 12px; border-color: var(--line); overflow-wrap: anywhere; }
+#events :is(.event-time,.event-location,.event-detail span) { color: var(--muted); }
+#events .event-time { font-variant-numeric: tabular-nums; }
+#events .tone-warning { color: #f2c788; }
+#qr .qr-card-large img { background: white; padding: 10px; }
+#qr .phone-frame { background: var(--board-panel); color: var(--text); border-color: var(--line); box-shadow: none; }
+#qr :is(.phone-frame p,.qr-card-large p,.phone-frame span,.qr-card-large span) { color: var(--muted); }
+#qr .phone-frame strong { color: var(--board-accent); }
+#mapEditor :is(.editor-inspector,.editor-mode-toggle,.map-editor-help,.editor-create-options,.editor-tip-card,.editor-empty,.editor-field,.editor-check) {
+  background: var(--board-panel); color: var(--text); border-color: var(--line);
+}
+#mapEditor .editor-mode-toggle button { color: var(--board-soft); background: transparent; }
+#mapEditor .editor-mode-toggle button.active { background: #27516b; color: white; }
+@media (max-width: 760px) {
+  #equipment .toolbar input { flex: 1 1 100%; max-width: none; }
+  #equipment .equipment-table { min-width: 660px; }
+  #events .event-row { grid-template-columns: minmax(0,1fr) auto; gap: 6px 12px; padding: 14px 0; }
+  #events .event-detail { grid-column: 1 / -1; }
+  #qr .qr-card-large { flex-wrap: wrap; padding: 16px 0; }
+}
