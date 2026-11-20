@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar.css', v='ui-20261109') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/polish.css', v='status-header-20261109') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/gallery_refresh.css', v='bento-monitor-20261119') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/control_room.css', v='status-20261119e') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/control_room.css', v='incident-20261120') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/control_map.css', v='room-20261119d') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/operations_shell.css', v='ops-1') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/operations_pages.css', v='ops-1') }}">
@@ -121,8 +121,8 @@
           <section class="panel map-panel">
             <div class="panel-heading">
               <div>
-                <span class="panel-kicker">DIGITAL TWIN</span>
-                <h2>영화관 화재 대피 경로</h2>
+                <span class="panel-kicker">FLOOR PLAN</span>
+                <h2>실시간 대피 지도</h2>
               </div>
               <div class="map-toolbar">
                 <!-- 2D / 3D View Toggle -->
@@ -151,6 +151,9 @@
                 <!-- 동적 Node/Edge/센서 오버레이 -->
                 <svg id="floorSvg" class="overlay-svg" viewBox="0 0 584 858" aria-label="노드, 간선, 센서 및 대피 경로 오버레이">
                   <defs>
+                    <marker id="zoneArrow" markerWidth="4" markerHeight="4" refX="3.7" refY="2" orient="auto">
+                      <path d="M0 0 4 2 0 4Z" fill="#84edff"></path>
+                    </marker>
                     <marker id="arrowGreen" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
                       <path d="M0,0 L0,7 L8,3.5 z" fill="#3182f6"></path>
                     </marker>
@@ -161,12 +164,14 @@
                   </defs>
                   <g id="edgeLayer"></g>
                   <g id="routeLayer"></g>
+                  <g id="zoneFocusLayer" pointer-events="none"></g>
                   <g id="prototypeLedLayer" pointer-events="none"></g>
                   <g id="realLedReportedLayer" pointer-events="none" aria-label="Pi가 응답 확인한 LED 명령 위치"></g>
                   <g id="shutterLayer"></g>
                   <g id="sensorLayer"></g>
                   <g id="nodeLayer"></g>
                   <g id="exitLayer"></g>
+                  <g id="incidentMapLayer" pointer-events="none" aria-hidden="true"></g>
                 </svg>
               </div>
               <p id="prototypeOverlayNote" class="prototype-overlay-note hidden">실물 LED 구간 참고도 · 위치와 방향은 미검증이며 점선은 실제 점등 상태가 아닙니다. LED 62 표시는 N28·N35의 공유 관계만 나타내며 LED의 실제 위치가 아닙니다.</p>
@@ -213,6 +218,16 @@
               <div class="panel-heading compact">
                 <div><span class="panel-kicker">RESPONSE</span><h2>현재 대응 상태</h2></div>
               </div>
+              <div class="response-channel">
+                <h3>화재 위치</h3>
+                <strong id="incidentStatus">수신 대기</strong>
+                <div id="incidentLocations"></div>
+              </div>
+              <div class="response-channel">
+                <h3>LED 안내 명령</h3>
+                <strong id="ledCommandState">수신 대기</strong>
+                <p id="ledCommandDetail"></p>
+              </div>
               <div class="response-grid">
                 <div class="response-item">
                   <span>추천 대피지점</span>
@@ -237,6 +252,14 @@
                 <strong>사용 가능한 대피 경로 없음</strong>
                 <span>정규 비상구와 보조 대피지점 접근 경로가 모두 차단되었습니다.</span>
               </div>
+            </section>
+
+            <section class="panel zone-card" aria-labelledby="zoneHeading">
+              <div class="panel-heading compact">
+                <div><span class="panel-kicker">EVACUATION</span><h2 id="zoneHeading">구역별 대피 안내</h2></div>
+              </div>
+              <div id="zoneGuidanceList"></div>
+              <p id="zoneGuidanceDetail"></p>
             </section>
 
             <section class="panel sensor-card">
@@ -585,7 +608,9 @@
   <script src="{{ url_for('static', filename='js/node_groups.js', v='node-groups-20261109') }}"></script>
   <script src="{{ url_for('static', filename='js/prototype_map.js', v='toilet-layout-20261109') }}"></script>
   <script src="{{ url_for('static', filename='js/real_led_projection.js', v='ticket-20261113') }}"></script>
-  <script src="{{ url_for('static', filename='js/dashboard.js', v='status-20261119e') }}"></script>
+  <script src="{{ url_for('static', filename='js/incident_display.js', v='incident-1') }}"></script>
+  <script src="{{ url_for('static', filename='js/zone_guidance.js', v='zones-1') }}"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js', v='incident-20261120') }}"></script>
   <script src="{{ url_for('static', filename='js/physical_sim_control.js', v='multi-fire-20261110') }}"></script>
   <script src="{{ url_for('static', filename='js/real_fire_control.js', v='real-clear-20261112') }}"></script>
   <script src="{{ url_for('static', filename='js/sidebar.js', v='ui-20261109') }}"></script>

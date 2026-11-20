@@ -1090,6 +1090,13 @@
     byId('blockedLabel').textContent = `${state.blockedNodes.length + state.blockedEdges.length} 구간`;
     updateRouteVisualScale();
 
+    window.FireGuardIncidentDisplay.render(state, displayPlan, points);
+    window.FireGuardZoneGuidance.render({
+      state, plan: displayPlan, allZone,
+      realCloud: cloudView === 'real' && Boolean(state.cloud?.enabled),
+      onFocus: () => { if (mapViewMode === '3d') setMapView('2d'); },
+    });
+
     // Sync 3D scene whenever state changes (if 3D is ready)
     if (map3dReady && typeof Map3D !== 'undefined') Map3D.update(allZone ? {...state, route: null} : state);
   }

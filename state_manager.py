@@ -147,20 +147,15 @@ class SimulationState:
         self.blocked_edges = shutter_edges | self.manual_blocked_edges
 
         # 1순위는 정규 EXIT, 2순위는 지정된 화장실/완강기 보조 대피 지점이다.
-        route = self.graph.shortest_route(
-            self.start_node,
-            blocked_nodes=self.blocked_nodes,
-            blocked_edges=self.blocked_edges,
-            edge_weight_overrides=self.edge_weight_overrides,
-        )
+        self.route = self._route_from(self.start_node)
+
+    def _route_from(self, origin):
+        constraints = dict(blocked_nodes=self.blocked_nodes, blocked_edges=self.blocked_edges,
+                           edge_weight_overrides=self.edge_weight_overrides)
+        route = self.graph.shortest_route(origin, **constraints)
         if route is None:
-            route = self.graph.shortest_fallback_route(
-                self.start_node,
-                blocked_nodes=self.blocked_nodes,
-                blocked_edges=self.blocked_edges,
-                edge_weight_overrides=self.edge_weight_overrides,
-            )
-        self.route = route.as_dict() if route else None
+            route = self.graph.shortest_fallback_route(origin, **constraints)
+        return route.as_dict() if route else None
 
     def _capture_mode(self):
         return {key: deepcopy(getattr(self, key)) for key in self.MODE_FIELDS}
@@ -528,6 +523,8 @@ class SimulationState:
                 "failSafeActive": fail_safe_active,
                 "startNode": self.start_node,
                 "route": deepcopy(self.route),
+                **({"simulationZoneRoutes": {node: self._route_from(node) for node in self.graph.nodes}}
+                   if self.operation_mode == "simulation" else {}),
                 "routeMode": route_mode,
                 "fallbackActive": route_mode == "fallback",
                 "selectedExitName": destination_name,

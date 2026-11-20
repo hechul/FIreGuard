@@ -190,3 +190,54 @@ body:has(#overview.active) .connection-chip.warning em { color: #f6c67d; }
     padding: 0;
   }
 }
+
+/* Keep the incident readout, floor plan and zone destinations in sight together. */
+@media (min-width: 1440px) {
+  #overview .dashboard-grid {
+    grid-template-areas: "status map zones" "sensors map zones" "sensors map events"
+                         "qr map events" ". map events" "scenario scenario scenario";
+    grid-template-rows: repeat(4,auto) 1fr auto;
+  }
+  #overview .zone-card { grid-area: zones; }
+}
+#overview .response-channel {
+  padding: 13px 0;
+  border-bottom: 1px solid #7495ae38;
+}
+#overview .response-channel h3 {
+  margin: 0 0 5px;
+  color: var(--board-soft);
+  font-size: 12px;
+  font-weight: 550;
+}
+#overview .response-channel > strong { color: var(--board-text); font-size: 16px; }
+#overview .response-channel [data-tone="danger"] { color: #ffa4aa; }
+#overview .response-channel [data-tone="warning"] { color: #f4c67c; }
+#overview .response-channel [data-tone="normal"] { color: #8de2bf; }
+#overview .response-channel [data-tone="info"] { color: #8ad9f5; }
+#overview #ledCommandDetail, #zoneGuidanceDetail {
+  color: var(--board-soft); font-size: 12px; line-height: 1.6; margin: 6px 0 0;
+}
+#incidentLocations { display: grid; gap: 5px; }
+.incident-location { display: grid; gap: 2px; padding: 7px 0 0; }
+.incident-location strong { color: #ffe1e3; font-size: 13px; }
+.incident-location span { color: var(--board-soft); font-size: 11px; }
+#zoneGuidanceList { display: grid; gap: 2px; margin-top: 8px; }
+#zoneGuidanceList button {
+  font: inherit; font-size: 13px; text-align: start; border: 0;
+  border-inline-start: 2px solid transparent; border-radius: 2px;
+  background: transparent; color: var(--board-text); padding: 8px 10px;
+}
+#zoneGuidanceList button:hover, #zoneGuidanceList button:focus-visible { background: #19354a; }
+#zoneGuidanceList button[aria-pressed="true"] { background: #16394a; border-color: #79dded; color: #aff6ff; }
+#routeLayer.zone-focus-muted { opacity: .18; }
+#zoneFocusLayer .zone-focus-edge {
+  fill: none; stroke: #84edff; stroke-width: 3.8; stroke-linecap: round; stroke-linejoin: round;
+}
+#zoneGuidanceList .zone-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; border-bottom: 1px solid #7495ae20; }
+.zone-row span { color: #9bd9cb; font-size: 11px; }
+.zone-row[data-status="blocked"] span { color: #ffa4aa; }
+.zone-row[data-status="fallback"] span { color: #f4c67c; }
+.zone-row[data-status="unknown"] span { color: var(--board-soft); }
+.incident-pin circle { fill: #ff394522; stroke: #ff777e; stroke-width: 1.6; }
+.incident-pin text { fill: #ffd5d8; stroke: #351722; stroke-width: 3px; paint-order: stroke; font-size: 9px; font-weight: 750; }
