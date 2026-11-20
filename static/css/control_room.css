@@ -34,8 +34,8 @@ body:has(#overview.active) .topbar .eyebrow { color: #82bdda; }
 @media (min-width: 1440px) {
   #overview .dashboard-grid {
     display: grid; grid-template-columns: minmax(185px,.78fr) minmax(450px,2.45fr) minmax(235px,1fr);
-    grid-template-areas: "status map events" "sensors map events" "qr map events" ". map events" "scenario scenario scenario";
-    grid-template-rows: auto auto auto 1fr auto; gap: 12px; align-items: start;
+    grid-template-areas: "status map events" "sensors map events" "qr map events" ". map events";
+    grid-template-rows: auto auto auto 1fr; gap: 12px; align-items: start;
   }
   #overview .dashboard-side, #overview .lower-side-grid { display: contents; }
   #overview .map-panel { grid-area: map; }
@@ -43,7 +43,6 @@ body:has(#overview.active) .topbar .eyebrow { color: #82bdda; }
   #overview .sensor-card { grid-area: sensors; }
   #overview .log-mini-card { grid-area: events; }
   #overview .qr-mini-card { grid-area: qr; }
-  #overview .scenario-card { grid-area: scenario; }
   #overview .response-grid { grid-template-columns: 1fr; }
   #overview .panel { padding: 15px; }
 }
@@ -195,8 +194,8 @@ body:has(#overview.active) .connection-chip.warning em { color: #f6c67d; }
 @media (min-width: 1440px) {
   #overview .dashboard-grid {
     grid-template-areas: "status map zones" "sensors map zones" "sensors map events"
-                         "qr map events" ". map events" "scenario scenario scenario";
-    grid-template-rows: repeat(4,auto) 1fr auto;
+                         "qr map events" ". map events";
+    grid-template-rows: repeat(4,auto) 1fr;
   }
   #overview .zone-card { grid-area: zones; }
 }
@@ -241,3 +240,33 @@ body:has(#overview.active) .connection-chip.warning em { color: #f6c67d; }
 .zone-row[data-status="unknown"] span { color: var(--board-soft); }
 .incident-pin circle { fill: #ff394522; stroke: #ff777e; stroke-width: 1.6; }
 .incident-pin text { fill: #ffd5d8; stroke: #351722; stroke-width: 3px; paint-order: stroke; font-size: 9px; font-weight: 750; }
+
+#overview .zone-caption { margin: 15px 0 6px; color: var(--board-soft); font-size: 12px; }
+#exitGuidanceCounts { display: flex; flex-wrap: wrap; gap: 7px 16px; }
+.exit-guidance-row { flex: 1 1 75px; border-bottom: 1px solid var(--board-rule); padding: 6px 0; }
+.exit-guidance-row span { display: block; color: var(--board-soft); font-size: 11px; }
+.exit-guidance-row strong { color: #a0e8d6; font-size: 18px; font-variant-numeric: tabular-nums; }
+.exit-guidance-note,.timeline-empty { color: var(--board-soft); font-size: 12px; line-height: 1.6; }
+#incidentTimeline { max-height: 34vh; overflow-y: auto; padding: 6px 2px; }
+.incident-step { position: relative; padding: 8px 0 8px 14px; border-inline-start: 1px solid var(--board-rule); margin-inline-start: 4px; }
+.incident-step::before { content: ''; position: absolute; inset-inline-start: -3px; top: 14px; width: 5px; height: 5px; background: #81cfed; border-radius: 50%; }
+.incident-step[data-kind="fire"]::before { background: #ff858b; }
+.incident-step[data-kind="clear"]::before { background: #77dfb8; }
+.timeline-time,.timeline-detail { display: block; font-size: 11px; color: var(--board-soft); overflow-wrap: anywhere; }
+.timeline-time { font-variant-numeric: tabular-nums; }
+.timeline-title { font-size: 13px; color: var(--board-text); }
+
+/* Give the live drawing first use of the operator's screen. */
+#overview .map-panel { padding-inline: 0; }
+#overview .map-panel > .panel-heading { margin-bottom: 4px; padding-block: 0 6px; }
+#overview #mapStage { height: clamp(635px, 84vh, 940px); }
+@media (min-width: 1440px) {
+  #overview .dashboard-grid { grid-template-columns: minmax(175px,.72fr) minmax(0,2.9fr) minmax(210px,.9fr); }
+}
+@media (max-width: 760px) {
+  #overview #mapStage { height: auto; aspect-ratio: 555 / 780; }
+  #overview .map-panel { padding-block: 2px; }
+  #overview .map-toolbar { gap: 4px; }
+  body:has(#overview.active) .topbar { padding-block: 8px; }
+  #overview .system-banner.normal { min-height: 36px; margin-bottom: 8px; }
+}

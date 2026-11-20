@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar.css', v='ui-20261109') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/polish.css', v='status-header-20261109') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/gallery_refresh.css', v='bento-monitor-20261119') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/control_room.css', v='incident-20261120') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/control_room.css', v='map-fit-20261120') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/control_map.css', v='room-20261119d') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/operations_shell.css', v='ops-1') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/operations_pages.css', v='ops-1') }}">
@@ -134,13 +134,7 @@
               </div>
             </div>
 
-                <div class="legend" id="map2dLegend">
-                  <span><i class="legend-line active"></i>대피 경로</span>
-                  <span><i class="legend-dot normal"></i>일반 노드</span>
-                  <span><i class="legend-dot danger"></i>화재</span>
-                  <span><i class="legend-square shutter"></i>통행 제한</span>
-                  <span><i class="legend-exit">EXIT</i>비상구</span>
-                </div>
+
 
             <div class="map-stage-container" style="position: relative;">
               <!-- 2D SVG Layer -->
@@ -154,9 +148,7 @@
                     <marker id="zoneArrow" markerWidth="4" markerHeight="4" refX="3.7" refY="2" orient="auto">
                       <path d="M0 0 4 2 0 4Z" fill="#84edff"></path>
                     </marker>
-                    <marker id="arrowGreen" markerWidth="9" markerHeight="9" refX="7" refY="3.5" orient="auto">
-                      <path d="M0,0 L0,7 L8,3.5 z" fill="#3182f6"></path>
-                    </marker>
+
                     <filter id="softGlow">
                       <feGaussianBlur stdDeviation="3" result="blur"></feGaussianBlur>
                       <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
@@ -205,6 +197,13 @@
               </div>
             </div>
 
+                <div class="legend" id="map2dLegend">
+                  <span><i class="legend-line active"></i>대피 경로</span>
+                  <span><i class="legend-dot normal"></i>일반 노드</span>
+                  <span><i class="legend-dot danger"></i>화재</span>
+                  <span><i class="legend-square shutter"></i>통행 제한</span>
+                  <span><i class="legend-exit">EXIT</i>비상구</span>
+                </div>
             <div class="map-summary-row">
               <div><span>출발 노드</span><strong id="startNodeLabel">-</strong></div>
               <div><span>선택 비상구</span><strong id="exitLabel">-</strong></div>
@@ -240,6 +239,7 @@
                   <small id="routeNodeText">-</small>
                 </div>
               </div>
+              <div id="physicalSimHost" hidden></div>
               <div id="failSafeNotice" class="failsafe-notice hidden">
                 <strong>LOCAL FAIL-SAFE ACTIVE</strong>
                 <span>외부 서버 연결이 끊어졌습니다. 현장 LED 유도는 Raspberry Pi 로컬 연산을 유지합니다.</span>
@@ -258,6 +258,9 @@
               <div class="panel-heading compact">
                 <div><span class="panel-kicker">EVACUATION</span><h2 id="zoneHeading">구역별 대피 안내</h2></div>
               </div>
+              <h3 class="zone-caption">출구별 안내 구역 수</h3>
+              <div id="exitGuidanceCounts"></div>
+              <h3 class="zone-caption zone-list-title">구역별 목적지</h3>
               <div id="zoneGuidanceList"></div>
               <p id="zoneGuidanceDetail"></p>
             </section>
@@ -280,78 +283,6 @@
               <div class="sensor-detail-list" id="sensorSummary"></div>
             </section>
 
-            <section class="panel scenario-card">
-              <div class="panel-heading compact">
-                <div><span class="panel-kicker">QUICK DEMO</span><h2>시나리오 제어</h2></div>
-                <button id="autoDemoBtn" class="mini-btn simulation-only" type="button">AUTO DEMO</button>
-              </div>
-
-              <div class="scenario-featured">
-                <button type="button" class="scenario-btn safe simulation-only" data-scenario="normal" data-note="모든 상태를 초기화하고 기본 동측 비상구 경로로 복원합니다."><span>▶</span><strong>정상</strong><small>기본 상태</small></button>
-                <button type="button" class="scenario-btn simulation-only" data-scenario="east_exit_fire" data-note="동측 비상구 앞 N10 화재로 기존 최단경로를 즉시 우회합니다."><span>🔥</span><strong>동측 출구</strong><small>화재</small></button>
-                <button type="button" class="scenario-btn simulation-only" data-scenario="mid_route_block" data-note="현재 최단경로의 E02 통로가 갑자기 폐쇄된 상황을 재현합니다."><span>🚧</span><strong>현재 경로</strong><small>갑자기 차단</small></button>
-                <button type="button" class="scenario-btn fallback simulation-only" data-scenario="fallback_toilet" data-note="모든 정규 비상구 진입이 막혀 가장 가까운 화장실 보조 대피지점으로 전환합니다."><span>WC</span><strong>출구 전부 차단</strong><small>화장실 대피</small></button>
-              </div>
-
-              <details class="scenario-lab" open>
-                <summary>
-                  <span><b>예외 상황 Scenario Lab</b><small>센서 · 화재 · 통로 · 혼잡 · 통신 장애 · Fallback</small></span>
-                  <strong>13 CASES</strong>
-                </summary>
-
-                <div class="scenario-group">
-                  <div class="scenario-group-title"><span>01</span><div><b>감지 / 화재</b><small>불꽃 감지와 복합 화재 확인</small></div></div>
-                  <div class="scenario-compact-grid">
-                    <button class="scenario-compact simulation-only" data-scenario="ticket_fire" data-note="매표소 앞 N14 화재를 발생시켜 인접 경로 재계산을 확인합니다."><i>🔥</i><b>매표소 화재</b><span>N14</span></button>
-                    <button class="scenario-compact simulation-only" data-scenario="cinema4_fire" data-note="4관 앞 N9 불꽃 센서 화재로 서측 상부 경로를 회피합니다."><i>🔥</i><b>4관 화재</b><span>N9</span></button>
-                    <button class="scenario-compact danger simulation-only" data-scenario="large_fire" data-note="N10와 N7에서 동시 화재가 발생한 대형 화재 상황입니다. 남아 있는 정규 출구를 재탐색합니다."><i>🔥🔥</i><b>복합 대형화재</b><span>N10 + N7</span></button>
-                  </div>
-                </div>
-
-                <div class="scenario-group">
-                  <div class="scenario-group-title"><span>02</span><div><b>경로 / 시설 / 인파</b><small>경로가 막히거나 비용이 변하는 상황</small></div></div>
-                  <div class="scenario-compact-grid">
-                    <button class="scenario-compact simulation-only" data-scenario="east_shutter" data-note="동측 방화셔터 SH-02를 닫아 E02를 차단합니다."><i>▧</i><b>방화셔터</b><span>SH-02 CLOSED</span></button>
-                    <button class="scenario-compact simulation-only" data-scenario="mid_route_block" data-note="대피 중 선택된 E02 통로에 장애물이 생겨 즉시 우회 경로를 계산합니다."><i>🚧</i><b>이동 중 통로 폐쇄</b><span>E02 BLOCK</span></button>
-                    <button class="scenario-compact warning simulation-only" data-scenario="crowd_congestion" data-note="동측 통로를 막지 않고 Edge 가중치만 높여 인파 혼잡에 따른 우회 경로를 계산합니다."><i>👥</i><b>인파 혼잡</b><span>Dynamic Weight</span></button>
-                  </div>
-                </div>
-
-                <div class="scenario-group">
-                  <div class="scenario-group-title"><span>03</span><div><b>보조 대피 / 한계 상황</b><small>정규 EXIT 이후 Fallback 단계 검증</small></div></div>
-                  <div class="scenario-compact-grid">
-                    <button class="scenario-compact fallback simulation-only" data-scenario="fallback_toilet" data-note="4개 정규 EXIT 진입 Edge를 모두 차단하고 N5/N6 화장실 중 최단 지점을 선택합니다."><i>WC</i><b>화장실 Fallback</b><span>EXIT 전부 불가</span></button>
-                    <button class="scenario-compact fallback simulation-only" data-scenario="fallback_descender" data-note="정규 EXIT와 화장실 접근까지 차단해 4관 왼쪽 N3 완강기로 안내합니다."><i>↧</i><b>완강기 Fallback</b><span>N3</span></button>
-                    <button class="scenario-compact danger simulation-only" data-scenario="no_route" data-note="정규 비상구, 화장실, 완강기까지 모두 접근 불가능해 NO SAFE ROUTE를 표시합니다."><i>×</i><b>대피 경로 없음</b><span>NO SAFE ROUTE</span></button>
-                  </div>
-                </div>
-
-                <div class="scenario-group">
-                  <div class="scenario-group-title"><span>04</span><div><b>통신 / 장비 장애</b><small>Fail-safe와 장치 고장을 구분</small></div></div>
-                  <div class="scenario-compact-grid">
-                    <button class="scenario-compact warning simulation-only" data-scenario="server_off" data-note="외부 서버/Supabase 연결만 단절됩니다. Raspberry Pi 로컬 Dijkstra와 LED는 유지됩니다."><i>☁</i><b>서버 단절</b><span>LOCAL FAIL-SAFE</span></button>
-                    <button class="scenario-compact danger simulation-only" data-scenario="fire_server_off" data-note="실제 위험 상황에서 동시에 외부 서버가 단절되어도 로컬 경로 계산이 유지되는지 보여줍니다."><i>🔥☁</i><b>화재 + 서버 단절</b><span>Fail-safe Test</span></button>
-                    <button class="scenario-compact danger simulation-only" data-scenario="pi_off" data-note="Raspberry Pi 현장 제어기 자체가 끊긴 상황입니다. 서버 단절과 달리 로컬 LED 제어 유지가 불가능한 장애로 구분합니다."><i>⌁</i><b>Pi 제어기 단절</b><span>EDGE OFFLINE</span></button>
-                    <button class="scenario-compact warning simulation-only" data-scenario="sensor_fault" data-note="동측 비상구의 불꽃 센서가 통신 단절된 상황을 장비 관리 화면에 표시합니다."><i>⚠</i><b>센서 통신 장애</b><span>FLM-15</span></button>
-                  </div>
-                </div>
-              </details>
-
-              <div class="scenario-explanation" id="scenarioExplanation">
-                <span>SCENARIO READY</span>
-                <strong>상황 버튼을 선택하면 여기에서 시연 목적을 바로 확인할 수 있습니다.</strong>
-              </div>
-
-              <p class="fallback-safety-note">※ 화장실/완강기는 캡스톤 시뮬레이션용 보조 대피지점입니다. 실제 적용 시 건물 방재계획·피난설비 위치·소방안전 검토가 필요합니다.</p>
-
-              <div class="auto-demo-row">
-                <span id="demoStep">READY</span>
-                <button id="stopDemoBtn" type="button" class="text-btn" disabled>중지</button>
-                <button id="serverRestoreBtn" type="button" class="text-btn simulation-only">서버 복구</button>
-              </div>
-              <div id="realModeNotice" class="real-mode-notice hidden">REAL 모드에서는 실제 Raspberry Pi 센서 이벤트만 표시하며 시뮬레이션 조작이 잠깁니다.</div>
-            </section>
-
             <div class="lower-side-grid">
               <section class="panel qr-mini-card">
                 <div class="panel-heading compact"><div><span class="panel-kicker">MOBILE</span><h2>QR 대피 안내</h2></div></div>
@@ -363,9 +294,11 @@
 
               <section class="panel log-mini-card">
                 <div class="panel-heading compact">
-                  <div><span class="panel-kicker">LIVE LOG</span><h2>실시간 이벤트</h2></div>
+                  <div><span class="panel-kicker">INCIDENT LOG</span><h2>화재 대응 타임라인</h2></div>
                   <button class="text-btn nav-shortcut" data-target-page="events" type="button">전체 보기 →</button>
                 </div>
+                <div id="incidentTimeline" aria-label="화재 대응 기록"></div>
+                <h3 class="zone-caption recent-events-title">최근 이벤트</h3>
                 <div id="miniEventList" class="mini-event-list"></div>
               </section>
             </div>
@@ -609,9 +542,10 @@
   <script src="{{ url_for('static', filename='js/prototype_map.js', v='toilet-layout-20261109') }}"></script>
   <script src="{{ url_for('static', filename='js/real_led_projection.js', v='ticket-20261113') }}"></script>
   <script src="{{ url_for('static', filename='js/incident_display.js', v='incident-1') }}"></script>
-  <script src="{{ url_for('static', filename='js/zone_guidance.js', v='zones-1') }}"></script>
-  <script src="{{ url_for('static', filename='js/dashboard.js', v='incident-20261120') }}"></script>
-  <script src="{{ url_for('static', filename='js/physical_sim_control.js', v='multi-fire-20261110') }}"></script>
+  <script src="{{ url_for('static', filename='js/incident_timeline.js', v='wall-1') }}"></script>
+  <script src="{{ url_for('static', filename='js/zone_guidance.js', v='zones-3') }}"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js', v='map-controls-20261120') }}"></script>
+  <script src="{{ url_for('static', filename='js/physical_sim_control.js', v='map-controls-20261120') }}"></script>
   <script src="{{ url_for('static', filename='js/real_fire_control.js', v='real-clear-20261112') }}"></script>
   <script src="{{ url_for('static', filename='js/sidebar.js', v='ui-20261109') }}"></script>
 </body>

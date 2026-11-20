@@ -2,7 +2,6 @@
   'use strict';
 
   const byId = (id) => document.getElementById(id);
-  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   let floorplan = null;
   let currentState = null;
@@ -23,7 +22,6 @@
   let selectedNodeId = null;
   let browserConnected = true;
   let pollTimer = null;
-  let demoRunId = 0;
 
   // 2D / 3D map view state
   let mapViewMode = '2d'; // '2d' | '3d'
@@ -233,6 +231,16 @@
           leds.appendChild(element('line', {...attrs, stroke: '#e2e8f0', 'stroke-width': 2, 'stroke-dasharray': '1 12'}));
         }
         svg.appendChild(leds);
+        // Fit both SVG layers to the same drawing, including edited nodes and exits.
+        const points = [...plan.nodes, ...plan.exits, ...window.FireGuardLedPlan.flat().map(([x,y]) => ({x,y}))];
+        for (const room of plan.rooms || []) points.push(room, {x:room.x+room.width,y:room.y+room.height});
+        const left = Math.min(...points.map(p => p.x)) - 24;
+        const top = Math.min(...points.map(p => p.y)) - 24;
+        const width = Math.max(...points.map(p => p.x)) + 24 - left;
+        const height = Math.max(...points.map(p => p.y)) + 24 - top;
+        const viewBox = [left, top, width, height].join(' ');
+        svg.setAttribute('viewBox', viewBox);
+        byId('floorSvg').setAttribute('viewBox', viewBox);
       }
     });
   }
@@ -245,22 +253,16 @@
   function updateRouteVisualScale() {
     const stage = byId('mapStage');
     const svg = byId('floorSvg');
-    const marker = byId('arrowGreen');
-    if (!stage || !svg || !marker) return;
+    if (!stage || !svg) return;
 
     const rect = stage.getBoundingClientRect();
-    const scale = Math.min(rect.width / 584, rect.height / 858);
+    const bounds = svg.viewBox.baseVal;
+    const scale = Math.min(rect.width / bounds.width, rect.height / bounds.height);
     const stroke = clamp(4.8 * scale, 2.6, 5.0);
-    const arrow = clamp(8.2 * scale, 4.8, 8.2);
 
     svg.style.setProperty('--route-stroke', `${stroke.toFixed(2)}px`);
     stage.style.setProperty('--route-stroke', `${stroke.toFixed(2)}px`);
-    stage.style.setProperty('--route-arrow-size', `${arrow.toFixed(2)}px`);
 
-    marker.setAttribute('markerWidth', arrow.toFixed(2));
-    marker.setAttribute('markerHeight', arrow.toFixed(2));
-    marker.setAttribute('refX', (arrow * 0.82).toFixed(2));
-    marker.setAttribute('refY', (arrow / 2).toFixed(2));
   }
 
 
@@ -964,51 +966,48 @@
       edgeLayer.appendChild(line);
     });
 
-    if (allZone) {
-      for (const directed of allZone.directedEdges) {
-        const edge = edgesById[directed.edgeId];
-        if (!edge || !points[edge.from] || !points[edge.to]) continue;
-        const forward = edge.from === directed.from && edge.to === directed.to;
-        const backward = edge.to === directed.from && edge.from === directed.to;
-        if (!forward && !backward) continue;
-        const path = buildEdgePath(points[edge.from], points[edge.to], 'allzone-route-plan', displayRouter);
-        const vertices = path.getAttribute('points').trim().split(/\s+/);
-        if (backward) vertices.reverse();
-        path.setAttribute('points', vertices.join(' '));
-        path.setAttribute('marker-end', 'url(#arrowGreen)');
-        appendRouteTrack(routeLayer, vertices, '#3182f6');
-        routeLayer.appendChild(path);
+    // Anchor the travelling highlight to each destination so branches meet in phase.
+    const segments = allZone ? allZone.directedEdges : (state.route?.edges || []).map((edgeId, i) => ({
+      edgeId, from: state.route.nodes[i], to: state.route.nodes[i + 1],
+    }));
+    const lines = [];
+    for (const segment of segments) {
+      const edge = edgesById[segment.edgeId];
+      if (!edge || !points[edge.from] || !points[edge.to]) continue;
+      const forward = edge.from === segment.from && edge.to === segment.to;
+      const backward = edge.from === segment.to && edge.to === segment.from;
+      if (!forward && !backward) continue;
+      const path = buildEdgePath(points[edge.from], points[edge.to], 'route-edge', displayRouter);
+      const vertices = path.getAttribute('points').trim().split(/\s+/).filter(Boolean);
+      if (vertices.length < 2) continue;
+      if (backward) vertices.reverse();
+      path.setAttribute('points', vertices.join(' '));
+      path.dataset.edgeId = edge.id;
+      path.dataset.fromNode = segment.from;
+      path.dataset.toNode = segment.to;
+      const coords = vertices.map(vertex => vertex.split(',').map(Number));
+      const length = coords.slice(1).reduce((sum, p, j) =>
+        sum + Math.hypot(p[0] - coords[j][0], p[1] - coords[j][1]), 0);
+      lines.push({segment, path, vertices, length});
+    }
+    const successors = new Map();
+    for (const line of lines) {
+      // The Pi lists the route forest first, then supplementary coverage edges.
+      if (!successors.has(line.segment.from)) successors.set(line.segment.from, line);
+    }
+    const flowTime = performance.now() / 1000;
+    for (const line of lines) {
+      let remaining = line.length;
+      let next = successors.get(line.segment.to);
+      const seen = new Set([line]);
+      while (next && !seen.has(next)) {
+        seen.add(next);
+        remaining += next.length;
+        next = successors.get(next.segment.to);
       }
-    } else if (state.route && state.route.nodes?.length > 1) {
-      const flowTime = performance.now() / 1000;
-      let routeDistance = 0;
-      for (let i = 0; i < state.route.nodes.length - 1; i += 1) {
-        const edge = edgesById[state.route.edges[i]];
-        if (!edge) continue;
-        const from = points[edge.from];
-        const to = points[edge.to];
-        if (!from || !to) continue;
-        const path = buildEdgePath(from, to, 'route-edge', displayRouter);
-        // Preserve the canonical corridor shape, but animate along traversal.
-        const forward = edge.from === state.route.nodes[i] && edge.to === state.route.nodes[i + 1];
-        const backward = edge.to === state.route.nodes[i] && edge.from === state.route.nodes[i + 1];
-        if (!forward && !backward) continue;
-        const vertices = path.getAttribute('points').trim().split(/\s+/).filter(Boolean);
-        if (!vertices.length) continue;
-        if (backward) vertices.reverse();
-        path.setAttribute('points', vertices.join(' '));
-        // routeFlow moves 21 SVG units per second. Offset each edge by the
-        // preceding path length, and preserve the phase across state redraws.
-        const phase = ((flowTime - routeDistance / 21) % 1 + 1) % 1;
-        path.style.animationDelay = `${-phase}s`;
-        path.dataset.edgeId = edge.id;
-        path.dataset.fromNode = state.route.nodes[i];
-        path.dataset.toNode = state.route.nodes[i + 1];
-        appendRouteTrack(routeLayer, vertices, '#159968');
-        routeLayer.appendChild(path);
-        const coords = vertices.map(p => p.split(',').map(Number));
-        routeDistance += coords.slice(1).reduce((length, p, j) => length + Math.hypot(p[0] - coords[j][0], p[1] - coords[j][1]), 0);
-      }
+      line.path.style.animationDelay = `-${(flowTime + remaining / 21) % 1}s`;
+      appendRouteTrack(routeLayer, line.vertices, '#159968');
+      routeLayer.appendChild(line.path);
     }
 
     floorplan.shutters.forEach((shutter) => {
@@ -1131,7 +1130,6 @@
     realBtn.classList.toggle('active', state.operationMode === 'real');
     simBtn.classList.toggle('active', state.operationMode === 'simulation');
     document.querySelectorAll('.simulation-only').forEach((el) => { el.disabled = state.operationMode !== 'simulation'; });
-    byId('realModeNotice').classList.toggle('hidden', state.operationMode !== 'real');
     byId('operationModeLabel').textContent = state.operationMode.toUpperCase();
     if (cloudConfig.enabled) {
       // Cloud monitoring remains read-only; manual alarm clear is local only.
@@ -1316,6 +1314,7 @@
     renderSensors(state);
     renderEquipment(state);
     renderEvents(state);
+    window.FireGuardTimeline.render(state, floorplan);
     renderRouting(state);
     renderQr(state);
     renderCloudState(cloudConfig.enabled ? (realState || state) : state);
@@ -1324,7 +1323,7 @@
 
   function renderCloudState(state) {
     const cloud = state.cloud;
-    document.querySelectorAll('.scenario-card').forEach(card => card.classList.toggle('hidden', Boolean(cloud?.enabled) && cloudView !== 'simulation'));
+    byId('physicalSimHost').hidden = !(cloud?.enabled && cloudView === 'simulation');
     byId('cloudLiveCard').classList.toggle('hidden', !cloud?.enabled);
     if (!cloud?.enabled) return;
     const card = byId('cloudLiveCard');
@@ -1438,9 +1437,6 @@
     cloudView = 'real';
     publishRealState();
     simulationGeneration += 1;
-    demoRunId += 1;
-    byId('demoStep').textContent = 'STOPPED';
-    byId('stopDemoBtn').disabled = true;
     if (realFloorplan && realState) {
       setCloudFloorplan(realFloorplan, realState);
       updateState(realState);
@@ -1523,42 +1519,6 @@
     if (result?.state && mode === 'real') closeNodeActionCard();
   }
 
-  async function runScenario(scenarioId) {
-    if (!currentState || currentState.operationMode !== 'simulation') {
-      showToast('SIMULATION 모드에서만 사용할 수 있습니다.', true); return;
-    }
-    return safeApi('/api/simulation/scenario', { scenarioId });
-  }
-
-  async function runAutoDemo() {
-    if (!currentState || currentState.operationMode !== 'simulation') return;
-    const runId = ++demoRunId;
-    byId('autoDemoBtn').disabled = true;
-    byId('stopDemoBtn').disabled = false;
-    const steps = [
-      ['STEP 1 · NORMAL', 'normal', 1800],
-      ['STEP 2 · EAST EXIT FIRE', 'east_exit_fire', 2600],
-      ['STEP 3 · SERVER LOST / FAIL-SAFE', 'server_off', 2600],
-      ['STEP 4 · SERVER RECOVERY', 'server_on', 1800],
-    ];
-    for (const [label, scenario, wait] of steps) {
-      if (runId !== demoRunId) break;
-      byId('demoStep').textContent = label;
-      await runScenario(scenario);
-      await sleep(wait);
-    }
-    if (runId === demoRunId) byId('demoStep').textContent = 'DEMO COMPLETE';
-    byId('autoDemoBtn').disabled = currentState?.operationMode !== 'simulation';
-    byId('stopDemoBtn').disabled = true;
-  }
-
-  function stopAutoDemo() {
-    demoRunId += 1;
-    byId('demoStep').textContent = 'STOPPED';
-    byId('autoDemoBtn').disabled = currentState?.operationMode !== 'simulation';
-    byId('stopDemoBtn').disabled = true;
-  }
-
   function showPage(pageId) {
     if (cloudConfig.enabled && pageId === 'mapEditor') { showToast('클라우드에서는 지도 편집을 사용할 수 없습니다.'); return; }
     editorDrag = null;
@@ -1580,15 +1540,6 @@
   function bindActions() {
     document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => showPage(button.dataset.page)));
     document.querySelectorAll('.nav-shortcut').forEach((button) => button.addEventListener('click', () => showPage(button.dataset.targetPage)));
-    document.querySelectorAll('[data-scenario]').forEach((button) => button.addEventListener('click', async () => {
-      const explanation = byId('scenarioExplanation');
-      if (explanation) {
-        explanation.querySelector('span').textContent = `SCENARIO · ${button.dataset.scenario.toUpperCase()}`;
-        explanation.querySelector('strong').textContent = button.dataset.note || '시나리오 실행 중';
-      }
-      await runScenario(button.dataset.scenario);
-    }));
-
     byId('realFireSwitchBtn').addEventListener('click', () => {
       if (currentState?.operationMode !== 'simulation' || !currentState?.realFireDetected) return;
       if (window.confirm('실제 센서에서 화재가 감지되었습니다. REAL 모드로 전환하시겠습니까?')) setMode('real');
@@ -1602,9 +1553,6 @@
       }
     });
     byId('simModeBtn').addEventListener('click', () => setMode('simulation'));
-    byId('autoDemoBtn').addEventListener('click', runAutoDemo);
-    byId('stopDemoBtn').addEventListener('click', stopAutoDemo);
-    byId('serverRestoreBtn').addEventListener('click', () => runScenario('server_on'));
 
     const btn2d = byId('mapView2dBtn');
     const btn3d = byId('mapView3dBtn');

@@ -18,7 +18,7 @@
   function init() {
     // Availability requires explicit server-side opt-in; never expose by default.
     if (document.documentElement.dataset.physicalSim !== 'enabled') return;
-    const card = document.querySelector('.scenario-card');
+    const card = document.getElementById('physicalSimHost');
     if (!card || document.getElementById('physicalSimPanel')) return;
     const panel = document.createElement('details');
     panel.id = 'physicalSimPanel';
