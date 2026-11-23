@@ -397,14 +397,14 @@
       <section id="qr" class="page">
         <div class="page-header-card">
           <div><span class="panel-kicker">MOBILE EVACUATION</span><h2>QR 기반 모바일 대피 안내</h2><p>각 장소에 해당 QR을 부착하세요. 스캔하면 해당 위치에서 출발하는 배포 서버의 최신 안내를 확인할 수 있습니다.</p></div>
-          <button class="btn secondary qr-print" type="button" id="printLocationCodes">안내판 인쇄</button>
+          <button class="btn secondary qr-print" type="button" id="printLocationCodes">벽 부착용 QR 4장 인쇄</button>
         </div>
         <div class="qr-location-grid">
-          {% for node, place in [('N37','5관'), ('N40','매표소')] %}
+          {% for node, place in [('N40','매표소'), ('N19','팝콘 매점'), ('N37','5관'), ('N33','동측 분기점')] %}
           <article class="qr-location">
             <h3>{{ place }}</h3>
             <span class="qr-location-id">위치 {{ node }}</span>
-            <img width="220" height="220" src="{{ url_for('static', filename='images/qr_' ~ node|lower ~ '.png') }}" alt="{{ place }} 대피 안내 QR 코드">
+            <img width="220" height="220" src="{{ url_for('static', filename='images/qr/' ~ node ~ '.png') }}" alt="{{ place }} 대피 안내 QR 코드">
             <p>이 위치에서 출발하는 대피 경로</p>
             <a class="btn primary link-btn" href="/mobile/{{ node }}" target="_blank" rel="noopener">모바일 화면 열기</a>
           </article>

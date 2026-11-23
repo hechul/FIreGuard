@@ -1707,7 +1707,7 @@
         if (row) selectMapEvent(currentState.events[Number(row.dataset.eventIndex)]);
       });
     }
-    byId('printLocationCodes').addEventListener('click', () => window.print());
+    byId('printLocationCodes').addEventListener('click', () => window.open('/qr', '_blank', 'noopener'));
     document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => showPage(button.dataset.page)));
     document.querySelectorAll('.nav-shortcut').forEach((button) => button.addEventListener('click', () => showPage(button.dataset.targetPage)));
     byId('realFireSwitchBtn').addEventListener('click', () => {

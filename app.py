@@ -8,7 +8,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, abort
 from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
 
@@ -64,7 +64,20 @@ def dashboard():
 
 @app.get("/mobile/<node_id>")
 def mobile(node_id: str):
-    return render_template("mobile.html", node_id=node_id)
+    from qr_locations import QR_LOCATIONS
+    plan = cloud_plan if cloud_enabled(app) else floorplan
+    if node_id not in {n['id'] for n in plan['nodes'] + plan['exits']}:
+        abort(404)
+    labels = {n['id']: n['name'] for n in plan['nodes'] + plan['exits']}
+    labels.update({n['id']: n['label'] for n in QR_LOCATIONS})
+    return render_template("mobile.html", node_id=node_id, location_name=labels[node_id])
+
+
+@app.get('/qr')
+def qr_print():
+    from qr_locations import QR_LOCATIONS, mobile_url
+    return render_template('qr_print.html', locations=[
+        dict(location, url=mobile_url(location['id'])) for location in QR_LOCATIONS])
 
 
 @app.get("/3d")
