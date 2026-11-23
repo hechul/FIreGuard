@@ -7,7 +7,9 @@
   const id = name => document.getElementById(name);
   function realRoute(origin, forest) {
     if (!forest || forest.unreachableNodes.includes(origin)) return null;
-    const next = new Map(forest.directedEdges.map(edge => [edge.from, edge]));
+    const next = new Map();
+    // The Pi lists primary routes before supplementary corridor coverage.
+    for (const edge of forest.directedEdges) if (!next.has(edge.from)) next.set(edge.from, edge);
     const targets = new Set([...forest.availableExits, ...(forest.fallbackDestinations || [])]);
     const nodes = [origin], edges = [];
     let cursor = origin;
@@ -187,7 +189,10 @@
       if (forest) {
         path.setAttribute('class','route-edge');
         const base = document.querySelector('#routeLayer [data-edge-id="'+CSS.escape(edgeId)+'"]');
-        if (base) path.style.animationDelay = base.style.animationDelay;
+        if (base) {
+          path.style.animationDelay = base.style.animationDelay;
+          path.setAttribute('points',base.getAttribute('points'));
+        }
       } else path.setAttribute('marker-end','url(#zoneArrow)');
       layer.append(path);
     }

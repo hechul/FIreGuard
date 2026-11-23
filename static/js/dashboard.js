@@ -964,6 +964,9 @@
     const segments = allZone ? allZone.directedEdges : (state.route?.edges || []).map((edgeId, i) => ({
       edgeId, from: state.route.nodes[i], to: state.route.nodes[i + 1],
     }));
+    const usesWestStrip = segments.some(segment => segment.ledApproach === 'S2') ||
+      (!allZone && state.cloud?.routeSource === 'pi' && state.cloud.hardware?.westExitApproach === 'S2');
+    const westStrip = usesWestStrip && window.FireGuardRealLedProjection?.coordinates(window.FireGuardPrototypeMap?.sections);
     recordEventRoutes(state, segments, allZone);
     if (eventSelection && (eventSelection.mode !== state.operationMode ||
       !state.events?.some(event => eventKey(event) === eventSelection.key))) eventSelection = null;
@@ -979,6 +982,12 @@
       const vertices = path.getAttribute('points').trim().split(/\s+/).filter(Boolean);
       if (vertices.length < 2) continue;
       if (backward) vertices.reverse();
+      if (edge.id === 'E09' && westStrip && (segment.ledApproach === 'S2' ||
+          (!allZone && state.cloud?.routeSource === 'pi' && state.cloud.hardware?.westExitApproach === 'S2'))) {
+        // Physical labels 8→5 are the four LEDs at the bottom of S2.
+        const indices = forward ? [7,6,5,4] : [4,5,6,7];
+        vertices.splice(0, vertices.length, ...indices.map(i => westStrip[i].x + ',' + westStrip[i].y));
+      }
       path.setAttribute('points', vertices.join(' '));
       path.dataset.edgeId = edge.id;
       path.dataset.fromNode = segment.from;

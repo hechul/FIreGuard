@@ -21,6 +21,9 @@ class GuideSerializationPortableTest(unittest.TestCase):
         commands = self.serialize(plan,self.wire)
         segments = [list(map(int,c.split()[1:])) for c in commands if c.startswith('SEG ')]
         self.assertLessEqual(sum(map(len,segments)),163)
+        moving_pixels = {pixel for segment in segments if len(segment) > 1 for pixel in segment}
+        self.assertFalse(any(len(s) == 1 and s[0] in moving_pixels for s in segments),
+                         'Compression must not leave a stationary head over a moving branch')
         self.assertEqual({i for s in segments for i in s},{self.wire(i) for i in range(162)})
         self.assertTrue(all(len(c.encode('ascii')) <= 94 for c in commands))
 

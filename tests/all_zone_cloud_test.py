@@ -28,6 +28,23 @@ def report():
 
 
 class AllZoneCloudTest(unittest.TestCase):
+    def test_two_physical_approaches_share_one_west_exit(self):
+        from cloud_model import HARDWARE_CALIBRATED_GRAPH_VERSION, HARDWARE_CALIBRATED_LED_VERSION
+        data = report()
+        data.update(graphMappingVersion=HARDWARE_CALIBRATED_GRAPH_VERSION, ledMappingVersion=HARDWARE_CALIBRATED_LED_VERSION)
+        data['allZone'].update(availableExits=['EXIT_W', 'EXIT_S2'], guidedNodes=['N7'],
+                               directedEdges=[dict(edgeId='E39', **{'from':'N7'}, to='EXIT_S2', exitNode='EXIT_S2')],
+                               coverageEdges=[dict(edgeId='E09', **{'from':'N7'}, to='EXIT_W', exitNode='EXIT_W')])
+        normalized = validate_hardware_telemetry(data, FLOOR, data['deviceId'])
+        now = datetime.now(timezone.utc).isoformat()
+        cloud = project_state(FLOOR, dict(telemetry=normalized, received_at=now, observed_at=now, sequence=1),
+                              [], data['deviceId'])['cloud']
+        plan = cloud['hardware']['allZone']
+        self.assertEqual(plan['availableExits'], ['EXIT_W'])
+        self.assertEqual(plan['directedEdges'][0]['ledApproach'], 'S2')
+        self.assertNotIn('ledApproach', plan['coverageEdges'][0])
+        self.assertEqual(cloud['routeSource'], 'pi')
+
     def test_fallback_path_is_preserved_and_not_called_an_exit(self):
         data = report()
         plan = data['allZone']

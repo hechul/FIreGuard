@@ -78,7 +78,7 @@
       // Partial corridor output is shown by acknowledged LED dots only;
       // never draw the whole E10 graph edge through the burning N7 endpoint.
       partialGuidanceCount: stale || unverified ? 0 : partialEdges.length,
-      directedEdges: stale || unverified ? [] : [...plan.directedEdges, ...coverageEdges].map(({edgeId,from,to,exitNode}) => ({edgeId,from,to,exitNode})),
+      directedEdges: stale || unverified ? [] : [...plan.directedEdges, ...coverageEdges].map(({edgeId,from,to,exitNode,ledApproach}) => ({edgeId,from,to,exitNode, ...(ledApproach === 'S2' ? {ledApproach} : {})})),
       ledAcknowledged: !stale && !unverified && h.ledStatus === 'active' && h.ledCommandAck === true,
     };
   }

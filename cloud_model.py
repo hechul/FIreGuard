@@ -426,9 +426,15 @@ def project_state(floorplan, row, events, device_id, stale_seconds=15, now=None,
         route_fields = {'routeNodes', 'routeEdges', 'exitNode', 'destinationNode', 'blockedNodes', 'blockedEdges', 'allZone'}
         hardware_view = {key: _west_exit_view(val) if key in route_fields else val for key, val in raw.items()}
         zone = hardware_view.get('allZone')
-        if zone and 'coverageEdges' in zone:
-            primary = {edge['edgeId'] for edge in zone['directedEdges']}
-            zone['coverageEdges'] = [e for e in zone['coverageEdges'] if e['edgeId'] not in primary]
+        # Both physical approaches lead to one exit. Retain which strip the
+        # sender traversed so its vertical approach isn't drawn horizontally.
+        if zone:
+            for group in ('directedEdges', 'coverageEdges'):
+                for original, shown in zip(raw['allZone'].get(group, []), zone.get(group, [])):
+                    if original['edgeId'] == 'E39':
+                        shown['ledApproach'] = 'S2'
+        if 'E39' in raw.get('routeEdges', []):
+            hardware_view['westExitApproach'] = 'S2'
         telemetry = {**telemetry, 'route': _west_exit_view(telemetry.get('route')), 'hardware': hardware_view}
     received = row['received_at'] if row else None
     stale = not row or max((now - timestamp(received)).total_seconds(),

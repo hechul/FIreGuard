@@ -178,9 +178,11 @@ def prepare_guide_commands(plan, translate):
     # A shared one-pixel junction (room 5 slot 159) has no direction of its
     # own. Its permanent head would overwrite the moving head of the longer
     # segment every frame. Keep its pixel in that segment instead.
-    moving_pixels = {wire for segment in segments if len(segment) > 1 for wire in segment}
-    segments = [segment for segment in segments
-                if len(segment) > 1 or segment[0] not in moving_pixels]
+    def without_stationary_duplicates(groups):
+        moving = {wire for group in groups if len(group) > 1 for wire in group}
+        return [group for group in groups if len(group) > 1 or group[0] not in moving]
+
+    segments = without_stationary_duplicates(segments)
     # Shared junction endpoints may occur in several SEG arrays. If needed,
     # store each redundant endpoint in fewer arrays; never remove an interior
     # pixel or the last occurrence of any guided LED. Full direction conflict
@@ -202,6 +204,9 @@ def prepare_guide_commands(plan, translate):
                 break
         if not trimmed:
             break
+    # Trimming a short duplicate can create a new singleton. In GUIDE the
+    # firmware redraws its head every frame, obscuring the pulse at that pixel.
+    segments = without_stationary_duplicates(segments)
     if len(segments) > 40 or sum(map(len, segments)) > 163:
         raise ValueError('GUIDE Arduino 저장 한도 초과')
     commands = ['BEGIN'] + ['SEG ' + ' '.join(map(str, s)) for s in segments]
