@@ -1,0 +1,12 @@
+#routeLayer .route-reassigned, #zoneFocusLayer .route-reassigned {
+  stroke: #bcffe2;
+  stroke-width: calc(var(--route-stroke, 4px) + 1px);
+  filter: drop-shadow(0 0 3px #65f5a7);
+}
+#zoneGuidanceList .zone-row:has(.zone-destination-change) { flex-wrap: wrap; row-gap: 3px; }
+.zone-destination-change {
+  flex: 1 1 100%;
+  color: #afe9ed;
+  font-size: 11px;
+  font-weight: 500;
+}

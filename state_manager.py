@@ -30,7 +30,7 @@ class SimulationState:
         self._lock = RLock()
         self.floorplan = floorplan
         self.graph = FloorGraph(floorplan)
-        self.events: list[dict[str, str]] = []
+        self.events: list[dict[str, Any]] = []
         self.operation_mode = "simulation"
         self.manual_blocked_edges: set[str] = set()
         self._reset_state(clear_events=False)
@@ -74,11 +74,12 @@ class SimulationState:
                 self._real_latched_ids = previous
                 self._real_latches_dirty = True
                 raise
+            previous_edges = self._fire_route_edges()
             for sid in sorted(set(sensor_ids)):
                 self._flame_confirmation.pop(sid, None)
                 self.flame_sensors[sid].update(active=False, latched=False, updatedAt=self._now())
             self._recompute()
-            self._add_event("CLEAR", ", ".join(sorted(set(sensor_ids))), "실제 화재 수동 해제 (MANUAL)", self._route_result_text())
+            self._add_event("CLEAR", ", ".join(sorted(set(sensor_ids))), "실제 화재 수동 해제 (MANUAL)", self._route_result_text(), previous_edges)
 
     @staticmethod
     def _now() -> str:
@@ -111,17 +112,25 @@ class SimulationState:
         self.blocked_edges: set[str] = set()
         self._recompute()
 
-    def _add_event(self, event_type: str, location: str, change: str, result: str) -> None:
-        self.events.insert(
-            0,
-            {
-                "timestamp": self._now(),
-                "type": event_type,
-                "location": location,
-                "change": change,
-                "result": result,
-            },
-        )
+    def _fire_route_edges(self) -> dict[str, tuple[str, str]]:
+        route = self.route or {}
+        nodes = route.get("nodes", [])
+        return dict(zip(route.get("edges", []), zip(nodes, nodes[1:])))
+
+    def _add_event(self, event_type: str, location: str, change: str, result: str,
+                   previous_edges: dict[str, tuple[str, str]] | None = None) -> None:
+        event = {
+            "timestamp": self._now(),
+            "type": event_type,
+            "location": location,
+            "change": change,
+            "result": result,
+        }
+        if previous_edges is not None:
+            current = self._fire_route_edges()
+            event["changedEdges"] = sorted(edge for edge in previous_edges.keys() | current.keys()
+                                          if previous_edges.get(edge) != current.get(edge))
+        self.events.insert(0, event)
         del self.events[self.MAX_EVENTS :]
 
     def _sensor_config(self, sensor_id: str) -> dict[str, Any]:
@@ -244,6 +253,7 @@ class SimulationState:
                 if sensor["active"] == active:
                     self._persist_real_fire()
                     return
+            previous_edges = self._fire_route_edges()
             self.flame_sensors[sensor_id].update({"active": bool(active), "updatedAt": self._now()})
             self._recompute()
             if source == "REAL":
@@ -253,7 +263,7 @@ class SimulationState:
                 "FIRE" if active else "CLEAR",
                 f"{sensor_id} / {node}",
                 f"{'화재 감지' if active else '화재 해제'} ({source})",
-                self._route_result_text(),
+                self._route_result_text(), previous_edges,
             )
 
     def set_node_fire(self, node_id: str, active: bool, source: str = "SIM") -> None:
@@ -270,6 +280,7 @@ class SimulationState:
             if not flame_ids:
                 raise ValueError(f"{node_id}에 연결된 화재 센서가 없습니다.")
 
+            previous_edges = self._fire_route_edges()
             now = self._now()
             for sensor_id in flame_ids:
                 self.flame_sensors[sensor_id].update({"active": bool(active), "updatedAt": now})
@@ -281,7 +292,7 @@ class SimulationState:
                 "FIRE" if active else "CLEAR",
                 f"{node_id} / {node_name}",
                 f"통합 화재 {'발생' if active else '해제'} ({source}: {linked})",
-                self._route_result_text(),
+                self._route_result_text(), previous_edges,
             )
 
     def set_shutter(self, shutter_id: str, closed: bool, source: str = "SIM") -> None:

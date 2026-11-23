@@ -20,12 +20,18 @@
     if (Array.isArray(saved) && saved.length <= 100) simulationHistory = saved;
   } catch (_) { /* Private browsing may disallow storage. */ }
   let selectedNodeId = null;
+  let eventSelection = null;
+  let previousEventRoutes = null;
+  const eventChanges = new Map();
+  const eventKey = event => JSON.stringify([event.timestamp, event.type, event.location, event.change, event.result]);
   let browserConnected = true;
   let pollTimer = null;
 
   // 2D / 3D map view state
   let mapViewMode = '2d'; // '2d' | '3d'
-  let map3dReady   = false;
+  let map3dReady = false;
+  let sceneFloorplan;
+  let sceneGraphVersion;
   let prototypeOverlayEnabled = false;
 
   // Map Editor state
@@ -644,12 +650,6 @@
       if (currentState) {
         renderMap(currentState);
         renderResponse(currentState);
-        renderQr(currentState);
-      }
-
-      // 3D 대시보드도 즉시 동기화 리빌드
-      if (map3dReady && typeof Map3D !== 'undefined') {
-        Map3D.rebuild(floorplan, currentState);
       }
       showToast('지도 변경 사항을 저장하고 2D/3D 대시보드에 동기화했습니다.');
     } catch (error) {
@@ -669,9 +669,6 @@
       buildControls();
       if (currentState) {
         renderMap(currentState);
-        if (map3dReady && typeof Map3D !== 'undefined') {
-          Map3D.rebuild(floorplan, currentState);
-        }
       }
       showToast('저장된 좌표를 다시 불러왔습니다.');
     } catch (error) {
@@ -864,6 +861,8 @@
     const stage3d = byId('mapStage3d');
     const legend  = byId('map2dLegend');
     const btn2d   = byId('mapView2dBtn');
+    btn2d.setAttribute('aria-pressed', String(mode === '2d'));
+    byId('mapView3dBtn').setAttribute('aria-pressed', String(mode === '3d'));
     const btn3d   = byId('mapView3dBtn');
 
     if (mode === '3d') {
@@ -872,12 +871,7 @@
       if (legend) legend.style.display = 'none';
       btn2d.classList.remove('active');
       btn3d.classList.add('active');
-      // Init 3D engine once (lazy)
-      if (!map3dReady && typeof Map3D !== 'undefined' && floorplan) {
-        Map3D.init(floorplan, stage3d);
-        map3dReady = true;
-      }
-      if (map3dReady && currentState) Map3D.update(currentState);
+      if (currentState) renderMap(currentState);
     } else {
       stage2d.style.display = '';
       stage3d.style.display = 'none';
@@ -970,6 +964,10 @@
     const segments = allZone ? allZone.directedEdges : (state.route?.edges || []).map((edgeId, i) => ({
       edgeId, from: state.route.nodes[i], to: state.route.nodes[i + 1],
     }));
+    recordEventRoutes(state, segments, allZone);
+    if (eventSelection && (eventSelection.mode !== state.operationMode ||
+      !state.events?.some(event => eventKey(event) === eventSelection.key))) eventSelection = null;
+    const focus = drawEventSelection(points, edgesById, displayRouter);
     const lines = [];
     for (const segment of segments) {
       const edge = edgesById[segment.edgeId];
@@ -988,7 +986,7 @@
       const coords = vertices.map(vertex => vertex.split(',').map(Number));
       const length = coords.slice(1).reduce((sum, p, j) =>
         sum + Math.hypot(p[0] - coords[j][0], p[1] - coords[j][1]), 0);
-      lines.push({segment, path, vertices, length});
+      lines.push({segment, path, vertices, coords, length});
     }
     const successors = new Map();
     for (const line of lines) {
@@ -1005,6 +1003,7 @@
         remaining += next.length;
         next = successors.get(next.segment.to);
       }
+      line.remaining = remaining;
       line.path.style.animationDelay = `-${(flowTime + remaining / 21) % 1}s`;
       appendRouteTrack(routeLayer, line.vertices, '#159968');
       routeLayer.appendChild(line.path);
@@ -1047,6 +1046,7 @@
       const groupIds = hasGroup ? groupModel.members(node.id) : [node.id];
       const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       group.setAttribute('role', 'button'); group.setAttribute('tabindex', '0');
+      group.setAttribute('aria-label', node.name + ' · ' + groupIds.join(', '));
       const blocked = groupIds.some(id => state.blockedNodes.includes(id));
       const classes = ['map-node'];
       const fallback = fallbackById[node.id];
@@ -1065,7 +1065,9 @@
       const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       label.setAttribute('x', node.x + sharedOffset); label.setAttribute('y', node.y + (['N29', 'N30'].includes(node.id) ? 18 : -11)); label.setAttribute('text-anchor', 'middle');
       label.setAttribute('class', fallback ? 'fallback-node-label' : 'node-label');
-      label.textContent = fallback ? `${node.id} · ${fallback.label}` : node.id;
+      const activeNode = groupIds.includes(selectedNodeId) ? selectedNodeId : groupIds.find(id => state.blockedNodes.includes(id));
+      const sensorIds = displayPlan.sensors.filter(sensor => sensor.node === (activeNode || node.id)).map(sensor => sensor.id);
+      label.textContent = [activeNode || node.id, ...sensorIds].join(' · ');
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title'); title.textContent = `${node.id} · ${node.name}${groupIds.length > 1 ? ` (포함: ${groupIds.join(', ')})` : ''}`;
       group.append(circle, label, title);
       group.addEventListener('click', () => selectNode(node.id));
@@ -1075,12 +1077,27 @@
 
     floorplan.exits.forEach((exit) => {
       const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rect.setAttribute('x', exit.x - 10); rect.setAttribute('y', exit.y - 9); rect.setAttribute('width', 20); rect.setAttribute('height', 18); rect.setAttribute('rx', 3); rect.setAttribute('class', 'exit-box');
+      // Keep the badge above the endpoint so it never covers the incoming corridor.
+      const name = exit.name || exit.id;
       const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      label.setAttribute('x', exit.x); label.setAttribute('y', exit.y + 3); label.setAttribute('text-anchor', 'middle'); label.setAttribute('class', 'exit-label'); label.textContent = 'EXIT';
+      label.setAttribute('class', 'exit-label');
+      label.setAttribute('text-anchor', 'middle');
+      label.textContent = name;
+      group.appendChild(label);
+      exitLayer.appendChild(group);
+      const width = Math.max(40, (label.getComputedTextLength() || name.length * 10) + 10);
+      const bounds = byId('floorSvg').viewBox.baseVal;
+      const center = clamp(exit.x, bounds.x + width / 2 + 2, bounds.x + bounds.width - width / 2 - 2);
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', center - width / 2); rect.setAttribute('y', exit.y - 20);
+      rect.setAttribute('width', width); rect.setAttribute('height', 14);
+      rect.setAttribute('rx', 4); rect.setAttribute('class', 'exit-box');
+      label.setAttribute('x', center); label.setAttribute('y', exit.y - 10);
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('cx', exit.x); dot.setAttribute('cy', exit.y); dot.setAttribute('r', 3);
+      dot.setAttribute('class', 'exit-endpoint');
       const title = document.createElementNS('http://www.w3.org/2000/svg', 'title'); title.textContent = exit.name;
-      group.append(rect, label, title); exitLayer.appendChild(group);
+      group.append(rect, label, dot, title);
     });
 
     byId('startNodeLabel').textContent = allZone ? '전체 구역' : state.startNode;
@@ -1096,8 +1113,28 @@
       onFocus: () => { if (mapViewMode === '3d') setMapView('2d'); },
     });
 
-    // Sync 3D scene whenever state changes (if 3D is ready)
-    if (map3dReady && typeof Map3D !== 'undefined') Map3D.update(allZone ? {...state, route: null} : state);
+    if (mapViewMode === '3d') {
+      try {
+        const version = state.cloud?.hardware?.graphMappingVersion;
+        const paths = lines.map(({segment, coords, remaining}) => ({...segment, vertices: coords, remaining}));
+        if (!map3dReady) {
+          Map3D.init(reportPlan, byId('mapStage3d'));
+          map3dReady = true;
+        } else if (sceneFloorplan !== floorplan || sceneGraphVersion !== version) {
+          Map3D.rebuild(reportPlan);
+        }
+        sceneFloorplan = floorplan;
+        sceneGraphVersion = version;
+        Map3D.update(state, paths);
+        Map3D.focusEvent?.(focus.nodeIds[0] || null, focus.edgeIds, focus.nodeIds.slice(1));
+      } catch (error) {
+        console.error('3D map unavailable', error);
+        setMapView('2d');
+        if (typeof Map3D !== 'undefined') Map3D.dispose();
+        map3dReady = false;
+        showToast('3D 지도를 표시할 수 없어 2D 지도로 돌아왔습니다.', true);
+      }
+    }
   }
 
   function renderHeader(state) {
@@ -1276,33 +1313,151 @@
       <tr><td>${escapeHtml(e.id)}</td><td>${escapeHtml(e.category)}</td><td>${escapeHtml(e.name)}</td><td>${escapeHtml(e.location)}</td><td>${escapeHtml(e.value ?? '-')}</td><td><span class="status-chip ${stateClass(e.status)}">${escapeHtml(e.stateLabel)}</span></td><td>${fmtTime(e.lastSeen)}</td></tr>`).join('') || '<tr><td colspan="7">조건에 맞는 장비가 없습니다.</td></tr>';
   }
 
+  function eventTargets(event) {
+    const location = String(event.location || '');
+    const tokens = location.split(/[\s,·/]+/);
+    let payload;
+    if (typeof event.result === 'string' && event.result.startsWith('{')) {
+      try { payload = JSON.parse(event.result); } catch (_) { /* Text-only event. */ }
+    }
+    const nodes = nodeMap(), edges = edgeMap();
+    const nodeIds = new Set(tokens.filter(token => Object.hasOwn(nodes, token)));
+    if (payload?.nodeId && Object.hasOwn(nodes, payload.nodeId)) nodeIds.add(payload.nodeId);
+    if (!nodeIds.size) {
+      for (const sensor of floorplan?.sensors || []) {
+        if (tokens.includes(sensor.id) && nodes[sensor.node]) nodeIds.add(sensor.node);
+      }
+    }
+    const edgeIds = tokens.filter(token => Object.hasOwn(edges, token));
+    const shutter = floorplan?.shutters?.find(item => item.name === location || item.id === location);
+    if (shutter && edges[shutter.edge]) edgeIds.push(shutter.edge);
+    return {nodeIds: [...nodeIds], edgeIds};
+  }
+
+  // Keep historical differences only when consecutive reports share a ledger
+  // boundary and one location-bearing event accounts for the transition.
+  function recordEventRoutes(state, segments, allZone) {
+    const events = state.events || [];
+    const keys = events.map(eventKey);
+    const context = JSON.stringify([state.operationMode, state.cloud?.deviceId, state.cloud?.hardware?.graphMappingVersion,
+      state.cloud?.routeSource, Boolean(allZone), state.cloud?.bootId, state.startNode]);
+    if (previousEventRoutes?.context !== context) eventChanges.clear();
+    if (state.cloud?.stale || (state.cloud?.enabled && !state.cloud.hasTelemetry) || allZone?.unverified) {
+      previousEventRoutes = {context};
+      return;
+    }
+    const directed = new Map(segments.map(({edgeId, from, to}) => [edgeId, from + '>' + to]));
+    const previous = previousEventRoutes;
+    const cloud = state.cloud;
+    const contiguous = !cloud?.enabled || (cloud.bootId && Number.isSafeInteger(cloud.sequence) &&
+      cloud.sequence === previous?.sequence + 1);
+    if (previous?.directed && previous.context === context && contiguous && keys.length) {
+      const overlap = previous.head ? keys.indexOf(previous.head) : keys.length;
+      if (overlap > 0) {
+        const newEvents = events.slice(0, overlap).filter(event => event.type !== 'LED');
+        const sameReport = !cloud?.enabled || Date.parse(newEvents[0]?.timestamp) === Date.parse(cloud.observedAt);
+        if (sameReport && newEvents.length === 1 && ['FIRE', 'CLEAR', 'ROUTE', 'CONGESTION', 'SHUTTER', 'START'].includes(newEvents[0].type)) {
+          const ids = new Set([...previous.directed.keys(), ...directed.keys()]);
+          eventChanges.set(eventKey(newEvents[0]), [...ids].filter(id => previous.directed.get(id) !== directed.get(id)));
+        }
+      }
+    }
+    for (const key of eventChanges.keys()) if (!keys.includes(key)) eventChanges.delete(key);
+    previousEventRoutes = {context, directed, head: keys[0], sequence: cloud?.sequence};
+  }
+
+  function changedEventEdges(event) {
+    if (Array.isArray(event.changedEdges)) {
+      const edges = edgeMap();
+      return [...new Set(event.changedEdges.filter(id => typeof id === 'string' && Object.hasOwn(edges, id)))];
+    }
+    return eventChanges.get(eventKey(event));
+  }
+
+  function eventCanSelect(event) {
+    const {nodeIds, edgeIds} = eventTargets(event);
+    return Boolean(nodeIds.length || edgeIds.length || changedEventEdges(event)?.length);
+  }
+
+  function selectMapEvent(event) {
+    if (event && !eventCanSelect(event)) return;
+    eventSelection = event ? {event, key: eventKey(event), mode: currentState.operationMode} : null;
+    if (event && !byId('overview').classList.contains('active')) showPage('overview');
+    renderMap(currentState);
+    renderEvents(currentState);
+    window.FireGuardTimeline.render(currentState, floorplan);
+    if (event) byId('eventMapSelection').scrollIntoView({block: 'nearest'});
+  }
+
+  window.FireGuardEventMap = {
+    select: selectMapEvent, canSelect: eventCanSelect,
+    isSelected: event => eventSelection?.key === eventKey(event),
+  };
+
+  function drawEventSelection(points, edges, mapRouter) {
+    const layer = byId('eventMapLayer');
+    layer.replaceChildren();
+    byId('eventMapSelection').classList.toggle('hidden', !eventSelection);
+    if (!eventSelection) return {nodeIds: [], edgeIds: []};
+    const {event} = eventSelection;
+    const targets = eventTargets(event);
+    const changes = changedEventEdges(event);
+    const edgeIds = [...new Set([...targets.edgeIds, ...(changes || [])])];
+    for (const id of edgeIds) {
+      const edge = edges[id];
+      if (!edge || !points[edge.from] || !points[edge.to]) continue;
+      const line = buildEdgePath(points[edge.from], points[edge.to], 'event-map-edge', mapRouter);
+      line.setAttribute('fill', 'none');
+      line.setAttribute('stroke', '#67e8f9');
+      line.setAttribute('stroke-width', '4');
+      line.setAttribute('stroke-dasharray', '2 7');
+      line.setAttribute('stroke-linecap', 'round');
+      layer.append(line);
+    }
+    for (const id of targets.nodeIds) {
+      const point = points[window.FireGuardNodeGroups?.displayId(id)] || points[id];
+      if (!point) continue;
+      const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      for (const [name, value] of Object.entries({cx: point.x, cy: point.y, r: 14, fill: 'none',
+        stroke: '#67e8f9', 'stroke-width': 3})) ring.setAttribute(name, value);
+      layer.append(ring);
+    }
+    const location = targets.nodeIds.map(id => points[id]?.name || id).join(', ') || event.location;
+    const routeInfo = changes ? (changes.length ? '변경 구간 ' + changes.length + '곳' : '경로 변화 없음') : '당시 경로 비교 기록 없음';
+    byId('eventMapSummary').textContent = [fmtTime(event.timestamp), location, event.change, routeInfo].join(' · ');
+    return {nodeIds: targets.nodeIds, edgeIds};
+  }
+
   function renderEvents(state) {
     byId('eventCount').textContent = `${state.events.length}건`;
-    byId('eventList').innerHTML = state.events.map((e) => `
-      <div class="event-row">
-        <div class="event-time">${escapeHtml(String(e.timestamp).replace('T', ' ').slice(0, 19))}</div>
-        <div class="event-type ${eventTone(e.type)}">${escapeHtml(e.type)}</div>
-        <div class="event-location">${escapeHtml(e.location)}</div>
-        <div class="event-detail"><strong>${escapeHtml(e.change)}</strong><br><span>${escapeHtml(e.result)}</span></div>
-      </div>`).join('') || '<div class="event-row"><div class="event-detail">이벤트 기록 없음</div></div>';
-
-    const recent = state.events.slice(0, 5);
-    byId('miniEventList').innerHTML = recent.map((e) => {
-      const tone = e.type === 'FIRE' ? 'danger' : ['SHUTTER', 'CONNECTION'].includes(e.type) ? 'warning' : '';
-      return `<div class="mini-event ${tone}"><i></i><span><strong>${fmtTime(e.timestamp)} · ${escapeHtml(e.type)}</strong><br>${escapeHtml(e.change)}</span></div>`;
-    }).join('') || '<div class="mini-event"><i></i><span>이벤트 기록 없음</span></div>';
+    for (const [id, compact] of [['eventList', false], ['miniEventList', true]]) {
+      const target = byId(id);
+      const rows = (compact ? state.events.slice(0, 5) : state.events).map((e, index) => {
+        const selectable = eventCanSelect(e);
+        const tag = selectable ? 'button' : 'div';
+        const attrs = selectable ? `type="button" data-event-index="${index}" aria-pressed="${eventKey(e) === eventSelection?.key}" title="지도에서 이벤트 확인"` : '';
+        if (compact) {
+          const tone = e.type === 'FIRE' ? 'danger' : ['SHUTTER', 'CONNECTION'].includes(e.type) ? 'warning' : '';
+          return `<${tag} ${attrs} class="mini-event ${tone}"><i></i><span><strong>${fmtTime(e.timestamp)} · ${escapeHtml(e.type)}</strong><br>${escapeHtml(e.change)}</span></${tag}>`;
+        }
+        return `<${tag} ${attrs} class="event-row">
+          <span class="event-time">${escapeHtml(String(e.timestamp).replace('T', ' ').slice(0, 19))}</span>
+          <span class="event-type ${eventTone(e.type)}">${escapeHtml(e.type)}</span>
+          <span class="event-location">${escapeHtml(e.location)}</span>
+          <span class="event-detail"><strong>${escapeHtml(e.change)}</strong><br><span>${escapeHtml(e.result)}</span></span>
+        </${tag}>`;
+      }).join('') || '<div class="' + (compact ? 'mini-event' : 'event-row') + '"><span>이벤트 기록 없음</span></div>';
+      if (target._eventRows !== rows) {
+        target.innerHTML = rows;
+        target._eventRows = rows;
+      }
+    }
   }
 
   function renderRouting(state) {
     byId('manualBlockedList').innerHTML = state.manualBlockedEdges.length
       ? state.manualBlockedEdges.map((id) => `<div class="blocked-item"><span>${id}</span><strong>BLOCKED</strong></div>`).join('')
       : '<div class="sensor-row"><span>관리자 수동 차단 없음</span><strong class="state-normal">OPEN</strong></div>';
-  }
-
-  function renderQr(state) {
-    const names = nodeMap();
-    byId('mobileExitPreview').textContent = state.selectedDestinationName || state.selectedExitName || '경로 없음';
-    byId('mobileRoutePreview').textContent = state.route ? state.route.nodes.map((id) => names[id]?.name || id).join(' → ') : '안전한 경로를 찾을 수 없습니다.';
   }
 
   function updateState(state) {
@@ -1316,7 +1471,6 @@
     renderEvents(state);
     window.FireGuardTimeline.render(state, floorplan);
     renderRouting(state);
-    renderQr(state);
     renderCloudState(cloudConfig.enabled ? (realState || state) : state);
     refreshNodeActionCard();
   }
@@ -1421,14 +1575,13 @@
     if (currentState) renderMap(currentState);
   }
 
-  function setCloudFloorplan(plan, snapshot) {
+  function setCloudFloorplan(plan) {
     floorplan = plan;
     geometryRouter = null;
     geometrySignature = '';
     selectedNodeId = null;
     byId('nodeActionCard').classList.add('hidden');
     buildControls();
-    if (map3dReady && typeof Map3D !== 'undefined') Map3D.rebuild(floorplan, snapshot);
   }
 
   function switchToReal(reason = '') {
@@ -1438,7 +1591,7 @@
     publishRealState();
     simulationGeneration += 1;
     if (realFloorplan && realState) {
-      setCloudFloorplan(realFloorplan, realState);
+      setCloudFloorplan(realFloorplan);
       updateState(realState);
     }
     if (reason) showToast(reason, true);
@@ -1489,7 +1642,7 @@
     simulationHistory = result.history;
     try { sessionStorage.setItem('fireguard-simulation-history', JSON.stringify(simulationHistory)); } catch (_) {}
     if (!floorplan || floorplan === realFloorplan) {
-      setCloudFloorplan(result.floorplan, result.state);
+      setCloudFloorplan(result.floorplan);
     }
     updateState(result.state);
     window.dispatchEvent(new CustomEvent('fireguard:simulation-action', {detail: {state: result.state, floorplan: result.floorplan, action}}));
@@ -1538,6 +1691,14 @@
   }
 
   function bindActions() {
+    byId('clearEventMapSelection').addEventListener('click', () => selectMapEvent(null));
+    for (const id of ['miniEventList', 'eventList']) {
+      byId(id).addEventListener('click', e => {
+        const row = e.target.closest('button[data-event-index]');
+        if (row) selectMapEvent(currentState.events[Number(row.dataset.eventIndex)]);
+      });
+    }
+    byId('printLocationCodes').addEventListener('click', () => window.print());
     document.querySelectorAll('.nav-item').forEach((button) => button.addEventListener('click', () => showPage(button.dataset.page)));
     document.querySelectorAll('.nav-shortcut').forEach((button) => button.addEventListener('click', () => showPage(button.dataset.targetPage)));
     byId('realFireSwitchBtn').addEventListener('click', () => {
@@ -1653,9 +1814,6 @@
       buildControls();
       if (currentState) {
         renderMap(currentState);
-        if (map3dReady && typeof Map3D !== 'undefined') {
-          Map3D.rebuild(floorplan, currentState);
-        }
       }
     });
     socket.on('connect_error', () => { setBrowserConnection(false); startPollingFallback(); });

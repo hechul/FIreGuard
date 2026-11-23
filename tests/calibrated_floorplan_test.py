@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import unittest
 
-from hardware.real_ticket_overlay import calibrated_floorplan, legacy_room5_floorplan
+from hardware.real_ticket_overlay import calibrated_floorplan, legacy_room5_floorplan, prototype_floorplan
 from cloud_model import cloud_floorplan
 
 
@@ -13,8 +13,8 @@ class CalibratedFloorplanTest(unittest.TestCase):
         floor = json.loads((Path(__file__).resolve().parents[1] / 'static/data/floorplan.json').read_text(encoding='utf-8'))
         original = deepcopy(floor)
         legacy = legacy_room5_floorplan(floor)
-        self.assertEqual(calibrated_floorplan(legacy), floor)
-        self.assertEqual(calibrated_floorplan(floor), floor)
+        self.assertEqual(calibrated_floorplan(legacy), prototype_floorplan(floor))
+        self.assertEqual(calibrated_floorplan(floor), prototype_floorplan(floor))
         self.assertEqual(floor, original)
         self.assertEqual(legacy['sensors'], floor['sensors'])
         self.assertEqual(next(s['node'] for s in cloud_floorplan(floor)['sensors'] if s['id'] == 'FLM-02'), 'N2')

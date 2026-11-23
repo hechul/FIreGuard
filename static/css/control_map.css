@@ -32,3 +32,69 @@
 #overview .map-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 #overview #map2dLegend { flex-wrap: wrap; gap: 8px 16px; margin: 0; padding: 10px 0; }
 #overview .map-toolbar button { white-space: nowrap; }
+
+#mapStage #nodeLayer :is(.node-label,.fallback-node-label) {
+  display: none;
+  pointer-events: none;
+}
+#mapStage #nodeLayer g:is(:focus-visible,:hover) text,
+#mapStage #nodeLayer .map-node:is(.selected,.blocked) + text {
+  display: block;
+}
+#mapStage #exitLayer { pointer-events: none; }
+#mapStage .exit-box { fill: #143a39; stroke: #67d6b0; stroke-width: 1; filter: none; }
+#mapStage .exit-label { fill: #b8f5d9; font-size: 9px; font-weight: 700; }
+#mapStage .exit-endpoint { fill: #8de2bf; }
+
+#mapStage3d { isolation:isolate; background:#111c26; border:1px solid var(--board-rule); border-radius:8px; }
+#mapStage3d canvas { display:block; }
+#realLed3dNote, .map3d-help, #map3dViewControls {
+  position:absolute; z-index:2; border-radius:5px; background:#10212eed; color:#d6e5ee;
+}
+#realLed3dNote { top:8px; inset-inline:12px; text-align:center; pointer-events:none; font-size:12px; margin:0; padding:4px; }
+.map3d-help { bottom:48px; left:50%; transform:translateX(-50%); white-space:nowrap; font-size:11px; padding:3px 8px; pointer-events:none; }
+#map3dViewControls { bottom:9px; left:50%; transform:translateX(-50%); display:flex; gap:2px; padding:3px; }
+#map3dViewControls button { background:transparent; color:inherit; border:0; border-radius:4px; white-space:nowrap; padding:6px 10px; }
+#map3dViewControls button:is(:hover,:focus-visible) { background:#30495b; }
+
+.event-map-selection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .5rem .75rem;
+  border-inline-start: 3px solid #65cde2;
+  background: #142d3c;
+  color: #e3f7fb;
+  font-size: .8rem;
+}
+.event-map-selection.hidden { display: none; }
+.event-map-selection button { flex-shrink: 0; }
+:is(#eventList, #miniEventList) :is(button, [role="button"]) {
+  cursor: pointer;
+  text-align: start;
+  background-color: transparent;
+  color: inherit;
+  font-family: inherit;
+}
+:is(#eventList, #miniEventList) :is(button, [role="button"]):is(:hover, [aria-pressed="true"]) {
+  background-color: rgba(92, 191, 220, .12);
+}
+:is(#eventList, #miniEventList) :focus-visible {
+  outline: 2px solid #65cde2;
+  outline-offset: -2px;
+}
+#incidentTimeline button.incident-step {
+  display: block;
+  width: calc(100% - 4px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  border: 0;
+  border-inline-start: 1px solid var(--board-rule);
+  cursor: pointer;
+}
+#incidentTimeline button.incident-step:is(:hover, :focus-visible, [aria-pressed="true"]) {
+  background-color: rgba(92, 191, 220, .12);
+}

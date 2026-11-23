@@ -22,3 +22,18 @@ body { margin: 0; }
 .exit { margin-top: 24px; color: #c2eaff; font-size: 1.9rem; font-weight: 800; }
 .route { line-height: 1.75; margin-top: 8px; overflow-wrap: anywhere; }
 .footer { border-top: 1px solid #324a5b; margin-top: 26px; padding-top: 14px; }
+.brand {display:flex;justify-content:space-between;align-items:center;}
+.brand small {font-size:.75rem;color:#aec1d0;letter-spacing:0;}
+.loc {margin:.25rem 0;font-size:clamp(1.65rem,8vw,2.6rem);}
+#guidance {margin-top:24px;}
+#destinationLabel,.exit,.next {margin:.35rem 0;}
+.next {color:#c7dbe7;font-weight:600;}
+#mobileMap {display:block;width:100%;height:clamp(230px,40vh,360px);margin:16px 0;background:#102330;border-radius:10px;}
+.map-room {fill:#1f3745;stroke:#4a626f;stroke-width:3;}
+.map-edge,.map-path {fill:none;stroke-linejoin:round;stroke-linecap:round;}
+.map-edge {stroke:#4e6571;stroke-width:2;}
+.map-path {stroke:#68e2ac;stroke-width:7;}
+.map-origin {fill:#8edaff;stroke:#142838;stroke-width:2;}
+.map-destination {fill:#8be5be;stroke:#142838;stroke-width:2;}
+.map-fire {fill:#ff737e;}
+#mobileMap text {font:700 18px system-ui;fill:#fff;stroke:#102330;stroke-width:4;paint-order:stroke;}

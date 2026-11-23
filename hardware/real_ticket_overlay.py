@@ -92,7 +92,9 @@ def prototype_floorplan(floor):
         if not any(n['id'] == 'N7' for n in result['nodes']):
             raise ValueError('S2 출구 입구 N7이 없습니다')
         exits.append(deepcopy(S2_EXIT))
-        edges.append(deepcopy(S2_EDGE))
+        # Keep legacy sender graph ordering when rebuilding it for validation.
+        index = next((i for i, edge in enumerate(edges) if edge['id'] == 'E40'), len(edges))
+        edges.insert(index, deepcopy(S2_EDGE))
     elif existing_exit != S2_EXIT or existing_edge != S2_EDGE:
         raise ValueError('S2 출구 지도 버전이 예상과 다릅니다')
     return result

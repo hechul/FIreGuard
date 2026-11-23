@@ -1,0 +1,12 @@
+.qr-location-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,260px),1fr)); gap: 24px; margin-block: 24px; }
+.qr-location { text-align: center; background: var(--board-panel); border-top: 2px solid var(--board-accent); padding: 22px; }
+.qr-location h3 { margin: 0; font-size: 26px; }
+.qr-location-id,.qr-location p { font-size: 13px; color: var(--board-soft); }
+.qr-location img { display: block; max-width: 100%; height: auto; margin: 18px auto 8px; image-rendering: pixelated; }
+@media print {
+  body:has(#qr.active) :is(.sidebar,.topbar,.page:not(#qr),#qr .page-header-card,.qr-location .link-btn,#browserOfflineBanner,#toast) { display: none !important; }
+  body:has(#qr.active) :is(.app-shell,.main-area,#qr) { display: block; background: white; color: black; padding: 0; margin: 0; min-height: auto; }
+  #qr.active .qr-location-grid { display: grid; grid-template-columns: 1fr 1fr; }
+  #qr.active .qr-location { break-inside: avoid; background: white; color: black; border: 1px dashed #666; }
+  #qr.active :is(.qr-location-id,.qr-location p) { color: #333; }
+}

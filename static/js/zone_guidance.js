@@ -18,6 +18,58 @@
     }
     return {nodes, edges, destinationId:cursor, routeMode:forest.availableExits.includes(cursor) ? 'exit' : 'fallback'};
   }
+  // Retain a short highlight across DOM rebuilds while flow animation continues.
+  const emphasisMs = 5200;
+  const previousRoutes = new Map();
+  const latestChanges = new Map();
+  const deadlines = new Map();
+  let expiryTimer = null;
+
+  const edgeKey = (id, from, to) => [id, from, to].join('/');
+  function routeKeys(route) {
+    return new Set((route?.edges || []).map((id, i) => edgeKey(id, route.nodes[i], route.nodes[i + 1])));
+  }
+  function trackRoute(origin, known, route, destination, label) {
+    if (!known) {
+      previousRoutes.delete(origin);
+      latestChanges.delete(origin);
+      deadlines.delete(origin);
+      return;
+    }
+    const edges = route instanceof Set ? route : routeKeys(route);
+    const previous = previousRoutes.get(origin);
+    if (previous) {
+      const until = performance.now() + emphasisMs;
+      const expiry = deadlines.get(origin) || new Map();
+      for (const edge of edges) if (!previous.edges.has(edge)) expiry.set(edge, until);
+      for (const edge of expiry.keys()) if (!edges.has(edge)) expiry.delete(edge);
+      if (expiry.size) deadlines.set(origin, expiry);
+      if (origin !== 'overview' && previous.destination !== destination) {
+        latestChanges.set(origin, previous.label + ' → ' + label);
+      }
+    }
+    previousRoutes.set(origin, {edges, destination, label});
+  }
+  function applyEmphasis() {
+    clearTimeout(expiryTimer);
+    const now = performance.now();
+    let nextExpiry = Infinity;
+    for (const [origin, expiry] of deadlines) {
+      for (const [edge, time] of expiry) {
+        if (time <= now) expiry.delete(edge);
+        else nextExpiry = Math.min(nextExpiry, time);
+      }
+      if (!expiry.size) deadlines.delete(origin);
+    }
+    for (const layer of [id('routeLayer'), id('zoneFocusLayer')]) {
+      const changed = deadlines.get(layer.id === 'routeLayer' ? 'overview' : selected);
+      for (const path of layer.querySelectorAll('polyline[data-edge-id]')) {
+        const d = path.dataset;
+        path.classList.toggle('route-reassigned', !!changed?.has(edgeKey(d.edgeId, d.fromNode, d.toNode)));
+      }
+    }
+    if (nextExpiry < Infinity) expiryTimer = setTimeout(applyEmphasis, Math.ceil(nextExpiry - now));
+  }
   function renderExitCounts(exits, totals, exceptions, reportAvailable) {
     const container = id('exitGuidanceCounts');
     if (!container) return;
@@ -52,6 +104,15 @@
     if (names.get('N19') === '추가 노드 N19') names.set('N19', '팝콘 매장 내부');
     const list = id('zoneGuidanceList'), layer = id('zoneFocusLayer');
     const detail = id('zoneGuidanceDetail');
+    const ready = sim ? !!state.simulationZoneRoutes : !!forest;
+    const overview = sim ? state.route : new Set((allZone?.directedEdges || []).map(e => edgeKey(e.edgeId, e.from, e.to)));
+    const source = sim ? state.startNode : 'pi';
+    // A different starting position is a new query, not a reroute.
+    if (previousRoutes.get('overview')?.destination !== source) {
+      previousRoutes.delete('overview');
+      deadlines.delete('overview');
+    }
+    trackRoute('overview', ready, overview, source, '');
     layer.replaceChildren();
     let focusRoute;
     const validOrigins = origins.filter(key => names.has(key));
@@ -87,7 +148,18 @@
         route.routeMode === 'fallback' ? '보조 · ' + target : target;
       button.dataset.status = !known ? 'unknown' : blocked || !route ? 'blocked' : route.routeMode;
       button.firstChild.textContent = names.get(key);
-      button.lastChild.textContent = status;
+      button.children[1].textContent = status;
+      trackRoute(key, known, blocked ? null : route, blocked ? 'blocked' : route?.destinationId || 'no_route', status);
+      const changed = latestChanges.get(key);
+      let note = button.querySelector('.zone-destination-change');
+      if (changed) {
+        if (!note) {
+          note = document.createElement('small');
+          note.className = 'zone-destination-change';
+          button.append(note);
+        }
+        note.textContent = '최근 변경 · ' + changed;
+      } else if (note) note.remove();
       button.setAttribute('aria-pressed',String(selected === key));
       if (selected === key) {
         focusRoute = known && !blocked ? route : null;
@@ -99,7 +171,7 @@
     if (!selected) detail.textContent = sim ? '시뮬레이션 계산 · 구역을 선택하면 지도에 경로가 표시됩니다.' :
       forest ? 'Pi 계산 경로 · 구역을 선택해 확인하세요.' : '확인 가능한 Pi 전체 구역 보고를 기다립니다.';
     id('routeLayer').classList.toggle('zone-focus-muted',Boolean(focusRoute));
-    if (!focusRoute) return;
+    if (!focusRoute) { applyEmphasis(); return; }
     for (const [i,edgeId] of focusRoute.edges.entries()) {
       const edge = plan.edges.find(e => e.id === edgeId);
       const source = document.querySelector('#edgeLayer [data-edge-id="'+CSS.escape(edgeId)+'"]');
@@ -109,6 +181,9 @@
       const path = document.createElementNS('http://www.w3.org/2000/svg','polyline');
       path.setAttribute('class','zone-focus-edge');
       path.setAttribute('points',vertices.join(' '));
+      path.dataset.edgeId = edgeId;
+      path.dataset.fromNode = focusRoute.nodes[i];
+      path.dataset.toNode = focusRoute.nodes[i+1];
       if (forest) {
         path.setAttribute('class','route-edge');
         const base = document.querySelector('#routeLayer [data-edge-id="'+CSS.escape(edgeId)+'"]');
@@ -116,9 +191,15 @@
       } else path.setAttribute('marker-end','url(#zoneArrow)');
       layer.append(path);
     }
+    applyEmphasis();
   }
-  window.FireGuardZoneGuidance = {render(view) {
-    if (previousMode !== view.state.operationMode) selected = null;
+  window.FireGuardZoneGuidance = {realRoute, render(view) {
+    if (previousMode !== view.state.operationMode) {
+      selected = null;
+      deadlines.clear();
+      previousRoutes.clear();
+      latestChanges.clear();
+    }
     previousMode = view.state.operationMode;
     activeView = view;
     paint();

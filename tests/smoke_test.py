@@ -53,9 +53,6 @@ assert s.snapshot()["failSafeActive"] is False
 s.reset()
 for edge_id in ("E03", "E09", "E12", "E16"):
     s.set_manual_edge(edge_id, True)
-# The newly confirmed S2 exit remains usable until its own edge is blocked.
-assert s.snapshot()["route"]["destinationId"] == "EXIT_S2"
-s.set_manual_edge("E39", True)
 snap = s.snapshot()
 assert snap["fallbackActive"] is True
 assert snap["selectedDestinationType"] == "toilet"

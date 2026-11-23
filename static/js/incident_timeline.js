@@ -37,7 +37,7 @@
           const node = sensors.find(sensor => sensor.id === id)?.node;
           return plan?.nodes?.find(n => n.id === node)?.name || node || id;
         }))];
-        rows.push({kind: fire ? 'fire' : 'clear', time:event.timestamp,
+        rows.push({event, kind: fire ? 'fire' : 'clear', time:event.timestamp,
           title: sites.join(', ') + (fire ? ' 화재 감지' : ' 경보 해제'),
           detail: state.cloud?.enabled ? ids.join(' · ') : event.result || ids.join(' · ')});
         for (const id of ids) {
@@ -46,7 +46,7 @@
         }
         if (fire && !active.size) break;
       } else if (inIncident && (event.type === 'LED' || event.type === 'ROUTE')) {
-        rows.push({kind: event.type.toLowerCase(), time:event.timestamp,
+        rows.push({event, kind: event.type.toLowerCase(), time:event.timestamp,
           title: event.type === 'LED' ? 'LED 출력 보고' : '경로 계산 보고',
           detail: event.type === 'LED' ? event.location : event.result});
       }
@@ -57,7 +57,8 @@
   function render(state, plan) {
     const target = document.getElementById('incidentTimeline');
     const rows = incidentRows(state, plan);
-    const key = JSON.stringify(rows);
+    const eventMap = window.FireGuardEventMap;
+    const key = JSON.stringify(rows.map(row => [row, eventMap?.canSelect(row.event), eventMap?.isSelected(row.event)]));
     if (target.dataset.timeline === key) return;
     target.dataset.timeline = key;
     target.replaceChildren();
@@ -69,7 +70,14 @@
       return;
     }
     for (const row of rows) {
-      const item = document.createElement('div');
+      const selectable = eventMap?.canSelect(row.event);
+      const item = document.createElement(selectable ? 'button' : 'div');
+      if (selectable) {
+        item.type = 'button';
+        item.title = '지도에서 위치 보기';
+        item.setAttribute('aria-pressed', String(eventMap.isSelected(row.event)));
+        item.addEventListener('click', () => eventMap.select(row.event));
+      }
       item.className = 'incident-step';
       item.dataset.kind = row.kind;
       const time = document.createElement('time');

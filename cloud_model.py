@@ -14,7 +14,7 @@ from uuid import UUID
 
 from route_service import FloorGraph
 from state_manager import SimulationState
-from hardware.real_ticket_overlay import legacy_room5_floorplan
+from hardware.real_ticket_overlay import legacy_room5_floorplan, prototype_floorplan
 
 CONFIG = json.loads((Path(__file__).parent / 'config/cloud_sensors.json').read_text(encoding='utf-8'))
 MAPPING_VERSION = CONFIG['mappingVersion']
@@ -188,6 +188,9 @@ def validate_hardware_telemetry(data, floorplan, device_id, now=None):
                            data['ledMappingVersion'] == HARDWARE_CALIBRATED_LED_VERSION))
     if data['mappingVersion'] != HARDWARE_SENSOR_VERSION or not compatible_mapping:
         raise ValueError('센서, 지도 또는 LED 매핑 버전이 서버와 다릅니다.')
+    # Validate the sender against its own graph before translating display IDs.
+    if data['graphMappingVersion'] in (HARDWARE_S2_GRAPH_VERSION, HARDWARE_CALIBRATED_GRAPH_VERSION):
+        floorplan = prototype_floorplan(floorplan)
     if data['graphMappingVersion'] != HARDWARE_CALIBRATED_GRAPH_VERSION:
         floorplan = legacy_room5_floorplan(floorplan)
     if (data['source'] != 'raspberry-pi' or type(data['physicalLedCount']) is not int
@@ -397,9 +400,36 @@ def validate_telemetry(data, floorplan, device_id, now=None):
             'led': {'status': led['status'], 'routeId': route_id, 'segments': clean_segments, 'error': error}}
 
 
+def _west_exit_view(value):
+    """Fold the Pi's two identifiers for the west exit into one dashboard exit."""
+    if isinstance(value, dict):
+        return {key: _west_exit_view(item) for key, item in value.items()}
+    if isinstance(value, list):
+        items = [_west_exit_view(item) for item in value]
+        # Only lists containing an alias can acquire duplicate identifiers.
+        if any(item in ("E39", "EXIT_S2") for item in value):
+            return list(dict.fromkeys(items))
+        return items
+    if value == "EXIT_S2":
+        return "EXIT_W"
+    if value == "E39":
+        return "E09"
+    return value
+
+
 def project_state(floorplan, row, events, device_id, stale_seconds=15, now=None, preview_start=None):
     now = now or datetime.now(timezone.utc)
     telemetry = row['telemetry'] if row else None
+    if telemetry and (telemetry.get('hardware') or {}).get('graphMappingVersion') in (
+            HARDWARE_S2_GRAPH_VERSION, HARDWARE_CALIBRATED_GRAPH_VERSION):
+        raw = telemetry['hardware']
+        route_fields = {'routeNodes', 'routeEdges', 'exitNode', 'destinationNode', 'blockedNodes', 'blockedEdges', 'allZone'}
+        hardware_view = {key: _west_exit_view(val) if key in route_fields else val for key, val in raw.items()}
+        zone = hardware_view.get('allZone')
+        if zone and 'coverageEdges' in zone:
+            primary = {edge['edgeId'] for edge in zone['directedEdges']}
+            zone['coverageEdges'] = [e for e in zone['coverageEdges'] if e['edgeId'] not in primary]
+        telemetry = {**telemetry, 'route': _west_exit_view(telemetry.get('route')), 'hardware': hardware_view}
     received = row['received_at'] if row else None
     stale = not row or max((now - timestamp(received)).total_seconds(),
                            (now - timestamp(row['observed_at'])).total_seconds()) > stale_seconds
@@ -446,7 +476,11 @@ def project_state(floorplan, row, events, device_id, stale_seconds=15, now=None,
         if all_zone and any(edge['from'] in last_danger or edge['to'] in last_danger
                             for edge in all_zone['directedEdges'] + all_zone.get('coverageEdges', [])):
             source = 'pi_unverified'
-        if result['route'] and last_danger.intersection(result['route']['nodes']):
+        if all_zone and any(e['edgeId'] in hardware['blockedEdges'] or e['to'] in reported
+                            for e in all_zone['directedEdges'] + all_zone.get('coverageEdges', [])):
+            source = 'pi_unverified'
+        if result['route'] and (last_danger.union(reported).intersection(result['route']['nodes'])
+                                or set(hardware['blockedEdges']).intersection(result['route']['edges'])):
             result['route'] = None
             result['routeMode'] = 'none'
             result['fallbackActive'] = False
@@ -480,6 +514,7 @@ def project_state(floorplan, row, events, device_id, stale_seconds=15, now=None,
                          'result': json.dumps(e.get('payload', {}), ensure_ascii=False)} for e in events]
     result['cloud'] = {'enabled': True, 'deviceId': device_id, 'hasTelemetry': bool(row), 'stale': stale,
                        'receivedAt': received, 'observedAt': row['observed_at'] if row else None,
+                       'bootId': row.get('boot_id') if row else None,
                        'sequence': row['sequence'] if row else None, 'mappingVersion': MAPPING_VERSION,
                        'routeSource': source, 'led': deepcopy(telemetry.get('led') or {'status': 'unknown', 'segments': []}) if telemetry else {'status': 'unknown', 'segments': []},
                        'hardware': deepcopy(hardware) if hardware else None}

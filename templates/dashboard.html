@@ -9,16 +9,18 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/polish.css', v='status-header-20261109') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/gallery_refresh.css', v='bento-monitor-20261119') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/control_room.css', v='map-fit-20261120') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/control_map.css', v='room-20261119d') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/control_map.css', v='event-map-20261123') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/operations_shell.css', v='ops-1') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/operations_pages.css', v='ops-1') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/route_changes.css', v='zone-changes-1') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/qr_locations.css', v='qr-1') }}">
   {% if not cloud_enabled %}<script src="/socket.io/socket.io.js"></script>{% endif %}
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="{{ url_for('static', filename='js/led_plan.js', v='toilet-layout-20261109') }}"></script>
   <script src="{{ url_for('static', filename='js/prototype_projection.js', v='shop-center-20261110') }}"></script>
-  <script src="{{ url_for('static', filename='js/map3d.js', v='real-led-20261112') }}"></script>
+  <script src="{{ url_for('static', filename='js/map3d.js', v='event-map-20261123') }}"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -127,14 +129,17 @@
               <div class="map-toolbar">
                 <!-- 2D / 3D View Toggle -->
                 <div class="mode-toggle" id="mapViewToggle" style="flex-shrink:0;">
-                  <button id="mapView2dBtn" class="active" type="button">2D</button>
-                  <button id="mapView3dBtn" type="button">3D</button>
+                  <button id="mapView2dBtn" aria-pressed="true" class="active" type="button">2D</button>
+                  <button id="mapView3dBtn" aria-pressed="false" type="button">3D</button>
                 </div>
                 <button id="prototypeOverlayBtn" type="button" class="btn ghost" aria-pressed="false">실물 LED 배치 참고</button>
               </div>
             </div>
 
-
+            <div id="eventMapSelection" class="event-map-selection hidden">
+              <span id="eventMapSummary" role="status"></span>
+              <button id="clearEventMapSelection" type="button" class="btn ghost">강조 해제</button>
+            </div>
 
             <div class="map-stage-container" style="position: relative;">
               <!-- 2D SVG Layer -->
@@ -164,6 +169,7 @@
                   <g id="nodeLayer"></g>
                   <g id="exitLayer"></g>
                   <g id="incidentMapLayer" pointer-events="none" aria-hidden="true"></g>
+                  <g id="eventMapLayer" pointer-events="none" aria-hidden="true"></g>
                 </svg>
               </div>
               <p id="prototypeOverlayNote" class="prototype-overlay-note hidden">실물 LED 구간 참고도 · 위치와 방향은 미검증이며 점선은 실제 점등 상태가 아닙니다. LED 62 표시는 N28·N35의 공유 관계만 나타내며 LED의 실제 위치가 아닙니다.</p>
@@ -171,15 +177,14 @@
               <p id="allZoneNote" class="prototype-overlay-note hidden"></p>
 
               <!-- 3D Map Container (hidden by default; shown on 3D toggle) -->
-              <div class="map-stage" id="mapStage3d" style="display:none; position:relative; overflow:hidden; background:#111418; border-color:#2A3441;">
-                <p id="realLed3dNote" hidden style="position:absolute;top:8px;left:12px;right:12px;z-index:5;color:#fff;font-size:12px;text-align:center;pointer-events:none"></p>
-                <!-- Three.js canvas injected here by Map3D.init() -->
-                <div id="map3dViewControls" style="position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:5;">
-                  <button onclick="Map3D.setView('iso')"  class="btn ghost" style="padding:6px 12px;font-size:12px;background:rgba(30,40,55,0.85);color:#E2E8F0;border:1px solid rgba(255,255,255,0.1);border-radius:999px;">📐 아이소메트릭</button>
-                  <button onclick="Map3D.setView('top')"  class="btn ghost" style="padding:6px 12px;font-size:12px;background:rgba(30,40,55,0.85);color:#E2E8F0;border:1px solid rgba(255,255,255,0.1);border-radius:999px;">🔝 탑뷰</button>
-                  <button onclick="Map3D.setView('side')" class="btn ghost" style="padding:6px 12px;font-size:12px;background:rgba(30,40,55,0.85);color:#E2E8F0;border:1px solid rgba(255,255,255,0.1);border-radius:999px;">↗ 사이드뷰</button>
+              <div class="map-stage" id="mapStage3d" style="display:none">
+                <p id="realLed3dNote" hidden></p>
+                <div id="map3dViewControls" role="group" aria-label="3D 시점">
+                  <button onclick="Map3D.setView('iso')" type="button">단면도</button>
+                  <button onclick="Map3D.setView('top')" type="button">위에서 보기</button>
+                  <button onclick="Map3D.setView('side')" type="button">옆에서 보기</button>
                 </div>
-                <div style="position:absolute;top:12px;right:14px;font-size:11px;color:#64748B;pointer-events:none;background:rgba(15,23,42,0.6);padding:4px 8px;border-radius:6px;">🖱️ 드래그: 360도 회전 | 우클릭: 이동 | 휠: 줌 | 노드 클릭: 제어</div>
+                <span class="map3d-help">드래그로 회전 · 휠로 확대 · 노드 선택</span>
               </div>
 
               <!-- Action Card (floats over 2D and 3D maps) -->
@@ -287,8 +292,8 @@
               <section class="panel qr-mini-card">
                 <div class="panel-heading compact"><div><span class="panel-kicker">MOBILE</span><h2>QR 대피 안내</h2></div></div>
                 <div class="qr-mini-body">
-                  <img src="{{ url_for('static', filename='images/qr_n1.png') }}" alt="모바일 대피 안내 QR 코드">
-                  <div><p>현재 위치 기반<br>모바일 대피 화면</p><a href="/mobile/N1" target="_blank" rel="noopener">모바일 미리보기 →</a></div>
+                  <img src="{{ url_for('static', filename='images/qr_n37.png') }}" alt="5관 모바일 대피 안내 QR">
+                  <div><p>5관 · 현장 대피 안내</p><button class="text-btn nav-shortcut" data-target-page="qr" type="button">장소별 QR 보기 →</button></div>
                 </div>
               </section>
 
@@ -391,21 +396,19 @@
       <!-- QR -->
       <section id="qr" class="page">
         <div class="page-header-card">
-          <div><span class="panel-kicker">MOBILE EVACUATION</span><h2>QR 기반 모바일 대피 안내</h2><p>관제 화면의 추천 경로를 모바일 화면에서도 확인하는 시연용 기능입니다.</p></div>
+          <div><span class="panel-kicker">MOBILE EVACUATION</span><h2>QR 기반 모바일 대피 안내</h2><p>각 장소에 해당 QR을 부착하세요. 스캔하면 해당 위치에서 출발하는 배포 서버의 최신 안내를 확인할 수 있습니다.</p></div>
+          <button class="btn secondary qr-print" type="button" id="printLocationCodes">안내판 인쇄</button>
         </div>
-        <div class="qr-page-grid">
-          <section class="panel qr-card-large">
-            <img src="{{ url_for('static', filename='images/qr_n1.png') }}" alt="모바일 대피 안내 QR 코드">
-            <div><span>현재 위치</span><strong>N1 · 매표소 우측</strong><p>스마트폰으로 QR을 스캔하여 대피 화면을 확인합니다.</p><a href="/mobile/N1" target="_blank" rel="noopener" class="btn primary link-btn">모바일 화면 열기</a></div>
-          </section>
-          <section class="panel phone-preview">
-            <div class="phone-frame">
-              <span class="phone-kicker">FIREGUARD</span>
-              <h3>대피 안내</h3>
-              <span>추천 비상구</span><strong id="mobileExitPreview">-</strong>
-              <p id="mobileRoutePreview">-</p>
-            </div>
-          </section>
+        <div class="qr-location-grid">
+          {% for node, place in [('N37','5관'), ('N40','매표소')] %}
+          <article class="qr-location">
+            <h3>{{ place }}</h3>
+            <span class="qr-location-id">위치 {{ node }}</span>
+            <img width="220" height="220" src="{{ url_for('static', filename='images/qr_' ~ node|lower ~ '.png') }}" alt="{{ place }} 대피 안내 QR 코드">
+            <p>이 위치에서 출발하는 대피 경로</p>
+            <a class="btn primary link-btn" href="/mobile/{{ node }}" target="_blank" rel="noopener">모바일 화면 열기</a>
+          </article>
+          {% endfor %}
         </div>
       </section>
 
@@ -542,9 +545,9 @@
   <script src="{{ url_for('static', filename='js/prototype_map.js', v='toilet-layout-20261109') }}"></script>
   <script src="{{ url_for('static', filename='js/real_led_projection.js', v='ticket-20261113') }}"></script>
   <script src="{{ url_for('static', filename='js/incident_display.js', v='incident-1') }}"></script>
-  <script src="{{ url_for('static', filename='js/incident_timeline.js', v='wall-1') }}"></script>
-  <script src="{{ url_for('static', filename='js/zone_guidance.js', v='zones-3') }}"></script>
-  <script src="{{ url_for('static', filename='js/dashboard.js', v='map-controls-20261120') }}"></script>
+  <script src="{{ url_for('static', filename='js/incident_timeline.js', v='event-map-20261123') }}"></script>
+  <script src="{{ url_for('static', filename='js/zone_guidance.js', v='zone-changes-1') }}"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js', v='event-map-20261123') }}"></script>
   <script src="{{ url_for('static', filename='js/physical_sim_control.js', v='map-controls-20261120') }}"></script>
   <script src="{{ url_for('static', filename='js/real_fire_control.js', v='real-clear-20261112') }}"></script>
   <script src="{{ url_for('static', filename='js/sidebar.js', v='ui-20261109') }}"></script>
