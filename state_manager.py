@@ -508,10 +508,8 @@ class SimulationState:
 
             route_mode = self.route.get("routeMode", "exit") if self.route else "none"
 
-            if not self.route:
-                overall_status = "no_route"
-            elif fire_ids:
-                overall_status = "fire"
+            if fire_ids:
+                overall_status = "fire" if self.route else "no_route"
             elif route_mode == "fallback":
                 overall_status = "warning"
             else:

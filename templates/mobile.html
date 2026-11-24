@@ -1,13 +1,12 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>FireGuard · 현재 위치 대피 안내</title>
-<style>
-*{box-sizing:border-box}body{margin:0;background:#eff3f7;color:#19334c;font-family:system-ui,'Malgun Gothic',sans-serif}.wrap{max-width:600px;margin:auto;padding:20px}.brand{font-weight:900;letter-spacing:2px}.card{background:white;border-radius:18px;padding:20px;margin:16px 0}.muted{font-size:13px;line-height:1.6;color:#526b7f}h1{margin:8px 0;font-size:30px}h2{font-size:22px;margin:10px 0}.status{font-weight:bold;color:#b13a32}.status[data-status=normal]{color:#137558}.destination{font-size:26px;font-weight:800;color:#145cae}.map{width:100%;height:auto;max-height:65vh;display:block}li{margin:12px 0;line-height:1.5}button{border:1px solid #bfccda;border-radius:9px;background:white;padding:12px;color:#19334c;font-size:15px;cursor:pointer}.legend{display:flex;gap:16px;font-size:12px}.legend span:nth-child(1){color:#996000}.legend span:nth-child(2){color:#176bda}.legend span:nth-child(3){color:#d83449}.footer{font-size:12px;line-height:1.6;text-align:center;color:#526b7f}
-</style></head><body data-node="{{ node_id }}" data-location="{{ location_name }}">
-<main class="wrap"><div class="brand">FIREGUARD · 모형 시연</div>
+<meta name="theme-color" content="#0c1925">
+<link rel="stylesheet" href="{{ url_for('static',filename='css/qr_mobile.css') }}"></head><body data-node="{{ node_id }}" data-location="{{ location_name }}">
+<main class="wrap"><header class="brand"><span class="brand-icon">F</span><div>FIREGUARD<small>모바일 대피 안내 · 모형 시연</small></div></header>
 <section class="card"><div class="muted">QR 부착 위치 · {{ node_id }}</div><h1 id="location">{{ location_name }}</h1><p class="muted">이 위치를 출발점으로 안내합니다. 이동한 위치는 자동 추적하지 않습니다.</p>
-<div id="status" class="status" role="status">최신 상태 확인 중</div><p id="message" class="muted">서버에서 정보를 불러오고 있습니다.</p><div id="destination" class="destination">대피지점 확인 중</div></section>
-<section class="card"><h2>이 위치에서의 경로</h2><div class="legend"><span>● 현재 위치</span><span>→ 이동 경로</span><span>● 화재·차단</span></div><svg id="map" class="map" role="img" aria-label="현재 위치와 대피경로 지도"></svg><ol id="steps"></ol></section>
+<div id="status" class="status" role="status">최신 상태 확인 중</div><p id="message" class="muted">서버에서 정보를 불러오고 있습니다.</p><div class="destination-label">안내 목적지</div><div id="destination" class="destination">대피지점 확인 중</div><div class="next"><span>다음 이동 지점</span><strong id="nextStop">확인 중</strong></div><p id="routeChange" class="notice" role="status" hidden></p></section>
+<section class="card"><div class="map-heading"><h2>이 위치에서의 경로</h2><button id="mapToggle" type="button" aria-pressed="true">전체 지도</button></div><div class="legend"><span>● 현재 위치</span><span>→ 이동 경로</span><span>● 화재·차단</span></div><p id="mapEmpty">최신 경로를 확인하면 지도가 표시됩니다.</p><svg hidden id="map" class="map" role="img" aria-label="현재 위치와 대피경로 지도"></svg><h3 hidden id="stepsTitle" class="steps-title">이동 순서</h3><ol id="steps"></ol></section>
 <p id="updated" class="muted"></p><button id="refresh" type="button">지금 새로고침</button><p class="footer">현장 LED 및 안내요원의 지시를 함께 확인하세요.<br>모형 시연용 안내이며 실제 발광을 확인한 화면은 아닙니다.</p></main>
 <script src="{{ url_for('static',filename='js/real_led_projection.js') }}"></script><script src="{{ url_for('static',filename='js/prototype_projection.js') }}"></script><script src="{{ url_for('static',filename='js/mobile_guidance.js') }}"></script><script src="{{ url_for('static',filename='js/mobile.js') }}"></script>
 </body></html>

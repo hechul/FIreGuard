@@ -17,7 +17,7 @@ def qr_svg(url):
     pixels = ''.join(f'<rect x="{x}" y="{y}" width="1" height="1"/>'
                      for y, row in enumerate(matrix) for x, dark in enumerate(row) if dark)
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {size} {size}" '
-            f'width="800" height="800" role="img" aria-label="대피 안내 QR">'
+            f'width="20mm" height="20mm" role="img" aria-label="대피 안내 QR">'
             f'<rect width="{size}" height="{size}" fill="white"/>'
             f'<g fill="black" shape-rendering="crispEdges">{pixels}</g></svg>')
 
@@ -32,7 +32,9 @@ def main():
         (images / f"{location['id']}.svg").write_text(svg, encoding='utf-8')
         qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=20, border=4)
         qr.add_data(url); qr.make(fit=True)
-        qr.make_image(fill_color='black', back_color='white').save(images / f"{location['id']}.png")
+        image = qr.make_image(fill_color='black', back_color='white')
+        dpi = image.size[0] * 25.4 / 20
+        image.save(images / f"{location['id']}.png", dpi=(dpi, dpi))
     output = root / 'static/qr'
     output.mkdir(parents=True, exist_ok=True)
     env = Environment(loader=FileSystemLoader(root / 'templates'), autoescape=select_autoescape(['html']))

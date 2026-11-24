@@ -230,7 +230,7 @@ def get_state():
         snapshot['routeMode'] = route.route_mode if route else 'none'
         snapshot['selectedDestinationName'] = state.graph.destination_name(route.destination_id) if route else None
         snapshot['selectedExitName'] = snapshot['selectedDestinationName']
-        if route is None:
+        if route is None and snapshot['sensorCounts']['flameActive'] > 0:
             snapshot['overallStatus'] = 'no_route'
     return jsonify(snapshot)
 
