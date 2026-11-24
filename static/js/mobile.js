@@ -3,6 +3,15 @@
   const start = document.body.dataset.node;
   const el = id => document.getElementById(id);
   let focused = false, lastDrawing = null, previousRoute = null, changedUntil = 0;
+  let referenceFloor = JSON.parse(el('referenceFloorplan').textContent);
+  function showReferenceMap() {
+    lastDrawing = [window.FireGuardPrototypeProjection.project(referenceFloor), {nodes:[],edges:[]}, {blockedNodes:[]}];
+    draw(...lastDrawing);
+    el('map').hidden = false;
+    el('mapEmpty').hidden = false;
+    el('mapEmpty').textContent = '전체 지도와 QR 위치입니다. 현재 대피경로는 확인되지 않았습니다.';
+    el('mapToggle').disabled = true;
+  }
   function shape(tag, attrs, text) {
     const item = document.createElementNS('http://www.w3.org/2000/svg', tag);
     for (const [key, value] of Object.entries(attrs)) item.setAttribute(key, value);
@@ -56,9 +65,8 @@
     el('status').textContent = '최신 안내 확인 불가';
     el('message').textContent = message;
     el('destination').textContent = '현장 안내를 확인하세요';
-    el('steps').replaceChildren(); el('map').replaceChildren();
-    el('map').hidden = true; el('mapEmpty').hidden = false;
-    el('mapToggle').disabled = true;
+    el('steps').replaceChildren();
+    showReferenceMap();
     el('stepsTitle').hidden = true;
     el('updated').textContent = '경로 표시를 중단했습니다.';
   }
@@ -71,7 +79,12 @@
         if (!response.ok) throw new Error('조회 실패');
         return response.json();
       };
-      const [state, raw] = await Promise.all([read('/api/state?startNode='+encodeURIComponent(start)),read('/api/floorplan')]);
+      const [stateResult, floorResult] = await Promise.allSettled([read('/api/state?startNode='+encodeURIComponent(start)),read('/api/floorplan')]);
+      if (floorResult.status === 'fulfilled') referenceFloor = floorResult.value;
+      if (stateResult.status !== 'fulfilled' || floorResult.status !== 'fulfilled') {
+        clear('최신 상태를 확인할 수 없어 대피경로를 숨겼습니다. 전체 지도는 참고용입니다.'); return;
+      }
+      const state = stateResult.value, raw = floorResult.value;
       if (document.hidden || !navigator.onLine) { clear('최신 경로를 다시 확인해야 합니다.'); return; }
       const floor = window.FireGuardRealLedProjection.floorplanForReport(raw,state.cloud);
       const view = window.FireGuardMobileGuidance.select(state,floor,start);
@@ -98,7 +111,7 @@
       el('map').hidden = !lastDrawing; el('mapEmpty').hidden = !!lastDrawing;
       el('mapToggle').disabled = !lastDrawing;
       el('stepsTitle').hidden = view.nodes.length === 0;
-      if (!lastDrawing) el('map').replaceChildren(); else draw(...lastDrawing);
+      if (!lastDrawing) showReferenceMap(); else draw(...lastDrawing);
       const reported = state.cloud?.observedAt || state.updatedAt;
       const validTime = reported && !Number.isNaN(Date.parse(reported));
       el('updated').textContent = (validTime ? '상태 보고 '+new Date(reported).toLocaleTimeString('ko-KR') : '상태 보고 시각 미확인')+' · 2초마다 확인';
@@ -115,5 +128,5 @@
   window.addEventListener('offline',() => clear('인터넷 연결을 확인하세요.'));
   document.addEventListener('visibilitychange',() => { clear('최신 경로를 확인하고 있습니다.'); if (!document.hidden) tick(); });
   el('refresh').addEventListener('click',tick);
-  tick(); setInterval(tick,2000);
+  showReferenceMap(); tick(); setInterval(tick,2000);
 }());

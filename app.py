@@ -70,7 +70,7 @@ def mobile(node_id: str):
         abort(404)
     labels = {n['id']: n['name'] for n in plan['nodes'] + plan['exits']}
     labels.update({n['id']: n['label'] for n in QR_LOCATIONS})
-    return render_template("mobile.html", node_id=node_id, location_name=labels[node_id])
+    return render_template("mobile.html", node_id=node_id, location_name=labels[node_id], mobile_floorplan=plan)
 
 
 @app.get('/qr')
