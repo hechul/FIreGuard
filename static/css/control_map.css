@@ -98,3 +98,34 @@
 #incidentTimeline button.incident-step:is(:hover, :focus-visible, [aria-pressed="true"]) {
   background-color: rgba(92, 191, 220, .12);
 }
+
+.zone-map-summary, .zone-map-notice {
+  margin: 0;
+  padding: .55rem .85rem;
+  font-size: .83rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.zone-map-summary {
+  border-inline-start: 3px solid #63d7a6;
+  background: #102e30;
+  color: #d4ffea;
+}
+.zone-map-notice {
+  border-inline-start: 3px solid #e4b879;
+  background: #302a22;
+  color: #ffdfae;
+}
+.zone-map-summary:empty, .zone-map-notice:empty { display: none; }
+#mapZonePicker {
+  color-scheme: dark;
+  max-width: 11rem;
+  padding: .45rem .6rem;
+  border: 1px solid #3a5465;
+  border-radius: .4rem;
+  background: #112332;
+  color: #e0edf3;
+  font: inherit;
+  font-size: .78rem;
+}
+#mapZonePicker:focus-visible { outline: 2px solid #75d9ea; }

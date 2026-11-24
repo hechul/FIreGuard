@@ -23,7 +23,31 @@
   // Retain a short highlight across DOM rebuilds while flow animation continues.
   const emphasisMs = 5200;
   const previousRoutes = new Map();
-  const latestChanges = new Map();
+  let previousFires = null;
+  let noticeTimer = null;
+  const noticeDuration = 6500;
+
+  function placeName(names, id) {
+    const name = names.get(id);
+    if (!name || name.startsWith('추가 노드') || /^N[0-9]+$/.test(name)) return '';
+    return name.replace(/ 내부$/, '').replace(/ 분기점$/, '');
+  }
+  function routePlaces(route, names) {
+    // Keep the caption short enough to read while watching the moving path.
+    const origin = placeName(names, route.nodes[0]);
+    const destination = placeName(names, route.destinationId);
+    const corridors = route.nodes.slice(1,-1).map(id => placeName(names,id));
+    const corridor = corridors.find(name => name.includes('복도'));
+    return [...new Set([origin, corridor, destination].filter(Boolean))].join(' → ');
+  }
+  function showNotice(message) {
+    clearTimeout(noticeTimer);
+    const notice = id('zoneMapNotice');
+    if (!notice) return;
+    notice.textContent = message;
+    notice.hidden = !message;
+    if (message) noticeTimer = setTimeout(() => showNotice(''), noticeDuration);
+  }
   const deadlines = new Map();
   let expiryTimer = null;
 
@@ -34,7 +58,6 @@
   function trackRoute(origin, known, route, destination, label) {
     if (!known) {
       previousRoutes.delete(origin);
-      latestChanges.delete(origin);
       deadlines.delete(origin);
       return;
     }
@@ -46,9 +69,6 @@
       for (const edge of edges) if (!previous.edges.has(edge)) expiry.set(edge, until);
       for (const edge of expiry.keys()) if (!edges.has(edge)) expiry.delete(edge);
       if (expiry.size) deadlines.set(origin, expiry);
-      if (origin !== 'overview' && previous.destination !== destination) {
-        latestChanges.set(origin, previous.label + ' → ' + label);
-      }
     }
     previousRoutes.set(origin, {edges, destination, label});
   }
@@ -107,6 +127,12 @@
     const list = id('zoneGuidanceList'), layer = id('zoneFocusLayer');
     const detail = id('zoneGuidanceDetail');
     const ready = sim ? !!state.simulationZoneRoutes : !!forest;
+    const fires = ready ? new Set(Object.entries(state.flameSensors || {})
+      .filter(([,value]) => value.active).map(([key]) => key)) : null;
+    const addedFire = previousFires?.size > 0 && fires && [...fires].some(key => !previousFires.has(key));
+    previousFires = fires;
+    const changes = [];
+    if (!fires?.size) showNotice('');
     const overview = sim ? state.route : new Set((allZone?.directedEdges || []).map(e => edgeKey(e.edgeId, e.from, e.to)));
     const source = sim ? state.startNode : 'pi';
     // A different starting position is a new query, not a reroute.
@@ -121,6 +147,20 @@
     const totals = new Map(plan.exits.map(exit => [exit.id, 0]));
     const exceptions = {fallback: 0, blocked: 0, missing: 0, unknown: 0};
     if (!validOrigins.includes(selected)) selected = null;
+    const picker = id('mapZonePicker');
+    if (picker) {
+      const choices = validOrigins.map(key => [key, placeName(names,key)]);
+      const signature = JSON.stringify(choices);
+      if (picker.dataset.choices !== signature) {
+        picker.replaceChildren(new Option('전체 구역', ''), ...choices.map(([key, name]) => new Option(name, key)));
+        picker.dataset.choices = signature;
+        picker.onchange = () => {
+          selected = picker.value || null;
+          paint();
+        };
+      }
+      picker.value = selected || '';
+    }
     for (const key of validOrigins) {
       let button = list.querySelector('[data-zone="'+key+'"]');
       if (!button) {
@@ -129,7 +169,6 @@
         button.append(document.createElement('strong'),document.createElement('span'));
         button.onclick = () => {
           selected = selected === key ? null : key;
-          if (selected) activeView.onFocus();
           paint();
         };
         list.append(button);
@@ -151,30 +190,33 @@
       button.dataset.status = !known ? 'unknown' : blocked || !route ? 'blocked' : route.routeMode;
       button.firstChild.textContent = names.get(key);
       button.children[1].textContent = status;
+      const previous = previousRoutes.get(key);
+      if (addedFire && previous && known && !blocked && route &&
+          names.has(previous.destination) && previous.destination !== route.destinationId) {
+        changes.push({key, text: placeName(names,key) + ' 대피 목적지 변경 · ' + previous.label + ' → ' + status});
+      }
       trackRoute(key, known, blocked ? null : route, blocked ? 'blocked' : route?.destinationId || 'no_route', status);
-      const changed = latestChanges.get(key);
-      let note = button.querySelector('.zone-destination-change');
-      if (changed) {
-        if (!note) {
-          note = document.createElement('small');
-          note.className = 'zone-destination-change';
-          button.append(note);
-        }
-        note.textContent = '최근 변경 · ' + changed;
-      } else if (note) note.remove();
       button.setAttribute('aria-pressed',String(selected === key));
       if (selected === key) {
         focusRoute = known && !blocked ? route : null;
-        detail.textContent = names.get(key) + ' · ' + (focusRoute ? focusRoute.nodes.join(' → ') : status);
+        detail.textContent = focusRoute ? routePlaces(focusRoute, names) : placeName(names,key) + ' · ' + status;
       }
+    }
+    if (changes.length) {
+      const change = changes.find(item => item.key === selected) || changes[0];
+      showNotice(change.text + (changes.length > 1 ? ' · 외 ' + (changes.length - 1) + '개 구역' : ''));
+    }
+    const summary = id('zoneMapSummary');
+    if (summary) {
+      summary.hidden = !selected;
+      summary.textContent = selected ? detail.textContent : '';
     }
     renderExitCounts(plan.exits, totals, exceptions, validOrigins.length > exceptions.unknown);
     for (const button of [...list.children]) if (!validOrigins.includes(button.dataset.zone)) button.remove();
     if (!selected) detail.textContent = sim ? '시뮬레이션 계산 · 구역을 선택하면 지도에 경로가 표시됩니다.' :
       forest ? 'Pi 계산 경로 · 구역을 선택해 확인하세요.' : '확인 가능한 Pi 전체 구역 보고를 기다립니다.';
-    id('routeLayer').classList.toggle('zone-focus-muted',Boolean(focusRoute));
-    if (!focusRoute) { applyEmphasis(); return; }
-    for (const [i,edgeId] of focusRoute.edges.entries()) {
+    id('routeLayer').classList.toggle('zone-focus-muted',Boolean(selected));
+    for (const [i,edgeId] of (focusRoute?.edges || []).entries()) {
       const edge = plan.edges.find(e => e.id === edgeId);
       const source = document.querySelector('#edgeLayer [data-edge-id="'+CSS.escape(edgeId)+'"]');
       if (!source || !edge) continue;
@@ -197,13 +239,15 @@
       layer.append(path);
     }
     applyEmphasis();
+    activeView.onZonePaint?.(selected, focusRoute || null);
   }
   window.FireGuardZoneGuidance = {realRoute, render(view) {
     if (previousMode !== view.state.operationMode) {
       selected = null;
       deadlines.clear();
       previousRoutes.clear();
-      latestChanges.clear();
+      previousFires = null;
+      showNotice('');
     }
     previousMode = view.state.operationMode;
     activeView = view;

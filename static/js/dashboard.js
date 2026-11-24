@@ -1116,13 +1116,8 @@
     updateRouteVisualScale();
 
     window.FireGuardIncidentDisplay.render(state, displayPlan, points);
-    window.FireGuardZoneGuidance.render({
-      state, plan: displayPlan, allZone,
-      realCloud: cloudView === 'real' && Boolean(state.cloud?.enabled),
-      onFocus: () => { if (mapViewMode === '3d') setMapView('2d'); },
-    });
-
-    if (mapViewMode === '3d') {
+    function paintZone3d(selected, focusRoute) {
+      if (mapViewMode !== '3d') return;
       try {
         const version = state.cloud?.hardware?.graphMappingVersion;
         const paths = lines.map(({segment, coords, remaining}) => ({...segment, vertices: coords, remaining}));
@@ -1134,7 +1129,26 @@
         }
         sceneFloorplan = floorplan;
         sceneGraphVersion = version;
-        Map3D.update(state, paths);
+        if (selected) for (const path of paths) path.muted = true;
+        if (focusRoute) {
+          // Reuse the projected SVG geometry, including the two physical
+          // approaches to the west exit, in its actual traversal order.
+          const focusPaths = Array.from(byId('zoneFocusLayer').querySelectorAll('polyline'), path => ({
+            edgeId: path.dataset.edgeId, from: path.dataset.fromNode, to: path.dataset.toNode,
+            vertices: path.getAttribute('points').trim().split(/\s+/).map(p => p.split(',').map(Number)),
+          }));
+          let remaining = 0;
+          for (let i = focusPaths.length - 1; i >= 0; i--) {
+            const path = focusPaths[i];
+            for (let j = 1; j < path.vertices.length; j++) {
+              const [x,y] = path.vertices[j], [px,py] = path.vertices[j - 1];
+              remaining += Math.hypot(x - px, y - py);
+            }
+            path.remaining = remaining;
+          }
+          paths.push(...focusPaths);
+        }
+        Map3D.update(state, paths, selected);
         Map3D.focusEvent?.(focus.nodeIds[0] || null, focus.edgeIds, focus.nodeIds.slice(1));
       } catch (error) {
         console.error('3D map unavailable', error);
@@ -1144,6 +1158,12 @@
         showToast('3D 지도를 표시할 수 없어 2D 지도로 돌아왔습니다.', true);
       }
     }
+
+    window.FireGuardZoneGuidance.render({
+      state, plan: displayPlan, allZone,
+      realCloud: cloudView === 'real' && Boolean(state.cloud?.enabled),
+      onZonePaint: paintZone3d,
+    });
   }
 
   function renderHeader(state) {

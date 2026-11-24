@@ -478,7 +478,7 @@ const Map3D = (() => {
       pool.route.material.dispose();
       pool.route = null;
     }
-    const positions = [], distances = [], sides = [], indices = [];
+    const positions = [], distances = [], sides = [], intensities = [], indices = [];
     for (const line of lines) {
       let travelled = 0;
       const points = line.vertices.filter(([x,y], i, vertices) =>
@@ -498,7 +498,9 @@ const Map3D = (() => {
         const dy = dot < -.95 ? next[1] : (prev[1]+next[1]) / Math.max(.6,1+dot);
         if (i) travelled += prev[2];
         for (const side of [-1,1]) {
-          positions.push(bx(x + side*dx*2.8), FLOOR_Y+5, bz(y + side*dy*2.8));
+          const width = line.muted ? 1.7 : 2.8;
+          positions.push(bx(x + side*dx*width), FLOOR_Y + (line.muted ? 4 : 5), bz(y + side*dy*width));
+          intensities.push(line.muted ? 0 : 1);
           distances.push(travelled - remaining);
           sides.push(side);
         }
@@ -513,21 +515,24 @@ const Map3D = (() => {
     geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
     geometry.setAttribute('distanceAlong',new THREE.Float32BufferAttribute(distances,1));
     geometry.setAttribute('side',new THREE.Float32BufferAttribute(sides,1));
+    geometry.setAttribute('intensity',new THREE.Float32BufferAttribute(intensities,1));
     geometry.setIndex(indices);
     const material = new THREE.ShaderMaterial({
       uniforms: {phase: {value:0}},
       side: THREE.DoubleSide,
       vertexShader: `attribute float distanceAlong;
-        attribute float side;
+        attribute float side; attribute float intensity;
+        varying float emphasis;
         varying float d; varying float across;
-        void main() { d=distanceAlong; across=side;
+        void main() { d=distanceAlong; across=side; emphasis=intensity;
           gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-      fragmentShader: `uniform float phase;
+      fragmentShader: `uniform float phase; varying float emphasis;
         varying float d; varying float across;
         void main() {
           float band = mod(d - phase + 2.4*abs(across), 21.0);
           float shine = smoothstep(4.0, 7.0, band)*(1.0-smoothstep(12.0,15.0,band));
-          gl_FragColor=vec4(mix(vec3(.035,.43,.29),vec3(.46,1.0,.74),shine),1.0);
+          vec3 flow=mix(vec3(.035,.43,.29),vec3(.46,1.0,.74),shine);
+          gl_FragColor=vec4(mix(vec3(.23,.32,.33), flow, emphasis),1.0);
         }`,
     });
     pool.route = new THREE.Mesh(geometry,material);
@@ -535,7 +540,7 @@ const Map3D = (() => {
     _dynamicGroup.add(pool.route);
   }
 
-  function update(state, directedLines = []) {
+  function update(state, directedLines = [], selectedZone = null) {
     if (!_scene || !_floorplan) return;
 
     const cloud = state.cloud;
@@ -543,7 +548,7 @@ const Map3D = (() => {
       (!cloud.hasTelemetry || cloud.stale || cloud.routeSource === 'pi_unverified');
     const lines = uncertain ? [] : directedLines;
     _updateRoute(lines);
-    const destinations = new Set(lines.map(line => line.to));
+    const destinations = new Set(lines.filter(line => !line.muted).map(line => line.to));
 
     // 2. Edge colours (blocked vs normal)
     Object.entries(pool.edges).forEach(([eid, line]) => {
@@ -558,7 +563,7 @@ const Map3D = (() => {
     Object.entries(pool.nodes).forEach(([nid, mesh]) => {
       const members = window.FireGuardNodeGroups?.members(nid) || [nid];
       const blocked = members.some(id => state.blockedNodes.includes(id));
-      const isStart = members.includes(state.startNode);
+      const isStart = members.includes(selectedZone || state.startNode);
       const isFallback = Boolean(fallbackById[nid]);
       let c = COLORS.node;
       if (blocked)    c = COLORS.nodeDanger;

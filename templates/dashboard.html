@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/polish.css', v='status-header-20261109') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/gallery_refresh.css', v='bento-monitor-20261119') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/control_room.css', v='map-fit-20261120') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/control_map.css', v='event-map-20261123') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/control_map.css', v='zone-focus-20261123') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/operations_shell.css', v='ops-1') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/operations_pages.css', v='ops-1') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/route_changes.css', v='zone-changes-1') }}">
@@ -20,7 +20,7 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="{{ url_for('static', filename='js/led_plan.js', v='toilet-layout-20261109') }}"></script>
   <script src="{{ url_for('static', filename='js/prototype_projection.js', v='shop-center-20261110') }}"></script>
-  <script src="{{ url_for('static', filename='js/map3d.js', v='event-map-20261123') }}"></script>
+  <script src="{{ url_for('static', filename='js/map3d.js', v='zone-focus-20261123') }}"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -127,6 +127,9 @@
                 <h2>실시간 대피 지도</h2>
               </div>
               <div class="map-toolbar">
+                <select id="mapZonePicker" aria-label="지도에서 강조할 구역">
+                  <option value="">전체 구역</option>
+                </select>
                 <!-- 2D / 3D View Toggle -->
                 <div class="mode-toggle" id="mapViewToggle" style="flex-shrink:0;">
                   <button id="mapView2dBtn" aria-pressed="true" class="active" type="button">2D</button>
@@ -136,6 +139,8 @@
               </div>
             </div>
 
+            <p id="zoneMapSummary" class="zone-map-summary"></p>
+            <p id="zoneMapNotice" class="zone-map-notice" role="status" aria-live="polite" aria-atomic="true"></p>
             <div id="eventMapSelection" class="event-map-selection hidden">
               <span id="eventMapSummary" role="status"></span>
               <button id="clearEventMapSelection" type="button" class="btn ghost">강조 해제</button>
@@ -546,8 +551,8 @@
   <script src="{{ url_for('static', filename='js/real_led_projection.js', v='west-flow-20261123') }}"></script>
   <script src="{{ url_for('static', filename='js/incident_display.js', v='incident-1') }}"></script>
   <script src="{{ url_for('static', filename='js/incident_timeline.js', v='event-map-20261123') }}"></script>
-  <script src="{{ url_for('static', filename='js/zone_guidance.js', v='west-flow-20261123') }}"></script>
-  <script src="{{ url_for('static', filename='js/dashboard.js', v='west-flow-20261123') }}"></script>
+  <script src="{{ url_for('static', filename='js/zone_guidance.js', v='zone-focus-20261123') }}"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js', v='zone-focus-20261123') }}"></script>
   <script src="{{ url_for('static', filename='js/physical_sim_control.js', v='map-controls-20261120') }}"></script>
   <script src="{{ url_for('static', filename='js/real_fire_control.js', v='real-clear-20261112') }}"></script>
   <script src="{{ url_for('static', filename='js/sidebar.js', v='ui-20261109') }}"></script>
