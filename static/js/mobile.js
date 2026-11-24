@@ -2,7 +2,7 @@
   'use strict';
   const start = document.body.dataset.node;
   const el = id => document.getElementById(id);
-  let focused = true, lastDrawing = null, previousRoute = null, changedUntil = 0;
+  let focused = false, lastDrawing = null, previousRoute = null, changedUntil = 0;
   function shape(tag, attrs, text) {
     const item = document.createElementNS('http://www.w3.org/2000/svg', tag);
     for (const [key, value] of Object.entries(attrs)) item.setAttribute(key, value);
