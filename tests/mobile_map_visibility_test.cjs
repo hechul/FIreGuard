@@ -5,10 +5,16 @@ class Element {
  constructor(){this.children=[];this.attrs={};this.dataset={};this.textContent='';this.hidden=false;this.disabled=false;}
  append(...items){this.children.push(...items)} appendChild(item){this.children.push(item)}
  replaceChildren(...items){this.children=items} setAttribute(k,v){this.attrs[k]=v}
+ hasAttribute(k){return Object.hasOwn(this.attrs,k)}
+ removeAttribute(k){delete this.attrs[k]}
+ toggleAttribute(k,force){const present=force===undefined?!this.hasAttribute(k):Boolean(force);if(present)this.setAttribute(k,'');else this.removeAttribute(k);return present;}
  addEventListener(){}
 }
 async function check(mode){
  const elements=new Map();const get=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id)};
+ // SVGElement has no HTMLElement.hidden reflection. Assigning .hidden=false
+ // leaves the actual attribute (and the CSS [hidden] rule) untouched.
+ get('map').setAttribute('hidden','');
  get('referenceFloorplan').textContent=JSON.stringify(floor);
  const state={cloud:{enabled:true,hasTelemetry:true,stale:mode==='stale'},flameSensors:{},blockedNodes:[],route:{nodes:['N37','N1'],edges:['E25']}};
  const listeners={};
@@ -22,13 +28,13 @@ async function check(mode){
     FireGuardMobileGuidance:require('../static/js/mobile_guidance.js'),addEventListener:(e,fn)=>listeners[e]=fn}};
  vm.runInNewContext(fs.readFileSync(require.resolve('../static/js/mobile.js'),'utf8'),context);
  await new Promise(resolve=>setImmediate(resolve));
- assert.equal(get('map').hidden,false,mode+': reference map remains visible');
+ assert.equal(get('map').hasAttribute('hidden'),false,mode+': SVG hidden attribute must be removed');
  assert(get('map').children.some(c=>c.textContent==='현재 위치'));
  const arrows=()=>get('map').children.filter(c=>c.attrs['marker-end']).length;
  if(mode==='live'){
   assert.equal(arrows(),1);
   listeners.offline();
-  assert.equal(get('map').hidden,false);assert.equal(arrows(),0,'old guidance removed on disconnect');
+  assert.equal(get('map').hasAttribute('hidden'),false);assert.equal(arrows(),0,'old guidance removed on disconnect');
  }else{
   assert.equal(arrows(),0);assert.equal(get('steps').children.length,0);
   assert.equal(get('mapEmpty').hidden,false);

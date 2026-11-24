@@ -7,7 +7,9 @@
   function showReferenceMap() {
     lastDrawing = [window.FireGuardPrototypeProjection.project(referenceFloor), {nodes:[],edges:[]}, {blockedNodes:[]}];
     draw(...lastDrawing);
-    el('map').hidden = false;
+    // SVGElement.hidden is not reflected to the HTML hidden attribute.
+    // Remove the actual attribute so [hidden] CSS cannot hide a drawn map.
+    el('map').removeAttribute('hidden');
     el('mapEmpty').hidden = false;
     el('mapEmpty').textContent = '전체 지도와 QR 위치입니다. 현재 대피경로는 확인되지 않았습니다.';
     el('mapToggle').disabled = true;
@@ -108,7 +110,7 @@
         const li = document.createElement('li'); li.textContent = `${names[id]} (${id})`; el('steps').append(li);
       }
       lastDrawing = view.status === 'unknown' ? null : [window.FireGuardPrototypeProjection.project(floor),view,state];
-      el('map').hidden = !lastDrawing; el('mapEmpty').hidden = !!lastDrawing;
+      el('map').toggleAttribute('hidden', !lastDrawing); el('mapEmpty').hidden = !!lastDrawing;
       el('mapToggle').disabled = !lastDrawing;
       el('stepsTitle').hidden = view.nodes.length === 0;
       if (!lastDrawing) showReferenceMap(); else draw(...lastDrawing);
